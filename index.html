@@ -162,22 +162,23 @@
       </div>
 
       <div class="grid-2 mt-20">
-        <div class="card">
-          <h3 data-i18n="low_stock_alerts">⚠️ تنبيهات المخزون المنخفض</h3>
-          <div id="stockAlerts"></div>
-        </div>
-        <div class="card">
-          <h3 data-i18n="top_products">🏆 المنتجات الأكثر مبيعاً</h3>
-          <div id="topProducts"></div>
-        </div>
-      </div>
+  <div class="card">
+    <h3 data-i18n="low_stock_alerts">⚠️ تنبيهات المخزون المنخفض</h3>
+    <!-- التعديل هنا: ضفنا الكلاس stack-alerts -->
+    <div id="smartAlerts" class="stack-alerts"></div> 
+  </div>
+  <div class="card">
+    <h3 data-i18n="top_products">🏆 المنتجات الأكثر مبيعاً</h3>
+    <!-- التعديل هنا: ضفنا id="topProductsReport" -->
+    <div id="topProductsReport"></div>
+  </div>
+</div>
 
-      <div class="card mt-20">
-        <h3 data-i18n="quick_accounts_summary">ملخص الحسابات السريع</h3>
-        <div id="accountSummary"></div>
-      </div>
-    </div>
-
+<div class="card mt-20">
+  <h3 data-i18n="quick_accounts_summary">ملخص الحسابات السريع</h3>
+  <!-- التعديل هنا: ضفنا id="dashboardOtherCards" -->
+  <div id="dashboardOtherCards" class="grid-cards mt-15"></div>
+</div>
     <!-- 2. نقطة البيع -->
     <div id="sales" class="page">
       <h2 data-i18n="page_sales_title">المبيعات وفواتير البيع</h2>
