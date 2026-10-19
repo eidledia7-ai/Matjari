@@ -1036,6 +1036,12 @@ function applyRolePermissions() {
 }
 
 async function startAuth() {
+  // التعديل الجديد: لو مفيش نت، افتح التطبيق من الذاكرة على طول
+  if (!navigator.onLine) {
+    loadOfflineSession();
+    return;
+  }
+
   initSupabase();
   if (!supabaseClient) {
     setAuthMessage('فشل الاتصال بالسيرفر', true);
@@ -1054,10 +1060,10 @@ async function startAuth() {
     } else {
       showLoggedOutUI();
     }
-  } catch (e) {
-    showLoggedOutUI();
-    setAuthMessage('تعذر الاتصال: ' + (e.message || ''), true);
-  }
+} catch (e) {
+  // لو حصل إيرور في الاتصال (زي ما نت فصل)، جرب تفتح من الذاكرة
+  loadOfflineSession(); 
+}
 }
 
 /* ============ الباركود ============ */
