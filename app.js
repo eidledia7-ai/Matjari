@@ -1358,6 +1358,9 @@ function scheduleSync() {
 }
 
 async function uploadToCloud() {
+ 
+  if (!navigator.onLine) return;
+  
   if (!state.currentUser || isSyncing) return;
   if (state.role === 'employee') return;
   isSyncing = true;
@@ -1421,14 +1424,61 @@ async function registerServiceWorker() {
     console.warn('SW registration failed:', e.message);
   }
 }
+/* ============ التشغيل الأولي ووضع الأوفلاين ============ */
 
-/* ============ التشغيل الأولي ============ */
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('service-worker.js', { scope: './' });
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!window.__swReloaded) { window.__swReloaded = true; location.reload(); }
+    });
+  } catch (e) { console.warn('SW registration failed:', e.message); }
+}
+
+function loadOfflineSession() {
+  const keys = Object.keys(localStorage).filter(k => k.startsWith('matjari_cache_'));
+  if (keys.length === 0) { showLoggedOutUI(); return; }
+  
+  const userId = keys[0].replace('matjari_cache_', '');
+  const cache = JSON.parse(localStorage.getItem(keys[0]));
+  
+  state.currentUser = { id: userId, email: 'offline-user' };
+  state.role = 'manager';
+  
+  if (cache.products) state.products = cache.products;
+  if (cache.sales) state.sales = cache.sales;
+  if (cache.customers) state.customers = cache.customers;
+  if (cache.suppliers) state.suppliers = cache.suppliers;
+  if (cache.expenses) state.expenses = cache.expenses;
+  if (cache.stockMoves) state.stockMoves = cache.stockMoves;
+  if (cache.returns) state.returns = cache.returns;
+  if (cache.customerPayments) state.customerPayments = cache.customerPayments;
+  if (cache.supplierPayments) state.supplierPayments = cache.supplierPayments;
+  if (cache.purchases) state.purchases = cache.purchases;
+  if (cache.shifts) state.shifts = cache.shifts;
+  if (cache.currentShift) state.currentShift = cache.currentShift;
+  if (cache.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, cache.storeSettings);
+  
+  showLoggedInUI(); 
+  applyRolePermissions(); 
+  renderAll(); 
+  showPage('sales');
+  showNotification('تم تشغيل التطبيق في وضع عدم الاتصال (أوفلاين) ✅', 'info');
+}
+
 window.onload = function() {
-  registerServiceWorker(); // <--- السطر الجديد المهم
+  registerServiceWorker();
   initAudio();
   setLanguage(currentLang);
   setupEventListeners();
-  startAuth();
+  
+  if (navigator.onLine) {
+    startAuth();
+  } else {
+    loadOfflineSession();
+  }
+  
   applySavedDarkMode();
 };
 function setupEventListeners() {
