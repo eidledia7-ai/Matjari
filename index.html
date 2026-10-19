@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="app_title">متجري - نظام المبيعات والمخازن المتكامل</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#176b70">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="auth-locked">
+
+  <!-- شاشة تسجيل الدخول -->
+  <div id="loginScreen" class="login-screen active">
+    <div class="login-card">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+        <button type="button" class="small-btn gray" onclick="toggleLanguage()">🌐 <span id="langSwitchText">English</span></button>
+      </div>
+      <h2 id="authTitle" data-i18n="login_title">🔐 تسجيل الدخول</h2>
+      <p class="notice info mb-15" id="authHint" data-i18n="login_hint">سجّل دخولك للوصول لبيانات محلك</p>
+
+      <div class="form-group mb-15">
+        <label data-i18n="email_label">البريد الإلكتروني</label>
+        <input type="email" id="authEmail" placeholder="name@example.com" data-i18n-placeholder="email_placeholder" autocomplete="email">
+      </div>
+
+      <div class="form-group mb-15">
+        <label data-i18n="password_label">كلمة المرور</label>
+        <div class="password-row">
+          <input type="password" id="authPassword" placeholder="كلمة المرور" data-i18n-placeholder="password_placeholder" autocomplete="current-password">
+          <button type="button" class="gray password-toggle" onclick="togglePassword('authPassword', this)" data-i18n="show_pass">إظهار</button>
+        </div>
+      </div>
+
+      <div id="recoveryPanel" style="display: none;">
+        <div class="form-group mb-15">
+          <label data-i18n="new_pass_label">كلمة المرور الجديدة</label>
+          <div class="password-row">
+            <input type="password" id="newPassword" placeholder="6 أحرف على الأقل" data-i18n-placeholder="new_password_placeholder" minlength="6">
+            <button type="button" class="gray password-toggle" onclick="togglePassword('newPassword', this)" data-i18n="show_pass">إظهار</button>
+          </div>
+        </div>
+        <button class="btn green w-100" onclick="saveNewPassword()" data-i18n="save_new_pass">حفظ كلمة المرور الجديدة</button>
+      </div>
+
+      <div id="loginButtons">
+        <button class="btn primary w-100 mb-10" id="loginButton" onclick="signIn()" data-i18n="login_btn">دخول للنظام 🚀</button>
+        <button class="btn green w-100 mb-10" id="signupButton" onclick="signUp()" data-i18n="signup_btn">إنشاء حساب جديد ✨</button>
+        <button class="btn gray w-100" id="forgotButton" onclick="sendPasswordReset()" data-i18n="forgot_btn">نسيت كلمة المرور؟</button>
+      </div>
+
+      <div id="authMessage" class="auth-message"></div>
+    </div>
+  </div>
+
+  <header class="app-header">
+    <button class="menu-btn" onclick="toggleSidebar(true)" aria-label="فتح القائمة">☰</button>
+    <h1 class="logo-title" data-i18n="app_title">متجري</h1>
+  </header>
+
+  <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h2 data-i18n="main_menu">القائمة الرئيسية</h2>
+      <button class="close-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <nav id="mainNavigation" class="sidebar-nav">
+      
+      <!-- 1. الرئيسية -->
+      <button data-page="home" onclick="showPage('home')" data-i18n="menu_home">🏠 الرئيسية</button>
+      
+      <!-- 2. نقطة البيع -->
+      <button data-page="sales" onclick="showPage('sales')" data-i18n="menu_sales">🛒 نقطة البيع</button>
+      
+      <!-- 3. المخزون -->
+      <div class="nav-group">
+        <button type="button" class="nav-toggle" onclick="toggleSubMenu('invSubMenu')">
+          <span>📦 <span data-i18n="menu_inventory">المخزون</span> <span id="stockAlertBadge"></span></span>
+          <span class="arrow">▼</span>
+        </button>
+        <div id="invSubMenu" class="sub-menu">
+          <button data-page="invProducts" onclick="showPage('invProducts')" data-i18n="tab_products">📦 المنتجات</button>
+          <button data-page="invMoves" onclick="showPage('invMoves')" data-i18n="tab_moves">📊 حركة المخزون</button>
+          <button data-page="invReturns" onclick="showPage('invReturns')" data-i18n="tab_returns">🔄 المرتجعات</button>
+        </div>
+      </div>
+
+      <!-- 4. الشركاء -->
+      <div class="nav-group">
+        <button type="button" class="nav-toggle" onclick="toggleSubMenu('partSubMenu')">
+          <span>🤝 <span data-i18n="menu_partners">الشركاء</span></span>
+          <span class="arrow">▼</span>
+        </button>
+        <div id="partSubMenu" class="sub-menu">
+          <button data-page="partCustomers" onclick="showPage('partCustomers')" data-i18n="tab_customers">👥 العملاء والتحصيلات</button>
+          <button data-page="partSuppliers" onclick="showPage('partSuppliers')" data-i18n="tab_suppliers">🏭 الموردون والمشتريات</button>
+        </div>
+      </div>
+
+      <!-- 5. المالية -->
+      <div class="nav-group">
+        <button type="button" class="nav-toggle" onclick="toggleSubMenu('finSubMenu')">
+          <span>💰 <span data-i18n="menu_finance">المالية</span></span>
+          <span class="arrow">▼</span>
+        </button>
+        <div id="finSubMenu" class="sub-menu">
+          <button data-page="finExpenses" onclick="showPage('finExpenses')" data-i18n="tab_expenses">💸 المصروفات</button>
+          <button data-page="finReports" onclick="showPage('finReports')" data-i18n="tab_reports">📈 التقارير المالية</button>
+          <button data-page="finCompare" onclick="showPage('finCompare')" data-i18n="tab_compare">📊 مقارنة الفترات</button>
+          <button data-page="finShift" onclick="showPage('finShift')" data-i18n="tab_shift">💵 إغلاق الوردية</button>
+        </div>
+      </div>
+
+      <!-- 6. الإعدادات -->
+      <div class="nav-group">
+        <button type="button" class="nav-toggle" onclick="toggleSubMenu('settSubMenu')">
+          <span>⚙️ <span data-i18n="menu_settings">الإعدادات</span></span>
+          <span class="arrow">▼</span>
+        </button>
+        <div id="settSubMenu" class="sub-menu">
+          <button data-page="settStore" onclick="showPage('settStore')" data-i18n="store_data_page">🏪 بيانات المحل</button>
+          <button data-page="settLang" onclick="showPage('settLang')" data-i18n="lang_page">🌐 لغة التطبيق</button>
+          <button data-page="settBackup" onclick="showPage('settBackup')" data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</button>
+          <button data-page="settUpdates" onclick="showPage('settUpdates')" data-i18n="app_updates">🔄 التحديثات والكاش</button>
+          <button type="button" onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
+        </div>
+      </div>
+
+      <!-- 7. الدعم -->
+      <div class="nav-group">
+        <button type="button" class="nav-toggle" onclick="toggleSubMenu('helpSubMenu')"><span>🆘 <span data-i18n="menu_support">الدعم والمساعدة</span></span><span class="arrow">▼</span></button>
+        <div id="helpSubMenu" class="sub-menu">
+          <button data-page="supportContact" onclick="showPage('supportContact')" data-i18n="contact_us">📞 تواصل معنا</button>
+          <button data-page="supportGuide" onclick="showPage('supportGuide')" data-i18n="help_guide">📖 دليل الاستخدام</button>
+          <button data-page="supportAbout" onclick="showPage('supportAbout')" data-i18n="about_page">ℹ️ عن التطبيق</button>
+        </div>
+      </div>
+
+      <button data-action="sync" onclick="syncNow()" style="margin-top: 15px;" data-i18n="sync_now">🔄 مزامنة الآن</button>
+      <button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    
+    <!-- 1. الرئيسية -->
+    <div id="home" class="page active">
+      <h2 data-i18n="page_home_title">الرئيسية وملخص النشاط</h2>
+      <div id="dashboardCards" class="grid-cards mt-15"></div>
+      <div id="dashboardOtherCards" class="grid-cards mt-15"></div>
+      <div id="smartAlerts" class="mt-20"></div>
+      <div id="monthlyGoalCard" class="mt-20"></div>
+      
+      <div class="card mt-20">
+        <h3 data-i18n="sales_last_7">مبيعات آخر 7 أيام</h3>
+        <div id="salesChart" style="height: 250px; position: relative;"></div>
+      </div>
+
+      <div class="grid-2 mt-20">
+        <div class="card">
+          <h3 data-i18n="low_stock_alerts">⚠️ تنبيهات المخزون المنخفض</h3>
+          <div id="stockAlerts"></div>
+        </div>
+        <div class="card">
+          <h3 data-i18n="top_products">🏆 المنتجات الأكثر مبيعاً</h3>
+          <div id="topProducts"></div>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <h3 data-i18n="quick_accounts_summary">ملخص الحسابات السريع</h3>
+        <div id="accountSummary"></div>
+      </div>
+    </div>
+
+    <!-- 2. نقطة البيع -->
+    <div id="sales" class="page">
+      <h2 data-i18n="page_sales_title">المبيعات وفواتير البيع</h2>
+      <div class="card">
+        <h3 data-i18n="add_sale_items">إضافة أصناف للفاتورة</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="select_product">اختر المنتج</label>
+            <select id="saleProduct"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="barcode_label">الباركود (يضاف فوراً 📷)</label>
+            <div style="display:flex;gap:5px">
+              <input type="text" id="saleBarcode" placeholder="امسح/اكتب الباركود..." data-i18n-placeholder="barcode_placeholder" autocomplete="off">
+              <button type="button" class="btn primary small-btn" onclick="openBarcodeScanner()" title="مسح بالكاميرا">📷</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label data-i18n="qty_label">الكمية</label>
+            <input type="number" id="saleQty" value="1" min="1">
+          </div>
+          <div class="form-group">
+            <label data-i18n="unit_price">سعر الوحدة</label>
+            <input type="number" id="saleUnitPrice" placeholder="يضاف تلقائياً" data-i18n-placeholder="auto_added_placeholder">
+          </div>
+          <div class="form-group span-2">
+            <label data-i18n="customer_label">العميل</label>
+            <select id="saleCustomer"></select>
+          </div>
+        </div>
+
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="addToCartManual()" data-i18n="add_manual_btn">إضافة يدوية للفاتورة</button>
+        </div>
+
+        <div id="cartTable" class="mt-20"></div>
+
+        <div class="form-grid mt-20">
+          <div class="form-group">
+            <label data-i18n="paid_now">المدفوع الآن</label>
+            <input type="number" id="salePaid" value="0" min="0" step="any">
+          </div>
+          <div class="form-group">
+            <label data-i18n="discount_label">الخصم 🏷️</label>
+            <div style="display: flex; gap: 5px;">
+              <input type="number" id="saleDiscount" value="0" min="0" step="any" placeholder="0.00">
+              <select id="saleDiscountType" style="width: 85px;">
+                <option value="fixed" data-i18n="opt_discount_fixed">ج.م</option>
+                <option value="percent" data-i18n="opt_discount_percent">%</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label data-i18n="pay_method">طريقة الدفع</label>
+            <select id="salePayMethod">
+              <option value="cash" data-i18n="pay_cash">💵 كاش</option>
+              <option value="visa" data-i18n="pay_visa">💳 فيزا / شبكة</option>
+              <option value="transfer" data-i18n="pay_transfer">📲 تحويل بنكي</option>
+            </select>
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="notes_label">ملاحظات</label>
+            <input type="text" id="saleNotes" placeholder="ملاحظات الفاتورة...">
+          </div>
+        </div>
+
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="completeSale()" data-i18n="complete_sale_btn">تأكيد الحفظ وطباعة الفاتورة (F9)</button>
+          <button class="btn grey" onclick="clearCart()" data-i18n="clear_cart_btn">تفريغ الفاتورة (F8)</button>
+        </div>
+
+        <div id="cartTotal" class="total-box mt-15">إجمالي الفاتورة: 0.00 ج.م</div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="sales_log">سجل المبيعات</h3>
+          <div class="btn-group">
+            <button class="btn red small-btn" onclick="clearTableLog('sales')" data-i18n="clear_log">🗑️ تصفير السجل</button>
+            <button class="btn secondary small-btn" onclick="openExportModal('sales')" data-i18n="export_print_btn">🖨️ / 📊 / 💬 خيارات</button>
+          </div>
+        </div>
+        <div class="form-grid mt-15">
+          <div class="form-group">
+            <label data-i18n="search_sales">بحث في المبيعات</label>
+            <input type="text" id="salesSearch" placeholder="برقم الفاتورة أو اسم العميل..." oninput="renderSales()">
+          </div>
+          <div class="form-group">
+            <label data-i18n="from_date">من تاريخ</label>
+            <input type="date" id="salesFrom" onchange="renderSales()">
+          </div>
+          <div class="form-group">
+            <label data-i18n="to_date">إلى تاريخ</label>
+            <input type="date" id="salesTo" onchange="renderSales()">
+          </div>
+        </div>
+        <div id="salesTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 3. المخزون - المنتجات -->
+    <div id="invProducts" class="page">
+      <h2 data-i18n="tab_products">📦 قائمة المنتجات</h2>
+      <div class="card">
+        <h3 id="productFormTitle" data-i18n="add_product_title">إضافة منتج جديد</h3>
+        <input type="hidden" id="productId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="prod_name">اسم المنتج *</label>
+            <input type="text" id="productName" placeholder="مثال: قلم جاف">
+          </div>
+          <div class="form-group">
+            <label data-i18n="barcode_label">الباركود</label>
+            <input type="text" id="productBarcode" placeholder="رقم الباركود">
+          </div>
+          <div class="form-group">
+            <label data-i18n="category_label">التصنيف</label>
+            <input type="text" id="productCategory" placeholder="مثال: أدوات مكتبية">
+          </div>
+          <div class="form-group">
+            <label data-i18n="sale_price">سعر البيع</label>
+            <input type="number" id="productPrice" min="0" step="any" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label data-i18n="cost_price">سعر التكلفة</label>
+            <input type="number" id="productCost" min="0" step="any" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label data-i18n="stock_qty">الكمية بالمخزن</label>
+            <input type="number" id="productStock" min="0" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label data-i18n="min_alert">حد التنبيه</label>
+            <input type="number" id="productMin" value="5" min="0">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveProduct()" data-i18n="save_product_btn">حفظ المنتج</button>
+          <button class="btn grey" onclick="clearProductForm()" data-i18n="cancel_btn">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="products_list">قائمة المنتجات</h3>
+          <div class="btn-group">
+            <button class="btn orange small-btn" onclick="openBarcodePrintModal()" data-i18n="print_barcode">🏷️ طباعة باركود</button>
+            <button class="btn secondary small-btn" onclick="openExportModal('products')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div class="form-group mt-15">
+          <input type="text" id="productSearch" placeholder="بحث..." oninput="renderProducts()">
+        </div>
+        <div id="productsTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 3. المخزون - حركة المخزون -->
+    <div id="invMoves" class="page">
+      <h2 data-i18n="tab_moves">📊 حركة المخزون</h2>
+      <div class="card">
+        <h3 data-i18n="manual_adjust">تعديل المخزون يدوياً</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="select_product">المنتج *</label>
+            <select id="adjustProduct"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="adjust_type">نوع الحركة *</label>
+            <select id="adjustType">
+              <option value="in" data-i18n="adj_in">إضافة كمية (+)</option>
+              <option value="out" data-i18n="adj_out">خصم كمية (-)</option>
+              <option value="set" data-i18n="adj_set">تعديل إلى رقم مباشر (=)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="qty_label">الكمية *</label>
+            <input type="number" id="adjustQty" min="0" placeholder="0">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="adjust_reason">سبب التعديل *</label>
+            <input type="text" id="adjustReason" placeholder="مثال: تلف، عينات">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveStockAdjustment()" data-i18n="save_move">تسجيل الحركة</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="moves_log">سجل حركات المخزون</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('stockMoves')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div class="form-group mt-15">
+          <input type="text" id="moveSearch" placeholder="بحث..." oninput="renderStockMoves()">
+        </div>
+        <div id="stockMovesTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 3. المخزون - المرتجعات -->
+    <div id="invReturns" class="page">
+      <h2 data-i18n="tab_returns">🔄 المرتجعات</h2>
+      <div class="card">
+        <h3 data-i18n="register_return">تسجيل مرتجع</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="invoice_label">الفاتورة *</label>
+            <select id="returnSale" onchange="updateReturnProducts()"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="item_label">الصنف *</label>
+            <select id="returnProduct"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="qty_label">الكمية *</label>
+            <input type="number" id="returnQty" value="1" min="1">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="reason_label">السبب</label>
+            <input type="text" id="returnReason" placeholder="مثال: عيب تصنيع">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveReturn()" data-i18n="save_return">تسجيل المرتجع</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="returns_log">سجل المرتجعات</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('returns')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="returnsTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 4. الشركاء - العملاء -->
+    <div id="partCustomers" class="page">
+      <h2 data-i18n="tab_customers">👥 العملاء والتحصيلات</h2>
+      <div class="card">
+        <h3 data-i18n="add_customer">إضافة عميل</h3>
+        <input type="hidden" id="customerId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="cust_name">اسم العميل *</label>
+            <input type="text" id="customerName" placeholder="اسم العميل">
+          </div>
+          <div class="form-group">
+            <label data-i18n="phone_label">الهاتف</label>
+            <input type="text" id="customerPhone" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label data-i18n="opening_debt">رصيد افتتاحي</label>
+            <input type="number" id="customerOpeningDebt" value="0" min="0" step="any">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveCustomer()" data-i18n="save_cust">حفظ العميل</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <h3 data-i18n="record_collection">تسجيل تحصيل</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="customer_label">العميل *</label>
+            <select id="customerPaymentCustomer"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="amount_label">المبلغ *</label>
+            <input type="number" id="customerPaymentAmount" placeholder="0.00" min="0" step="any">
+          </div>
+          <div class="form-group">
+            <label data-i18n="date_label">التاريخ</label>
+            <input type="date" id="customerPaymentDate">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="notes_label">ملاحظات</label>
+            <input type="text" id="customerPaymentNotes">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="recordCustomerPayment()" data-i18n="save_collection">تسجيل التحصيل</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="customers_list">قائمة العملاء</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('customers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <input type="text" id="customerSearch" placeholder="بحث..." oninput="renderCustomers()" class="mt-15">
+        <div id="customersTable" class="mt-15"></div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="collections_log">سجل التحصيلات</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('customerPayments')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="customerPaymentsTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 4. الشركاء - الموردون -->
+    <div id="partSuppliers" class="page">
+      <h2 data-i18n="tab_suppliers">🏭 الموردون والمشتريات</h2>
+      <div class="card">
+        <h3 id="supplierFormTitle" data-i18n="add_supplier">إضافة مورد</h3>
+        <input type="hidden" id="supplierId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="supp_name">اسم المورد *</label>
+            <input type="text" id="supplierName">
+          </div>
+          <div class="form-group">
+            <label data-i18n="phone_label">الهاتف</label>
+            <input type="text" id="supplierPhone">
+          </div>
+          <div class="form-group">
+            <label data-i18n="opening_due">رصيد افتتاحي (مستحق له)</label>
+            <input type="number" id="supplierOpeningDebt" value="0" min="0" step="any">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveSupplier()" data-i18n="save_supp">حفظ المورد</button>
+          <button class="btn grey" onclick="clearSupplierForm()" data-i18n="cancel_btn">إلغاء</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <h3 data-i18n="record_purchase">تسجيل فاتورة مشتريات</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="supplier_label">المورد *</label>
+            <select id="purchaseSupplier"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="existing_prod">منتج موجود</label>
+            <select id="purchaseProduct"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="new_prod_name">أو منتج جديد</label>
+            <input type="text" id="purchaseNewName" placeholder="اسم منتج جديد">
+          </div>
+          <div class="form-group">
+            <label data-i18n="qty_label">الكمية *</label>
+            <input type="number" id="purchaseQty" value="1" min="1" oninput="calcPurchaseTotal()">
+          </div>
+          <div class="form-group">
+            <label data-i18n="cost_price">التكلفة *</label>
+            <input type="number" id="purchaseCost" min="0" step="any" placeholder="0.00" oninput="calcPurchaseTotal()">
+          </div>
+          <div class="form-group">
+            <label data-i18n="purchase_sale_price">سعر البيع للوحدة</label>
+            <input type="number" id="purchasePrice" min="0" step="any" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label data-i18n="purchase_total_field">الإجمالي (تلقائي)</label>
+            <input type="text" id="purchaseTotal" readonly value="0.00" style="background:#f0f4f7;font-weight:bold;">
+          </div>
+          <div class="form-group">
+            <label data-i18n="paid_label">المدفوع</label>
+            <input type="number" id="purchasePaid" value="0" min="0" step="any">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="savePurchase()" data-i18n="save_purchase">تسجيل المشتريات</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <h3 data-i18n="record_supp_payment">تسجيل سداد مبلغ لمورد</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="supplier_label">المورد *</label>
+            <select id="supplierPaymentSupplier"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="amount_label">المبلغ المدفوع *</label>
+            <input type="number" id="supplierPaymentAmount" placeholder="0.00" min="0" step="any">
+          </div>
+          <div class="form-group">
+            <label data-i18n="date_label">التاريخ</label>
+            <input type="date" id="supplierPaymentDate">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="notes_label">ملاحظات</label>
+            <input type="text" id="supplierPaymentNotes" placeholder="تفاصيل السداد...">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="recordSupplierPayment()" data-i18n="save_supp_payment">تسجيل السداد للمورد</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="suppliers_list">قائمة الموردين</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('suppliers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="suppliersTable" class="mt-15"></div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="purchases_log">سجل المشتريات</h3>
+          <div class="btn-group">
+            <button class="btn red small-btn" onclick="clearTableLog('purchases')" data-i18n="clear_log">🗑️ تصفير السجل</button>
+            <button class="btn secondary small-btn" onclick="openExportModal('purchases')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="purchasesTable" class="mt-15"></div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="supp_payments_log">سجل مدفوعات الموردين</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('supplierPayments')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="supplierPaymentsTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 5. المالية - المصروفات -->
+    <div id="finExpenses" class="page">
+      <h2 data-i18n="tab_expenses">💸 المصروفات</h2>
+      <div class="card">
+        <h3 data-i18n="add_expense">إضافة مصروف</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="expense_item">البند *</label>
+            <input type="text" id="expenseName" placeholder="مثال: كهرباء">
+          </div>
+          <div class="form-group">
+            <label data-i18n="amount_label">المبلغ *</label>
+            <input type="number" id="expenseAmount" min="0" step="any">
+          </div>
+          <div class="form-group">
+            <label data-i18n="date_label">التاريخ</label>
+            <input type="date" id="expenseDate">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="notes_label">ملاحظات</label>
+            <input type="text" id="expenseNotes">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveExpense()" data-i18n="save_expense">حفظ المصروف</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="expenses_log">سجل المصروفات</h3>
+          <div class="btn-group">
+            <button class="btn red small-btn" onclick="clearTableLog('expenses')" data-i18n="clear_log">🗑️ تصفير السجل</button>
+            <button class="btn green small-btn" onclick="openExpensesDetailReport()" data-i18n="detailed_report">📊 تقرير تفصيلي</button>
+            <button class="btn secondary small-btn" onclick="openExportModal('expenses')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="expensesTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 5. المالية - التقارير -->
+    <div id="finReports" class="page">
+      <h2 data-i18n="tab_reports">📈 التقارير المالية</h2>
+      <div class="card">
+        <h3 data-i18n="quick_period">الفترة السريعة</h3>
+        <div class="btn-group">
+          <button class="btn secondary" onclick="setReportPeriod('today')" data-i18n="period_today">📅 اليوم</button>
+          <button class="btn secondary" onclick="setReportPeriod('week')" data-i18n="period_week">📆 الأسبوع</button>
+          <button class="btn secondary" onclick="setReportPeriod('month')" data-i18n="period_month">🗓️ آخر 30 يوم</button>
+          <button class="btn secondary" onclick="setReportPeriod('currentMonth')" data-i18n="period_curr_month">📊 الشهر الحالي</button>
+          <button class="btn secondary" onclick="setReportPeriod('year')" data-i18n="period_year">📈 السنة</button>
+          <button class="btn grey" onclick="clearReportPeriod()" data-i18n="period_all">الكل</button>
+        </div>
+      </div>
+      <div class="card mt-15">
+        <h3 data-i18n="custom_range">نطاق مخصص</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="from_date">من تاريخ</label>
+            <input type="date" id="reportFrom" onchange="renderReports()">
+          </div>
+          <div class="form-group">
+            <label data-i18n="to_date">إلى تاريخ</label>
+            <input type="date" id="reportTo" onchange="renderReports()">
+          </div>
+        </div>
+        <div class="btn-group mt-10">
+          <button class="btn green" onclick="renderReports()" data-i18n="refresh_btn">🔄 تحديث</button>
+          <button class="btn secondary" onclick="printReportSummary()" data-i18n="print_report">🖨️ طباعة التقرير</button>
+        </div>
+      </div>
+      <div id="reportCards" class="grid-cards mt-20"></div>
+      <div class="card mt-20">
+        <h3 data-i18n="performance_summary">📊 ملخص الأداء</h3>
+        <div id="dailyReport"></div>
+      </div>
+      <div class="card mt-20" style="background:linear-gradient(135deg,#d0e2ed,#bcd5e4)">
+        <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3>
+        <div id="topProductsReport"></div>
+      </div>
+    </div>
+
+    <!-- 5. المالية - المقارنة -->
+    <div id="finCompare" class="page">
+      <h2 data-i18n="tab_compare">📊 مقارنة الفترات</h2>
+      <div class="card">
+        <h3 data-i18n="compare_settings">⚙️ إعدادات المقارنة</h3>
+        
+        <div class="form-group mb-15">
+          <label data-i18n="compare_type">نوع المقارنة</label>
+          <select id="compareType" onchange="onCompareTypeChange()">
+            <option value="monthVsPrev" data-i18n="comp_m_prev">الشهر الحالي vs الشهر السابق</option>
+            <option value="monthVsYear" data-i18n="comp_m_year">الشهر الحالي vs نفس الشهر من السنة السابقة</option>
+            <option value="custom" data-i18n="comp_custom">فترتين مخصصتين</option>
+          </select>
+        </div>
+
+        <div id="compareCustomPeriods" style="display: none;">
+          <div class="grid-2">
+            <div>
+              <h4 style="margin-bottom:10px;color:#17364c" data-i18n="period_1">الفترة الأولى</h4>
+              <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="form-group">
+                  <label data-i18n="from_date">من تاريخ</label>
+                  <input type="date" id="compareAFrom">
+                </div>
+                <div class="form-group">
+                  <label data-i18n="to_date">إلى تاريخ</label>
+                  <input type="date" id="compareATo">
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 style="margin-bottom:10px;color:#17364c" data-i18n="period_2">الفترة الثانية</h4>
+              <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="form-group">
+                  <label data-i18n="from_date">من تاريخ</label>
+                  <input type="date" id="compareBFrom">
+                </div>
+                <div class="form-group">
+                  <label data-i18n="to_date">إلى تاريخ</label>
+                  <input type="date" id="compareBTo">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="renderComparison()" data-i18n="show_compare">📊 عرض المقارنة</button>
+          <button class="btn secondary" onclick="printComparisonReport()" data-i18n="print_btn">🖨️ طباعة</button>
+        </div>
+      </div>
+
+      <div id="compareResult"></div>
+    </div>
+
+    <!-- 5. المالية - الوردية -->
+    <div id="finShift" class="page">
+      <h2 data-i18n="tab_shift">💵 إغلاق الوردية</h2>
+      <div class="card">
+        <h3 data-i18n="shift_close_title">💵 إغلاق الوردية الحالية</h3>
+        <p class="notice info mb-15" data-i18n="shift_note">قم بعدّ النقدية فعلياً وادخلها للمطابقة.</p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="cashier_name">اسم الكاشير / الوردية *</label>
+            <input type="text" id="shiftCashierName" placeholder="مثال: أحمد">
+          </div>
+          <div class="form-group">
+            <label data-i18n="expected_cash">مبيعات الكاش المتوقعة</label>
+            <input type="text" id="shiftExpectedCash" readonly style="font-weight: bold; background: #f9f9f9;">
+          </div>
+          <div class="form-group">
+            <label data-i18n="actual_cash">النقدية الفعلية بالدرج *</label>
+            <input type="number" id="shiftActualCash" placeholder="0.00" min="0" step="any" oninput="calculateShiftDiff()">
+          </div>
+          <div class="form-group span-2">
+            <label data-i18n="diff_label">الفرق</label>
+            <input type="text" id="shiftDifference" readonly style="font-weight: bold;">
+          </div>
+          <div class="form-group span-3">
+            <label data-i18n="notes_label">ملاحظات</label>
+            <input type="text" id="shiftNotes" placeholder="أي ملاحظات...">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="closeShift()" data-i18n="close_shift_btn">🔒 إغلاق الوردية وحفظها</button>
+          <button class="btn secondary" onclick="printShiftReport()" data-i18n="print_report">🖨️ طباعة التقرير</button>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0" data-i18n="shifts_log">📋 سجل الورديات</h3>
+          <div class="btn-group">
+            <button class="btn secondary small-btn" onclick="openExportModal('shifts')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+          </div>
+        </div>
+        <div id="shiftsTable" class="mt-15"></div>
+      </div>
+    </div>
+
+    <!-- 6. الإعدادات - بيانات المحل -->
+    <div id="settStore" class="page">
+      <h2 data-i18n="store_data_page">🏪 بيانات المحل</h2>
+      <div class="card">
+        <div class="form-grid">
+          <div class="form-group">
+            <label data-i18n="store_logo">شعار المحل (صورة)</label>
+            <input type="file" id="storeLogo" accept="image/*">
+            <img id="storeLogoPreview" style="max-width: 120px; margin-top: 8px; display: none; border-radius: 8px; background: #fff; padding: 5px;">
+            <button class="small-btn gray" type="button" onclick="removeStoreLogo()" style="margin-top: 5px;" data-i18n="remove_logo">حذف الشعار</button>
+          </div>
+          <div class="form-group">
+            <label data-i18n="store_name">اسم المحل</label>
+            <input type="text" id="storeName" placeholder="اسم المحل">
+          </div>
+          <div class="form-group">
+            <label data-i18n="phone_label">رقم الهاتف</label>
+            <input type="text" id="storePhone" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label data-i18n="address_label">العنوان</label>
+            <input type="text" id="storeAddress">
+          </div>
+          <div class="form-group">
+            <label data-i18n="tax_number">الرقم الضريبي (اختياري)</label>
+            <input type="text" id="storeTaxNumber">
+          </div>
+          <div class="form-group">
+            <label data-i18n="currency_label">العملة</label>
+            <input type="text" id="storeCurrency" value="ج.م">
+          </div>
+          <div class="form-group">
+            <label data-i18n="monthly_goal">🎯 هدف المبيعات الشهري (اختياري)</label>
+            <input type="number" id="storeMonthlyGoal" min="0" step="any" placeholder="مثال: 50000">
+          </div>
+        </div>
+        <div class="btn-group mt-15">
+          <button class="btn primary" onclick="saveStoreSettings()" data-i18n="save_store_btn">حفظ بيانات المحل</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. الإعدادات - اللغة -->
+    <div id="settLang" class="page">
+      <h2 data-i18n="lang_page">🌐 لغة التطبيق</h2>
+      <div class="card">
+        <h3 data-i18n="select_lang_title">اختر لغة النظام المفضلة</h3>
+        <p class="muted" data-i18n="lang_desc">يمكنك التبديل بين اللغات المتاحة وسيتم تطبيقها فوراً على واجهة التطبيق بالكامل.</p>
+        <div class="form-group mt-15" style="max-width: 300px;">
+          <label data-i18n="change_lang_label">لغة التطبيق / Language</label>
+          <button type="button" class="btn secondary w-100" onclick="toggleLanguage()"><span id="currentLangDisplay">العربية (Arabic)</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. الإعدادات - النسخ الاحتياطي -->
+    <div id="settBackup" class="page">
+      <h2 data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</h2>
+      <div class="card">
+        <p class="muted mt-15" data-i18n="backup_auth_note">سيُطلب تأكيد كلمة مرور حسابك الحالية قبل تنزيل النسخة أو استعادتها، وتُستخدم لتشفير النسخة وفك تشفيرها.</p>
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="exportBackup()" data-i18n="export_backup">تنزيل نسخة (.shopbak)</button>
+          <label class="btn primary" style="cursor: pointer; display: inline-block;">
+            <span data-i18n="import_backup">استعادة نسخة</span>
+            <input type="file" id="backupFile" accept=".shopbak,.json" onchange="importBackup(event)" style="display: none;">
+          </label>
+        </div>
+      </div>
+
+      <div class="card mt-20 red-border no-print" id="dangerZone">
+        <h3 class="red-text" data-i18n="danger_zone">منطقة الخطر</h3>
+        <p class="muted" data-i18n="danger_desc">مسح كافة بيانات التطبيق الحالية بشكل نهائي.</p>
+        <button class="btn red" onclick="safeClearAllDataPrompt()" data-i18n="clear_all_data">مسح كافة بيانات التطبيق</button>
+      </div>
+    </div>
+
+    <!-- 6. الإعدادات - التحديثات -->
+    <div id="settUpdates" class="page">
+      <h2 data-i18n="app_updates">🔄 التحديثات والكاش</h2>
+      <div class="card">
+        <p class="muted" data-i18n="updates_note">تحديث التطبيق تلقائي. لو لاحظت مشاكل، اضغط "تحديث الآن".</p>
+        <div class="btn-group mt-15">
+          <button class="btn green" onclick="checkForUpdates()" data-i18n="update_now">🔄 تحديث الآن</button>
+          <button class="btn orange" onclick="clearAppCache()" data-i18n="clear_cache">🗑️ مسح الكاش</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. الدعم - تواصل -->
+    <div id="supportContact" class="page">
+      <h2 data-i18n="contact_us">📞 تواصل معنا</h2>
+      <div class="card">
+        <h3 data-i18n="contact_us">📞 تواصل مع الدعم الفني</h3>
+        <p class="muted" data-i18n="contact_desc">نحن هنا لمساعدتك على مدار الساعة عبر القنوات التالية:</p>
+        <div class="btn-group mt-15" style="flex-wrap: wrap;">
+          <a href="https://wa.me/201091027546" target="_blank" class="btn green" style="text-decoration:none; display:inline-flex; align-items:center; gap:8px;">💬 واتساب: 01091027546</a>
+          <a href="mailto:ibrahim.a.gamall@gmail.com" class="btn primary" style="text-decoration:none; display:inline-flex; align-items:center; gap:8px;">📧 إيميل: ibrahim.a.gamall@gmail.com</a>
+          <a href="https://www.facebook.com/share/1DqpZrK6wm/" target="_blank" class="btn secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:8px;">👤 صفحة فيسبوك</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. الدعم - دليل الاستخدام -->
+    <div id="supportGuide" class="page">
+      <h2 data-i18n="help_guide">📖 دليل الاستخدام</h2>
+      <div class="card mt-20">
+        <h3 data-i18n="help_guide">📖 دليل الاستخدام السريع</h3>
+        <div style="line-height: 1.8; margin-top: 15px;">
+          <p data-i18n-html="guide_sales_html"><strong>1. المبيعات:</strong> اختر المنتجات أو امسح الباركود (يضاف تلقائياً + صوت).</p>
+          <p data-i18n-html="guide_shortcuts_html"><strong>2. اختصارات لوحة المفاتيح:</strong></p>
+          <ul>
+            <li data-i18n-html="guide_f2_html"><code>F2</code>: الانتقال لشاشة نقطة البيع.</li>
+            <li data-i18n-html="guide_f4_html"><code>F4</code>: التركيز على خانة الباركود.</li>
+            <li data-i18n-html="guide_f8_html"><code>F8</code>: تفريغ الفاتورة.</li>
+            <li data-i18n-html="guide_f9_html"><code>F9</code>: حفظ الفاتورة وطباعتها.</li>
+          </ul>
+          <p data-i18n-html="guide_inventory_html"><strong>3. المخزون:</strong> أضف المنتجات وعدّل الأرصدة مع ذكر السبب.</p>
+          <p data-i18n-html="guide_shifts_html"><strong>4. الورديات:</strong> اكتب اسم الكاشير، ثم اقفل الوردية في نهاية اليوم لمطابقة النقدية.</p>
+          <p data-i18n-html="guide_export_html"><strong>5. الطباعة والتصدير:</strong> اضغط على خيارات في أي جدول لطباعة تقرير احترافي أو تصدير Excel أو إرسال واتساب لفترة مخصصة.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. الدعم - عن التطبيق -->
+    <div id="supportAbout" class="page">
+      <h2 data-i18n="about_page">ℹ️ عن التطبيق</h2>
+      <div class="card mt-20 text-center" style="padding: 30px;">
+        <h3 data-i18n="app_title">متجري</h3>
+        <p class="mt-10 text-muted" data-i18n="version_text">الإصدار الاحترافي v5.0</p>
+        <p class="mt-15" style="line-height: 1.6;" data-i18n="about_desc">تم تصميم هذا النظام لمساعدة أصحاب المتاجر على إدارة المبيعات، المخزون، الحسابات، والعملاء بسهولة وأمان تام.</p>
+        <div class="mt-20">
+          <p data-i18n="copyright_text">جميع الحقوق محفوظة © 2026</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- نوافذ منبثقة -->
+  <div id="barcodeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h3 data-i18n="scan_barcode_title">📷 مسح الباركود</h3>
+      <p class="muted" data-i18n="point_camera">وجّه الكاميرا نحو الباركود</p>
+      <video id="barcodeVideo" autoplay playsinline style="width:100%;max-height:320px;background:#000;border-radius:10px"></video>
+      <div class="btn-group mt-15">
+        <button class="btn red" onclick="closeBarcodeScanner()" data-i18n="close_btn">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="expensesReportModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 500px;">
+      <h3 data-i18n="exp_report_title">📊 تقرير المصروفات التفصيلي</h3>
+      <p class="muted" data-i18n="select_period_msg">اختر الفترة ثم اضغط "عرض التقرير"</p>
+
+      <div class="btn-group mt-15" style="flex-wrap: wrap;">
+        <button class="btn secondary small-btn" onclick="setExpenseReportPeriod('today')" data-i18n="period_today">📅 اليوم</button>
+        <button class="btn secondary small-btn" onclick="setExpenseReportPeriod('week')" data-i18n="period_week">📆 7 أيام</button>
+        <button class="btn secondary small-btn" onclick="setExpenseReportPeriod('month')" data-i18n="period_month">🗓️ 30 يوم</button>
+        <button class="btn secondary small-btn" onclick="setExpenseReportPeriod('currentMonth')" data-i18n="period_curr_month">📊 الشهر الحالي</button>
+        <button class="btn secondary small-btn" onclick="setExpenseReportPeriod('year')" data-i18n="period_year">📈 السنة</button>
+        <button class="btn grey small-btn" onclick="setExpenseReportPeriod('all')" data-i18n="period_all">الكل</button>
+      </div>
+
+      <div class="form-grid mt-15" style="grid-template-columns: 1fr 1fr;">
+        <div class="form-group">
+          <label data-i18n="from_date">من تاريخ</label>
+          <input type="date" id="expReportFrom">
+        </div>
+        <div class="form-group">
+          <label data-i18n="to_date">إلى تاريخ</label>
+          <input type="date" id="expReportTo">
+        </div>
+      </div>
+
+      <div class="btn-group mt-15">
+        <button class="btn green" onclick="printExpensesDetail()" data-i18n="show_report">📊 عرض التقرير</button>
+        <button class="btn grey" onclick="closeExpensesReportModal()" data-i18n="cancel_btn">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="barcodePrintModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 600px;">
+      <h3 data-i18n="barcode_print_title">🏷️ طباعة باركود</h3>
+      <p class="muted" data-i18n="barcode_print_desc">اختر المنتجات وحدد عدد النسخ</p>
+
+      <div class="form-group mt-15">
+        <label data-i18n="copies_label">عدد النسخ لكل منتج</label>
+        <input type="number" id="barcodeCopies" value="1" min="1" max="50">
+      </div>
+
+      <div class="form-group mt-10">
+        <label data-i18n="label_size">حجم الملصق</label>
+        <select id="barcodeSize">
+          <option value="small" data-i18n="size_small">صغير (3 في السطر)</option>
+          <option value="medium" selected data-i18n="size_medium">متوسط (2 في السطر)</option>
+          <option value="large" data-i18n="size_large">كبير (1 في السطر)</option>
+        </select>
+      </div>
+      <div class="form-group mt-10">
+        <label data-i18n="barcode_type">نوع الباركود</label>
+        <select id="barcodeType">
+          <option value="qr" selected data-i18n="opt_qr_camera">QR Code (للكاميرا)</option>
+          <option value="code128" data-i18n="opt_barcode_usb">باركود عادي (قارئ USB)</option>
+          <option value="both" data-i18n="opt_both_codes">الاثنين مع بعض</option>
+        </select>
+      </div>
+      <div class="form-group mt-10">
+        <label data-i18n="select_products_label">اختر المنتجات</label>
+        <div id="barcodeProductList" style="max-height:300px;overflow-y:auto;border:1px solid #dce3ec;border-radius:8px;padding:10px;background:#fff;"></div>
+      </div>
+
+      <div class="btn-group mt-15">
+        <button class="btn gray small-btn" onclick="barcodeSelectAll(true)" data-i18n="select_all">تحديد الكل</button>
+        <button class="btn gray small-btn" onclick="barcodeSelectAll(false)" data-i18n="deselect_all">إلغاء التحديد</button>
+      </div>
+
+      <div class="btn-group mt-15">
+        <button class="btn orange" onclick="printBarcodeLabels()" data-i18n="print_barcode_btn">🖨️ طباعة الباركود</button>
+        <button class="btn gray" onclick="closeBarcodePrintModal()" data-i18n="cancel_btn">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="exportModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 480px;">
+      <h3 id="exportModalTitle">🖨️ خيارات التصدير والطباعة</h3>
+      <p class="muted" id="exportModalDesc">اختر نطاق السجلات المطلوبة:</p>
+      
+      <div class="form-group mt-15">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="radio" name="exportScope" value="all" checked onchange="toggleExportDateRange(false)"> <span data-i18n="all_records">كل السجلات</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:8px;">
+          <input type="radio" name="exportScope" value="custom" onchange="toggleExportDateRange(true)"> <span data-i18n="custom_period">فترة مخصصة (من - إلى)</span>
+        </label>
+      </div>
+
+      <div id="exportDateRangeBox" class="form-grid mt-15" style="grid-template-columns: 1fr 1fr; display: none;">
+        <div class="form-group">
+          <label data-i18n="from_date">من تاريخ</label>
+          <input type="date" id="exportModalFrom">
+        </div>
+        <div class="form-group">
+          <label data-i18n="to_date">إلى تاريخ</label>
+          <input type="date" id="exportModalTo">
+        </div>
+      </div>
+
+      <div class="btn-group mt-20" style="justify-content: center; gap: 10px;">
+        <button class="btn primary" onclick="executeExportAction('print')" data-i18n="print_btn">🖨️ طباعة</button>
+        <button class="btn green" onclick="executeExportAction('excel')" data-i18n="excel_btn">📊 Excel</button>
+        <button class="btn orange" onclick="executeExportAction('whatsapp')" data-i18n="whatsapp_btn">💬 واتساب</button>
+        <button class="btn grey" onclick="closeExportModal()" data-i18n="cancel_btn">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
