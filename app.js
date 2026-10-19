@@ -1405,15 +1405,32 @@ async function syncNow() {
   }
 }
 
+/* ============ تسجيل Service Worker ============ */
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('service-worker.js', { scope: './' });
+    console.log('SW registered:', reg.scope);
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!window.__swReloaded) {
+        window.__swReloaded = true;
+        location.reload();
+      }
+    });
+  } catch (e) {
+    console.warn('SW registration failed:', e.message);
+  }
+}
+
 /* ============ التشغيل الأولي ============ */
 window.onload = function() {
+  registerServiceWorker(); // <--- السطر الجديد المهم
   initAudio();
   setLanguage(currentLang);
   setupEventListeners();
   startAuth();
   applySavedDarkMode();
 };
-
 function setupEventListeners() {
   window.addEventListener('keydown', function(e) {
     if (e.key === 'F2') { e.preventDefault(); showPage('sales'); }
