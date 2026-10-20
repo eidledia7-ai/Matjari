@@ -3740,3 +3740,32 @@ function renderComparison() {
 
 function printComparisonReport() { window.print(); }
 function printReportSummary() { window.print(); }
+
+/* ============ إدارة الموظفين (Edge Function) ============ */
+async function inviteStaff() {
+  const email = document.getElementById('staffEmail').value.trim();
+  if (!email) return showNotification('أدخل إيميل الموظف', 'error');
+
+  showLoading('جارٍ إرسال الدعوة...');
+  try {
+    // بنبعت الطلب للسيرفر (Edge Function) اللي هنعمله في سوبابيز
+    const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
+      body: {
+        email: email,
+        owner_id: state.currentUser.id // بنبعت رقم حسابك (التاجر) عشان الموظف يتربط بيك
+      }
+    });
+
+    if (error) throw error;
+    
+    // لو الدالة ردت بخطأ (مثلاً الإيميل متسجل قبل كده)
+    if (data && data.error) throw new Error(data.error);
+
+    showNotification('تم إرسال الدعوة للموظف بنجاح! 📧', 'success');
+    document.getElementById('staffEmail').value = '';
+  } catch (e) {
+    showNotification('تعذر إرسال الدعوة: ' + (e.message || ''), 'error');
+  } finally {
+    hideLoading();
+  }
+}
