@@ -967,42 +967,54 @@ async function openUserSession(user) {
       };
     }
 
-    const dataRes = await supabaseClient
-      .from('shop_data')
-      .select('shop_data')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (dataRes.error) throw dataRes.error;
+let localCache = null;
+try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + user.id)); } catch (e) {}
 
-    if (dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
-      const d = dataRes.data.shop_data;
-      state.products = d.products || [];
-      state.sales = d.sales || [];
-      state.customers = d.customers || [];
-      state.suppliers = d.suppliers || [];
-      state.expenses = d.expenses || [];
-      state.stockMoves = d.stockMoves || [];
-      state.returns = d.returns || [];
-      state.customerPayments = d.customerPayments || [];
-      state.supplierPayments = d.supplierPayments || [];
-      state.purchases = d.purchases || [];
-      state.shifts = d.shifts || [];
-      state.currentShift = d.currentShift || null;
-      if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
-    } else {
-      state.products = [];
-      state.sales = [];
-      state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-      state.suppliers = [];
-      state.expenses = [];
-      state.stockMoves = [];
-      state.returns = [];
-      state.customerPayments = [];
-      state.supplierPayments = [];
-      state.purchases = [];
-      state.shifts = [];
-      state.currentShift = null;
-    }
+let dataRes = { data: null, error: null };
+if (navigator.onLine) {
+  try {
+    dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', user.id).maybeSingle();
+    if (dataRes.error) throw dataRes.error;
+  } catch (e) { console.warn('Cloud fetch failed', e); }
+}
+
+let d = null;
+// التعديل: لو الموبايل فيه بيانات، استخدمها فوراً ومتستناش السيرفر
+if (localCache && (localCache.products || localCache.sales)) {
+  d = localCache;
+} else if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
+  d = dataRes.data.shop_data;
+  localStorage.setItem('matjari_cache_' + user.id, JSON.stringify(d));
+}
+
+if (d) {
+  state.products = d.products || [];
+  state.sales = d.sales || [];
+  state.customers = d.customers || [];
+  state.suppliers = d.suppliers || [];
+  state.expenses = d.expenses || [];
+  state.stockMoves = d.stockMoves || [];
+  state.returns = d.returns || [];
+  state.customerPayments = d.customerPayments || [];
+  state.supplierPayments = d.supplierPayments || [];
+  state.purchases = d.purchases || [];
+  state.shifts = d.shifts || [];
+  state.currentShift = d.currentShift || null;
+  if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
+} else {
+  state.products = [];
+  state.sales = [];
+  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
+  state.suppliers = [];
+  state.expenses = [];
+  state.stockMoves = [];
+  state.returns = [];
+  state.customerPayments = [];
+  state.supplierPayments = [];
+  state.purchases = [];
+  state.shifts = [];
+  state.currentShift = null;
+}
 
     showLoggedInUI();
     applyRolePermissions();
