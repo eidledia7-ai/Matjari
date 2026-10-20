@@ -1071,7 +1071,21 @@ async function startAuth() {
     return;
   }
   try {
-    const result = await supabaseClient.auth.getSession();
+  // التعديل الجديد: لو الرابط فيه تغيير باسورد أو دعوة، نوقف أي جلسة تانية ونطلب الباسورد
+if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
+  await supabaseClient.auth.signOut();
+  
+  showLoggedOutUI();
+  document.getElementById('recoveryPanel').style.display = 'block';
+  document.getElementById('loginButtons').style.display = 'none';
+  document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
+  
+  // نمسح الهاش من الرابط عشان لو عمل Refresh ميفضلش يطلب باسورد
+  history.replaceState(null, null, ' ');
+  return;
+}
+
+const result = await supabaseClient.auth.getSession();
     if (result.error) throw result.error;
     if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
       showLoggedOutUI();
