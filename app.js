@@ -3807,8 +3807,8 @@ async function loadStaffList() {
   try {
     const { data, error } = await supabaseClient
       .from('shop_user_roles')
-      .select('user_id, role, owner_id')
-      .eq('owner_id', state.currentUser.id); // بنجيب الموظفين اللي تابعين للمدير الحالي
+      .select('user_id, role, owner_id, email') 
+      .eq('owner_id', state.currentUser.id);
 
     if (error) throw error;
 
@@ -3817,17 +3817,20 @@ async function loadStaffList() {
       return;
     }
 
-    let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>رقم الموظف (ID)</th><th>الرتبة</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>إيميل الموظف</th><th>الرتبة</th></tr></thead><tbody>';
+    
     data.forEach(staff => {
-      html += `<tr>
-        <td><small>${staff.user_id}</small></td>
-        <td><span class="badge" style="background:#e0e0e0; padding:4px 8px; border-radius:4px;">${staff.role}</span></td>
-      </tr>`;
+      html += '<tr>' +
+        '<td><b>' + (staff.email || staff.user_id) + '</b></td>' +
+        '<td><span class="badge" style="background:#e0e0e0; padding:4px 8px; border-radius:4px;">' + staff.role + '</span></td>' +
+        '</tr>';
     });
+    
     html += '</tbody></table></div>';
     container.innerHTML = html;
 
   } catch (e) {
     container.innerHTML = '<p class="text-red">تعذر تحميل قائمة الموظفين.</p>';
+    console.error(e);
   }
 }
