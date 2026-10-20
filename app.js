@@ -3748,17 +3748,22 @@ async function inviteStaff() {
 
   showLoading('جارٍ إرسال الدعوة...');
   try {
-    // بنبعت الطلب للسيرفر (Edge Function) اللي هنعمله في سوبابيز
+    // بنجيب المفتاح اللي التطبيق شغال بيه
+    const session = await supabaseClient.auth.getSession();
+    const token = session.data.session?.access_token || SUPABASE_KEY; 
+
     const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_KEY // مهم جداً عشان Supabase يقبل الطلب
+      },
       body: {
         email: email,
-        owner_id: state.currentUser.id // بنبعت رقم حسابك (التاجر) عشان الموظف يتربط بيك
+        owner_id: state.currentUser.id 
       }
     });
 
     if (error) throw error;
-    
-    // لو الدالة ردت بخطأ (مثلاً الإيميل متسجل قبل كده)
     if (data && data.error) throw new Error(data.error);
 
     showNotification('تم إرسال الدعوة للموظف بنجاح! 📧', 'success');
