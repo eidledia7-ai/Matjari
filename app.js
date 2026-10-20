@@ -947,12 +947,20 @@ async function openUserSession(user) {
   state.currentUser = user;
   showLoading('جارٍ تحميل بياناتك...');
   try {
+  
     const roleRes = await supabaseClient
-      .from('shop_user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    state.role = (roleRes.data && roleRes.data.role === 'employee') ? 'employee' : 'manager';
+  .from('shop_user_roles')
+  .select('role, owner_id')
+  .eq('user_id', user.id)
+  .maybeSingle();
+  
+// التعديل: لو الشخص ده ليه owner_id، يبقى هو موظف تابع لحد، مش مدير
+if (roleRes.data && roleRes.data.owner_id) {
+    state.role = 'employee';
+    state.ownerId = roleRes.data.owner_id; // هنحفظ رقم المدير بتاعه
+} else {
+    state.role = 'manager';
+} 
 
     const subRes = await supabaseClient
       .from('shop_subscriptions')
@@ -970,10 +978,13 @@ async function openUserSession(user) {
 let localCache = null;
 try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + user.id)); } catch (e) {}
 
-let dataRes = { data: null, error: null };
+// بنحدد مين اللي هنقرا بياناته (الموظف ولا المدير)
+const targetUserId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
+
 if (navigator.onLine) {
   try {
-    dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', user.id).maybeSingle();
+    // التعديل هنا: بنجيب بيانات targetUserId بدل user.id
+    dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', targetUserId).maybeSingle();
     if (dataRes.error) throw dataRes.error;
   } catch (e) { console.warn('Cloud fetch failed', e); }
 }
@@ -1062,7 +1073,7 @@ async function startAuth() {
   try {
     const result = await supabaseClient.auth.getSession();
     if (result.error) throw result.error;
-    if (location.hash.indexOf('type=recovery') !== -1) {
+    if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
       showLoggedOutUI();
       document.getElementById('recoveryPanel').style.display = 'block';
       document.getElementById('loginButtons').style.display = 'none';
