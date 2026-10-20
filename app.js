@@ -810,6 +810,7 @@ function showPage(pageId) {
   if (pageId === 'finShift') { calcExpectedShiftCash(); renderShifts(); }
 
   if (pageId === 'settStore') loadStoreSettings();
+  if (pageId === 'settStaff') loadStaffList();
 }
 
 /* ============ Supabase Auth ============ */
@@ -3797,5 +3798,36 @@ async function inviteStaff() {
     showNotification('تعذر إرسال الدعوة: ' + (e.message || ''), 'error');
   } finally {
     hideLoading();
+  }
+}
+async function loadStaffList() {
+  const container = document.getElementById('staffList');
+  if (!container) return;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('shop_user_roles')
+      .select('user_id, role, owner_id')
+      .eq('owner_id', state.currentUser.id); // بنجيب الموظفين اللي تابعين للمدير الحالي
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      container.innerHTML = '<p class="text-muted">لا يوجد موظفين مسجلين حتى الآن.</p>';
+      return;
+    }
+
+    let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>رقم الموظف (ID)</th><th>الرتبة</th></tr></thead><tbody>';
+    data.forEach(staff => {
+      html += `<tr>
+        <td><small>${staff.user_id}</small></td>
+        <td><span class="badge" style="background:#e0e0e0; padding:4px 8px; border-radius:4px;">${staff.role}</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+
+  } catch (e) {
+    container.innerHTML = '<p class="text-red">تعذر تحميل قائمة الموظفين.</p>';
   }
 }
