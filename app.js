@@ -1,5 +1,5 @@
 /* ==========================================================
-   متجري v5.0 - النظام السحابي المتكامل (app.js) — النسخة النهائية
+   متجري v5.0 - النظام السحابي المتكامل (app.js) — الجزء 1/3
    ========================================================== */
 
 /* ============ إعدادات Supabase ============ */
@@ -948,18 +948,20 @@ async function openUserSession(user) {
   state.currentUser = user;
   showLoading('جارٍ تحميل بياناتك...');
   try {
+  
     const roleRes = await supabaseClient
-      .from('shop_user_roles')
-      .select('role, owner_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-      
-    if (roleRes.data && roleRes.data.owner_id) {
-        state.role = 'employee';
-        state.ownerId = roleRes.data.owner_id; 
-    } else {
-        state.role = 'manager';
-    }
+  .from('shop_user_roles')
+  .select('role, owner_id')
+  .eq('user_id', user.id)
+  .maybeSingle();
+  
+// التعديل: لو الشخص ده ليه owner_id، يبقى هو موظف تابع لحد، مش مدير
+if (roleRes.data && roleRes.data.owner_id) {
+    state.role = 'employee';
+    state.ownerId = roleRes.data.owner_id; // هنحفظ رقم المدير بتاعه
+} else {
+    state.role = 'manager';
+} 
 
     const subRes = await supabaseClient
       .from('shop_subscriptions')
@@ -974,55 +976,57 @@ async function openUserSession(user) {
       };
     }
 
-    let localCache = null;
-    try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + user.id)); } catch (e) {}
+let localCache = null;
+try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + user.id)); } catch (e) {}
 
-    const targetUserId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
-    let dataRes = { data: null, error: null }; // ✅ إصلاح الخطأ هنا
+// بنحدد مين اللي هنقرا بياناته (الموظف ولا المدير)
+const targetUserId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
+let dataRes = { data: null, error: null };
+if (navigator.onLine) {
+  try {
+    // التعديل هنا: بنجيب بيانات targetUserId بدل user.id
+    dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', targetUserId).maybeSingle();
+    if (dataRes.error) throw dataRes.error;
+  } catch (e) { console.warn('Cloud fetch failed', e); }
+}
 
-    if (navigator.onLine) {
-      try {
-        dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', targetUserId).maybeSingle();
-        if (dataRes.error) throw dataRes.error;
-      } catch (e) { console.warn('Cloud fetch failed', e); }
-    }
+let d = null;
+// التعديل: لو الموبايل فيه بيانات، استخدمها فوراً ومتستناش السيرفر
+if (localCache && (localCache.products || localCache.sales)) {
+  d = localCache;
+} else if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
+  d = dataRes.data.shop_data;
+  localStorage.setItem('matjari_cache_' + user.id, JSON.stringify(d));
+}
 
-    let d = null;
-    if (localCache && (localCache.products || localCache.sales)) {
-      d = localCache;
-    } else if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
-      d = dataRes.data.shop_data;
-      localStorage.setItem('matjari_cache_' + user.id, JSON.stringify(d));
-    }
-
-    if (d) {
-      state.products = d.products || [];
-      state.sales = d.sales || [];
-      state.customers = d.customers || [];
-      state.suppliers = d.suppliers || [];
-      state.expenses = d.expenses || [];
-      state.stockMoves = d.stockMoves || [];
-      state.returns = d.returns || [];
-      state.customerPayments = d.customerPayments || [];
-      state.supplierPayments = d.supplierPayments || [];
-      state.purchases = d.purchases || [];
-      state.shifts = d.shifts || [];
-      state.currentShift = d.currentShift || null;
-      if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
-    } else {
-      state.products = [];
-      state.sales = [];
-      state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-      state.suppliers = [];
-      state.expenses = [];
-      state.stockMoves = [];
-      state.returns = [];
-      state.customerPayments = [];
-      state.supplierPayments = [];
-      state.purchases = [];
-      state.shifts = [];
-      state.currentShift = null;
-    }
+if (d) {
+  state.products = d.products || [];
+  state.sales = d.sales || [];
+  state.customers = d.customers || [];
+  state.suppliers = d.suppliers || [];
+  state.expenses = d.expenses || [];
+  state.stockMoves = d.stockMoves || [];
+  state.returns = d.returns || [];
+  state.customerPayments = d.customerPayments || [];
+  state.supplierPayments = d.supplierPayments || [];
+  state.purchases = d.purchases || [];
+  state.shifts = d.shifts || [];
+  state.currentShift = d.currentShift || null;
+  if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
+} else {
+  state.products = [];
+  state.sales = [];
+  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
+  state.suppliers = [];
+  state.expenses = [];
+  state.stockMoves = [];
+  state.returns = [];
+  state.customerPayments = [];
+  state.supplierPayments = [];
+  state.purchases = [];
+  state.shifts = [];
+  state.currentShift = null;
+}
 
     showLoggedInUI();
     applyRolePermissions();
@@ -1030,10 +1034,8 @@ async function openUserSession(user) {
     
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
-    
     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
-    
   } catch (e) {
     console.error(e);
     setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
@@ -1058,6 +1060,7 @@ function applyRolePermissions() {
 }
 
 async function startAuth() {
+  // التعديل الجديد: لو مفيش نت، افتح التطبيق من الذاكرة على طول
   if (!navigator.onLine) {
     loadOfflineSession();
     return;
@@ -1069,7 +1072,8 @@ async function startAuth() {
     return;
   }
   try {
-  if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
+  // التعديل الجديد: لو الرابط فيه تغيير باسورد أو دعوة، نوقف أي جلسة تانية ونطلب الباسورد
+if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
   await supabaseClient.auth.signOut();
   
   showLoggedOutUI();
@@ -1077,6 +1081,7 @@ async function startAuth() {
   document.getElementById('loginButtons').style.display = 'none';
   document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
   
+  // نمسح الهاش من الرابط عشان لو عمل Refresh ميفضلش يطلب باسورد
   history.replaceState(null, null, ' ');
   return;
 }
@@ -1094,6 +1099,7 @@ const result = await supabaseClient.auth.getSession();
       showLoggedOutUI();
     }
 } catch (e) {
+  // لو حصل إيرور في الاتصال (زي ما نت فصل)، جرب تفتح من الذاكرة
   loadOfflineSession(); 
 }
 }
@@ -1396,26 +1402,32 @@ function scheduleSync() {
 }
 
 async function uploadToCloud() {
+ 
   if (!navigator.onLine) return;
+  
   if (!state.currentUser || isSyncing) return;
-  if (state.role === 'employee') return; // الموظف ميرفعش لوحده
+  if (state.role === 'employee') return;
   isSyncing = true;
   try {
     const payload = {
-      products: state.products, sales: state.sales, customers: state.customers,
-      suppliers: state.suppliers, expenses: state.expenses, stockMoves: state.stockMoves,
-      returns: state.returns, customerPayments: state.customerPayments,
-      supplierPayments: state.supplierPayments, purchases: state.purchases,
-      shifts: state.shifts, currentShift: state.currentShift, storeSettings: state.storeSettings
+      products: state.products,
+      sales: state.sales,
+      customers: state.customers,
+      suppliers: state.suppliers,
+      expenses: state.expenses,
+      stockMoves: state.stockMoves,
+      returns: state.returns,
+      customerPayments: state.customerPayments,
+      supplierPayments: state.supplierPayments,
+      purchases: state.purchases,
+      shifts: state.shifts,
+      currentShift: state.currentShift,
+      storeSettings: state.storeSettings
     };
-    
-    // التعديل المهم: دايماً نرفع باسم المدير
-    const targetUserId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-
     const result = await supabaseClient
       .from('shop_data')
       .upsert({
-        user_id: targetUserId, // ✅ الرفع باسم المدير
+        user_id: (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id,
         shop_data: payload,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
@@ -1441,6 +1453,23 @@ async function syncNow() {
 }
 
 /* ============ تسجيل Service Worker ============ */
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('service-worker.js', { scope: './' });
+    console.log('SW registered:', reg.scope);
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!window.__swReloaded) {
+        window.__swReloaded = true;
+        location.reload();
+      }
+    });
+  } catch (e) {
+    console.warn('SW registration failed:', e.message);
+  }
+}
+/* ============ التشغيل الأولي ووضع الأوفلاين ============ */
+
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   try {
@@ -1496,7 +1525,6 @@ window.onload = function() {
   
   applySavedDarkMode();
 };
-
 function setupEventListeners() {
   window.addEventListener('keydown', function(e) {
     if (e.key === 'F2') { e.preventDefault(); showPage('sales'); }
@@ -3744,34 +3772,32 @@ async function inviteStaff() {
   const email = document.getElementById('staffEmail').value.trim();
   if (!email) return showNotification('أدخل إيميل الموظف', 'error');
 
-  const defaultPassword = '123456';
-
-  showLoading('جارٍ إنشاء الحساب...');
+  showLoading('جارٍ إرسال الدعوة...');
   try {
+    // بنجيب المفتاح اللي التطبيق شغال بيه
     const session = await supabaseClient.auth.getSession();
     const token = session.data.session?.access_token || SUPABASE_KEY; 
 
     const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
       headers: {
         Authorization: `Bearer ${token}`,
-        apikey: SUPABASE_KEY
+        apikey: SUPABASE_KEY // مهم جداً عشان Supabase يقبل الطلب
       },
-      body: {
-        email: email,
-        owner_id: state.currentUser.id,
-        password: defaultPassword 
-      }
+  body: {
+  email: email,
+  owner_id: state.currentUser.id,
+  password: '123456'
+}
     });
 
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
 
-    alert(`تم إنشاء الحساب بنجاح!\n\nأعطِ هذه البيانات للموظف ليدخل بها:\n\nالإيميل: ${email}\nالباسورد: ${defaultPassword}\n\n(ينصح بتغيير الباسورد بعد الدخول)`);
-    
+alert('Account Created!\nEmail: ' + email + '\nPassword: 123456');
+
     document.getElementById('staffEmail').value = '';
-    loadStaffList();
   } catch (e) {
-    showNotification('تعذر إنشاء الحساب: ' + (e.message || ''), 'error');
+    showNotification('تعذر إرسال الدعوة: ' + (e.message || ''), 'error');
   } finally {
     hideLoading();
   }
