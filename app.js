@@ -949,11 +949,11 @@ async function openUserSession(user) {
   showLoading('جارٍ تحميل بياناتك...');
   try {
   
-    const roleRes = await supabaseClient
-  .from('shop_user_roles')
-  .select('role, owner_id')
-  .eq('user_id', user.id)
-  .maybeSingle();
+     const roleRes = await supabaseClient
+.from('shop_user_roles')
+.select('role, owner_id, email')
+.eq('user_id', user.id)
+.maybeSingle();
   
 // التعديل: لو الشخص ده ليه owner_id، يبقى هو موظف تابع لحد، مش مدير
 if (roleRes.data && roleRes.data.owner_id) {
@@ -3793,8 +3793,7 @@ async function inviteStaff() {
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
 
-alert('Account Created!\nEmail: ' + email + '\nPassword: 123456');
-
+    showNotification('تم إرسال الدعوة للموظف بنجاح! 📧', 'success');
     document.getElementById('staffEmail').value = '';
   } catch (e) {
     showNotification('تعذر إرسال الدعوة: ' + (e.message || ''), 'error');
