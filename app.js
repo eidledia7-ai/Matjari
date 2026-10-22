@@ -22,6 +22,7 @@ const translations = {
     signup_btn: "إنشاء حساب جديد ✨",
     forgot_btn: "نسيت كلمة المرور؟",
     logout_btn: "خروج 🚪",
+    change_pass_btn: "🔑 تغيير كلمة المرور",
     main_menu: "القائمة الرئيسية",
     menu_home: "🏠 الرئيسية",
     menu_sales: "🛒 نقطة البيع",
@@ -287,6 +288,7 @@ const translations = {
     signup_btn: "Create Account ✨",
     forgot_btn: "Forgot Password?",
     logout_btn: "Logout 🚪",
+    change_pass_btn: "🔑 Change Password",
     main_menu: "Main Menu",
     menu_home: "🏠 Home",
     menu_sales: "🛒 POS",
@@ -943,6 +945,31 @@ async function handleLogout() {
     showLoggedOutUI();
   } catch (e) {
     showNotification('تعذر الخروج', 'error');
+  }
+}
+/* ============ تغيير كلمة المرور ============ */
+async function changePasswordPrompt() {
+  const newPass = prompt(currentLang === 'en' ? 'Enter new password (at least 6 characters):' : 'أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
+  if (newPass === null) return; // لو المستخدم داس إلغاء
+  
+  if (newPass.length < 6) {
+    return showNotification(currentLang === 'en' ? 'Password must be at least 6 characters.' : 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.', 'error');
+  }
+  
+  const confirmPass = prompt(currentLang === 'en' ? 'Confirm new password:' : 'تأكيد كلمة المرور الجديدة:');
+  if (confirmPass !== newPass) {
+    return showNotification(currentLang === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.', 'error');
+  }
+
+  showLoading(currentLang === 'en' ? 'Updating...' : 'جارٍ التحديث...');
+  try {
+    const { data, error } = await supabaseClient.auth.updateUser({ password: newPass });
+    if (error) throw error;
+    showNotification(currentLang === 'en' ? 'Password updated successfully!' : 'تم تغيير كلمة المرور بنجاح! ✅', 'success');
+  } catch (e) {
+    showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + (e.message || ''), 'error');
+  } finally {
+    hideLoading();
   }
 }
 
