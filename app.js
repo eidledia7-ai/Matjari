@@ -767,12 +767,11 @@ function toggleSidebar(show) {
 
 function showPage(pageId) {
   // قائمة الصفحات الممنوعة صراحةً على الموظف
-  const pagesManagerOnly = ['supportContact', 'supportGuide', 'supportAbout'];
-
-  if (state.role === 'employee' && (pageId !== 'sales' && pageId !== 'home' || pagesManagerOnly.indexOf(pageId) !== -1)) {
-    showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
-    pageId = 'sales';
-  }
+// الموظف مسموح له بصفحة البيع فقط
+if (state.role === 'employee' && pageId !== 'sales') {
+  showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
+  pageId = 'sales';
+}
 
   document.querySelectorAll('.page').forEach(function(p) {
     p.classList.remove('active');
@@ -1462,7 +1461,7 @@ async function uploadToCloud() {
   if (!navigator.onLine) return;
   
   if (!state.currentUser || isSyncing) return;
-  if (state.role === 'employee') return;
+  
   isSyncing = true;
   try {
     const payload = {
@@ -1831,7 +1830,7 @@ async function completeSale() {
     const cust = state.customers.find(function(c) { return c.id === customerId; });
     if (cust) cust.openingDebt = (cust.openingDebt || 0) + saleObj.remaining;
   }
-
+await uploadToCloud();
   saveData();
   playBeep(true);
   showNotification('تم حفظ الفاتورة بنجاح ✅');
