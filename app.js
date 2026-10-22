@@ -766,7 +766,10 @@ function toggleSidebar(show) {
 }
 
 function showPage(pageId) {
-  if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'home') {
+  // قائمة الصفحات الممنوعة صراحةً على الموظف
+  const pagesManagerOnly = ['supportContact', 'supportGuide', 'supportAbout'];
+
+  if (state.role === 'employee' && (pageId !== 'sales' && pageId !== 'home' || pagesManagerOnly.indexOf(pageId) !== -1)) {
     showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
     pageId = 'sales';
   }
@@ -948,21 +951,56 @@ async function openUserSession(user) {
   state.currentUser = user;
   showLoading('جارٍ تحميل بياناتك...');
   try {
-  
-     const roleRes = await supabaseClient
-.from('shop_user_roles')
-.select('role, owner_id, email')
-.eq('user_id', user.id)
-.maybeSingle();
-  
-// التعديل: لو الشخص ده ليه owner_id، يبقى هو موظف تابع لحد، مش مدير
-if (roleRes.data && roleRes.data.owner_id) {
+    // 1. تحديد الدور (Role) ورقم المدير (owner_id) والإيميل
+    const roleRes = await supabaseClient
+      .from('shop_user_roles')
+      .select('role, owner_id, email')
+      .eq('user_id', user.id)
+      .maybeSingle();
+      
+    // نبدأ بالافتراضي الأأمن (موظف)
     state.role = 'employee';
-    state.ownerId = roleRes.data.owner_id; // هنحفظ رقم المدير بتاعه
-} else {
-    state.role = 'manager';
-} 
+    state.ownerId = null;
 
+    if (roleRes.data) {
+      if (roleRes.data.role === 'manager' && !roleRes.data.owner_id) {
+        state.role = 'manager';
+      } else if (roleRes.data.role === 'employee' && roleRes.data.owner_id) {
+        state.role = 'employee';
+        state.ownerId = roleRes.data.owner_id;
+      } else {
+        throw new Error('بيانات دور المستخدم غير متسقة. تواصل مع الدعم.');
+      }
+    } else {
+      // لا يوجد سطر: نتحقق هل لديه بيانات shop_data
+      let hasShopData = false;
+      try {
+        const dataCheck = await supabaseClient
+          .from('shop_data')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (dataCheck.data) hasShopData = true;
+      } catch (e) { }
+
+      // أول مستخدم (أو صاحب بيانات) → manager، وننشئ السطر
+      state.role = 'manager';
+      state.ownerId = null;
+      try {
+        await supabaseClient
+          .from('shop_user_roles')
+          .upsert({
+            user_id: user.id,
+            role: 'manager',
+            owner_id: null,
+            email: user.email || null
+          }, { onConflict: 'user_id' });
+      } catch (e) {
+        console.warn('تعذر إنشاء سطر الدور تلقائياً:', e.message);
+      }
+    }
+
+    // 2. جلب بيانات الاشتراك
     const subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
@@ -976,57 +1014,60 @@ if (roleRes.data && roleRes.data.owner_id) {
       };
     }
 
-let localCache = null;
-try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + user.id)); } catch (e) {}
+    // 3. تحديد مين صاحب البيانات (المدير) عشان نقرا كاشه ونحفظ فيه
+    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
+    let localCache = null;
+    try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + cacheOwnerId)); } catch (e) {}
 
-// بنحدد مين اللي هنقرا بياناته (الموظف ولا المدير)
-const targetUserId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
-let dataRes = { data: null, error: null };
-if (navigator.onLine) {
-  try {
-    // التعديل هنا: بنجيب بيانات targetUserId بدل user.id
-    dataRes = await supabaseClient.from('shop_data').select('shop_data').eq('user_id', targetUserId).maybeSingle();
-    if (dataRes.error) throw dataRes.error;
-  } catch (e) { console.warn('Cloud fetch failed', e); }
-}
+    let dataRes = { data: null, error: null };
+    if (navigator.onLine && supabaseClient) {
+      try {
+        dataRes = await supabaseClient
+          .from('shop_data')
+          .select('shop_data')
+          .eq('user_id', cacheOwnerId)
+          .maybeSingle();
+        if (dataRes.error) throw dataRes.error;
+      } catch (e) { console.warn('Cloud fetch failed', e); }
+    }
 
-let d = null;
-// التعديل: لو الموبايل فيه بيانات، استخدمها فوراً ومتستناش السيرفر
-if (localCache && (localCache.products || localCache.sales)) {
-  d = localCache;
-} else if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
-  d = dataRes.data.shop_data;
-  localStorage.setItem('matjari_cache_' + user.id, JSON.stringify(d));
-}
+    let d = null;
+    // بنجيب البيانات من السيرفر لو موجودة، أو من الكاش
+    if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
+      d = dataRes.data.shop_data;
+      try { localStorage.setItem('matjari_cache_' + cacheOwnerId, JSON.stringify(d)); } catch(e) {}
+    } else if (localCache && (localCache.products || localCache.sales)) {
+      d = localCache;
+    }
 
-if (d) {
-  state.products = d.products || [];
-  state.sales = d.sales || [];
-  state.customers = d.customers || [];
-  state.suppliers = d.suppliers || [];
-  state.expenses = d.expenses || [];
-  state.stockMoves = d.stockMoves || [];
-  state.returns = d.returns || [];
-  state.customerPayments = d.customerPayments || [];
-  state.supplierPayments = d.supplierPayments || [];
-  state.purchases = d.purchases || [];
-  state.shifts = d.shifts || [];
-  state.currentShift = d.currentShift || null;
-  if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
-} else {
-  state.products = [];
-  state.sales = [];
-  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-  state.suppliers = [];
-  state.expenses = [];
-  state.stockMoves = [];
-  state.returns = [];
-  state.customerPayments = [];
-  state.supplierPayments = [];
-  state.purchases = [];
-  state.shifts = [];
-  state.currentShift = null;
-}
+    if (d) {
+      state.products = d.products || [];
+      state.sales = d.sales || [];
+      state.customers = d.customers || [];
+      state.suppliers = d.suppliers || [];
+      state.expenses = d.expenses || [];
+      state.stockMoves = d.stockMoves || [];
+      state.returns = d.returns || [];
+      state.customerPayments = d.customerPayments || [];
+      state.supplierPayments = d.supplierPayments || [];
+      state.purchases = d.purchases || [];
+      state.shifts = d.shifts || [];
+      state.currentShift = d.currentShift || null;
+      if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
+    } else {
+      state.products = [];
+      state.sales = [];
+      state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
+      state.suppliers = [];
+      state.expenses = [];
+      state.stockMoves = [];
+      state.returns = [];
+      state.customerPayments = [];
+      state.supplierPayments = [];
+      state.purchases = [];
+      state.shifts = [];
+      state.currentShift = null;
+    }
 
     showLoggedInUI();
     applyRolePermissions();
@@ -1057,6 +1098,16 @@ function applyRolePermissions() {
   });
   const syncBtn = document.querySelector('.sidebar-nav button[data-action="sync"]');
   if (syncBtn) syncBtn.style.display = employee ? 'none' : '';
+
+  // [إضافة] إخفاء .nav-group إذا كل أزراره مخفية، وإظهاره إذا فيه أي زر ظاهر
+  document.querySelectorAll('.nav-group').forEach(function(group) {
+    const buttons = group.querySelectorAll('button');
+    let anyVisible = false;
+    buttons.forEach(function(b) {
+      if (b.style.display !== 'none') anyVisible = true;
+    });
+    group.style.display = anyVisible ? '' : 'none';
+  });
 }
 
 async function startAuth() {
@@ -1372,8 +1423,10 @@ async function safeClearAllDataPrompt() {
 
 /* ============ التخزين السحابي والمحلي ============ */
 function saveData() {
-  if (!state.currentUser) return;
-  const key = 'matjari_cache_' + state.currentUser.id;
+  // [إصلاح الكاش] نحفظ على ownerId للموظف و user.id للمدير
+  const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
+  if (!cacheOwnerId) return;
+  const key = 'matjari_cache_' + cacheOwnerId;
   try {
     const cache = {
       products: state.products,
@@ -1395,6 +1448,9 @@ function saveData() {
   } catch (e) {}
 }
 
+// ملاحظة مقصودة: منع رفع بيانات الموظف للسحابة (uploadToCloud) مقصود مؤقتاً
+// لمنع تعارض الكتابة بين المدير والموظف على نفس سطر shop_data.
+// الحل المستقبلي: جدول منفصل للحركات/الفواتير أو merge على مستوى السجل.
 function scheduleSync() {
   if (!state.currentUser || state.role === 'employee') return;
   clearTimeout(syncTimer);
@@ -1480,15 +1536,31 @@ async function registerServiceWorker() {
   } catch (e) { console.warn('SW registration failed:', e.message); }
 }
 
+// [إصلاح] استخدام matjari_last_user لاختيار الكاش بدلاً من keys[0] العشوائي
 function loadOfflineSession() {
   const keys = Object.keys(localStorage).filter(k => k.startsWith('matjari_cache_'));
   if (keys.length === 0) { showLoggedOutUI(); return; }
+
+  let lastUserRaw = null;
+  try { lastUserRaw = JSON.parse(localStorage.getItem('matjari_last_user')); } catch (e) {}
+
+  let chosenKey = null;
+  let chosenId = null;
+  if (lastUserRaw && lastUserRaw.id && keys.indexOf('matjari_cache_' + lastUserRaw.id) !== -1) {
+    chosenKey = 'matjari_cache_' + lastUserRaw.id;
+    chosenId = lastUserRaw.id;
+  } else {
+    // fallback: أول مفتاح مع تحذير
+    console.warn('[offline] لم يتم العثور على matjari_last_user صالح، يتم استخدام أول كاش متاح.');
+    chosenKey = keys[0];
+    chosenId = keys[0].replace('matjari_cache_', '');
+  }
+
+  const cache = JSON.parse(localStorage.getItem(chosenKey));
   
-  const userId = keys[0].replace('matjari_cache_', '');
-  const cache = JSON.parse(localStorage.getItem(keys[0]));
-  
-  state.currentUser = { id: userId, email: 'offline-user' };
-  state.role = 'manager';
+  state.currentUser = { id: chosenId, email: 'offline-user' };
+  state.role = (lastUserRaw && lastUserRaw.role) ? lastUserRaw.role : 'manager';
+  state.ownerId = (state.role === 'employee' && lastUserRaw && lastUserRaw.id) ? lastUserRaw.id : null;
   
   if (cache.products) state.products = cache.products;
   if (cache.sales) state.sales = cache.sales;
@@ -3768,35 +3840,40 @@ function printComparisonReport() { window.print(); }
 function printReportSummary() { window.print(); }
 
 /* ============ إدارة الموظفين (Edge Function) ============ */
+// ملاحظة: كلمة المرور '123456' مؤقتة للموظف عند الدعوة، ويجب عليه تغييرها فور أول دخول.
 async function inviteStaff() {
   const email = document.getElementById('staffEmail').value.trim();
   if (!email) return showNotification('أدخل إيميل الموظف', 'error');
 
-  showLoading('جارٍ إرسال الدعوة...');
+  const defaultPassword = '123456';
+
+  showLoading('جارٍ إنشاء الحساب...');
   try {
-    // بنجيب المفتاح اللي التطبيق شغال بيه
     const session = await supabaseClient.auth.getSession();
     const token = session.data.session?.access_token || SUPABASE_KEY; 
 
     const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
       headers: {
         Authorization: `Bearer ${token}`,
-        apikey: SUPABASE_KEY // مهم جداً عشان Supabase يقبل الطلب
+        apikey: SUPABASE_KEY
       },
-  body: {
-  email: email,
-  owner_id: state.currentUser.id,
-  password: '123456'
-}
+      body: {
+        email: email,
+        owner_id: state.currentUser.id,
+        password: defaultPassword
+      }
     });
 
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
 
-    showNotification('تم إرسال الدعوة للموظف بنجاح! 📧', 'success');
+    // إظهار الباسورد والإيميل في Alert
+    alert(`Account Created!\nEmail: ${email}\nPassword: ${defaultPassword}`);
+    
     document.getElementById('staffEmail').value = '';
+    loadStaffList();
   } catch (e) {
-    showNotification('تعذر إرسال الدعوة: ' + (e.message || ''), 'error');
+    showNotification('تعذر إنشاء الحساب: ' + (e.message || ''), 'error');
   } finally {
     hideLoading();
   }
@@ -3809,7 +3886,8 @@ async function loadStaffList() {
     const { data, error } = await supabaseClient
       .from('shop_user_roles')
       .select('user_id, role, owner_id, email') 
-      .eq('owner_id', state.currentUser.id);
+      .eq('owner_id', state.currentUser.id)
+      .order('email', { ascending: true });
 
     if (error) throw error;
 
@@ -3818,12 +3896,13 @@ async function loadStaffList() {
       return;
     }
 
-    let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>إيميل الموظف</th><th>الرتبة</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>إيميل الموظف</th><th>الرتبة</th><th>الإجراءات</th></tr></thead><tbody>';
     
     data.forEach(staff => {
       html += '<tr>' +
-        '<td><b>' + (staff.email || staff.user_id) + '</b></td>' +
-        '<td><span class="badge" style="background:#e0e0e0; padding:4px 8px; border-radius:4px;">' + staff.role + '</span></td>' +
+        '<td><b>' + escapeHTML(staff.email || staff.user_id) + '</b></td>' +
+        '<td><span class="badge" style="background:#e0e0e0; padding:4px 8px; border-radius:4px;">' + escapeHTML(staff.role) + '</span></td>' +
+        '<td><button class="small-btn red" onclick="deactivateStaff(\'' + staff.user_id + '\')">إلغاء التنشيط</button></td>' +
         '</tr>';
     });
     
@@ -3833,5 +3912,30 @@ async function loadStaffList() {
   } catch (e) {
     container.innerHTML = '<p class="text-red">تعذر تحميل قائمة الموظفين.</p>';
     console.error(e);
+  }
+}
+
+// [دالة جديدة] إلغاء تنشيط موظف: حذف سطره من shop_user_roles بشرط أن يكون تابعاً للمدير الحالي
+async function deactivateStaff(userId) {
+  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (!userId) return;
+  if (!confirm('هل أنت متأكد من إلغاء تنشيط هذا الموظف؟')) return;
+
+  showLoading('جارٍ إلغاء التنشيط...');
+  try {
+    const { error } = await supabaseClient
+      .from('shop_user_roles')
+      .delete()
+      .eq('user_id', userId)
+      .eq('owner_id', state.currentUser.id);
+
+    if (error) throw error;
+
+    showNotification('تم إلغاء تنشيط الموظف ✅', 'success');
+    await loadStaffList();
+  } catch (e) {
+    showNotification('تعذر إلغاء التنشيط: ' + (e.message || ''), 'error');
+  } finally {
+    hideLoading();
   }
 }
