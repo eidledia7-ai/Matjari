@@ -213,10 +213,18 @@
             <select id="saleCustomer"></select>
           </div>
         </div>
-
-        <div class="btn-group mt-15">
-          <button class="btn primary" onclick="addToCartManual()" data-i18n="add_manual_btn">إضافة يدوية للفاتورة</button>
-        </div>
+<!-- كروت أو استيكرات الإضافة السريعة -->
+<div class="sticker-grid mt-15">
+  <button type="button" class="sticker-btn" onclick="addToCartManual()">
+    <span class="sticker-icon">🛒</span>
+    <span class="sticker-text" data-i18n="add_manual_btn">إضافة يدوية</span>
+  </button>
+  
+  <button type="button" class="sticker-btn" onclick="openBarcodeScanner()">
+    <span class="sticker-icon">📷</span>
+    <span class="sticker-text">مسح كاميرا</span>
+  </button>
+</div>
 
         <div id="cartTable" class="mt-20"></div>
 
