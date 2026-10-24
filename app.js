@@ -32,7 +32,8 @@ const translations = {
     menu_settings: "الإعدادات",
     menu_support: "🆘 الدعم والتواصل",
     store_data_page: "🏪 بيانات المحل",
-    lang_page: "🌐 لغة التطبيق",
+ staff_page: "👥 إدارة الموظفين",
+       lang_page: "🌐 لغة التطبيق",
     select_lang_title: "اختر لغة النظام المفضلة",
     lang_desc: "يمكنك التبديل بين اللغات المتاحة وسيتم تطبيقها فوراً على واجهة التطبيق بالكامل.",
     sync_now: "🔄 مزامنة الآن",
@@ -298,7 +299,8 @@ const translations = {
     menu_settings: "Settings",
     menu_support: "🆘 Support & Contact",
     store_data_page: "🏪 Store Details",
-    lang_page: "🌐 App Language",
+   staff_page: "👥 Staff Management",
+     lang_page: "🌐 App Language",
     select_lang_title: "Select Preferred System Language",
     lang_desc: "You can switch between available languages and it will apply immediately to the entire app interface.",
     sync_now: "🔄 Sync Now",
@@ -1907,9 +1909,19 @@ function renderSales() {
     return;
   }
 
+  // ترجمة طريقة الدفع
+  const en = currentLang === 'en';
+  const payLabels = {
+    cash: en ? 'Cash' : 'نقدي',
+    visa: en ? 'Visa' : 'فيزا',
+    transfer: en ? 'Transfer' : 'تحويل',
+    card: en ? 'Card' : 'بطاقة'
+  };
+
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_paid">المدفوع</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_payment_method">طريقة الدفع</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(s) {
     const cust = state.customers.find(function(c) { return c.id === s.customerId; });
+    const payText = payLabels[s.payMethod] || s.payMethod || '-';
     html += '<tr>' +
       '<td>' + escapeHTML(s.id) + '</td>' +
       '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
@@ -1917,10 +1929,11 @@ function renderSales() {
       '<td>' + s.total.toFixed(2) + '</td>' +
       '<td>' + s.paid.toFixed(2) + '</td>' +
       '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
-      '<td>' + escapeHTML(s.payMethod) + '</td>' +
+      '<td>' + escapeHTML(payText) + '</td>' +
       '<td>' +
         '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')">طباعة</button>' +
-        '<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">حذف خطأ</button>' +
+        '<button class="small-btn" onclick="sendInvoiceWhatsApp(\'' + s.id + '\')" style="background:#25D366; color:white;">واتساب 💬</button>' +
+        '<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">حذف</button>' +
       '</td>' +
       '</tr>';
   });
@@ -3422,10 +3435,15 @@ async function printInvoice(sale) {
   if (!sale) return;
   const cust = state.customers.find(c => c.id === sale.customerId);
   const settings = state.storeSettings || {};
-  const qrDataUrl = await generateQRData(sale);
+
+  // نفتح النافذة الأول قبل أي await عشان مايتبلوكش
   const w = window.open('', '_blank');
   if (!w) return showNotification(currentLang === 'en' ? 'Please allow pop-ups to print the invoice.' : 'اسمح بالنوافذ المنبثقة لطباعة الفاتورة', 'warning');
+
+  const qrDataUrl = await generateQRData(sale);
+
   const currency = escapeHTML(settings.currency || '');
+  const currencyLabel = currency ? ` ${currency}` : '';
   const shopName = escapeHTML(settings.name || (currentLang === 'en' ? 'My Store' : 'متجري'));
   const phone = escapeHTML(settings.phone || settings.storePhone || '-');
   const address = escapeHTML(settings.address || settings.storeAddress || '-');
@@ -3439,13 +3457,70 @@ async function printInvoice(sale) {
   const paymentMethod = sale.payMethod || sale.paymentMethod || 'cash';
   const cashier = escapeHTML(sale.cashier || sale.cashierName || (state.currentUser && (state.currentUser.email || state.currentUser.user_metadata?.name)) || '—');
   const en = currentLang === 'en';
+
+  // ترجمة طريقة الدفع
+  const payLabels = {
+    cash: en ? 'Cash' : 'نقدي',
+    card: en ? 'Card' : 'بطاقة',
+    credit: en ? 'Credit' : 'آجل',
+    wallet: en ? 'Wallet' : 'محفظة'
+  };
+  const payText = payLabels[paymentMethod] || paymentMethod;
+
+  // حماية اللوجو بدل escapeHTML
+  const logo = settings.logo;
+  const safeLogo = typeof logo === 'string' && (logo.startsWith('http') || logo.startsWith('data:image/')) ? logo : '';
+
   const labels = en ? {invoice:'Invoice',date:'Date',customer:'Customer',item:'Item',qty:'Qty',price:'Price',total:'Total',subtotal:'Subtotal',discount:'Discount',net:'Net Total',paid:'Paid',remaining:'Remaining',payment:'Payment Method',cashier:'Cashier',thanks:'Thank you for shopping with us!'} : {invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',item:'الصنف',qty:'الكمية',price:'السعر',total:'الإجمالي',subtotal:'الإجمالي قبل الخصم',discount:'الخصم',net:'الصافي',paid:'المدفوع',remaining:'المتبقي',payment:'طريقة الدفع',cashier:'الكاشير',thanks:'شكراً لتعاملكم معنا!'};
+
   w.document.write(`<!DOCTYPE html><html lang="${en?'en':'ar'}" dir="${en?'ltr':'rtl'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${labels.invoice} ${escapeHTML(sale.id)}</title><style>
   *{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;margin:0;padding:22px;background:#f3f6f8;color:#203447}.invoice{max-width:760px;margin:auto;background:white;padding:28px;border:1px solid #dce5ec;border-top:7px solid #176b70;border-radius:12px}.head{text-align:center;border-bottom:2px solid #e1e8ed;padding-bottom:16px}.head h1{color:#17364c;margin:0 0 8px}.muted{color:#687b8b;font-size:13px}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.meta div{padding:11px;background:#f1f6f8;border-radius:8px}.meta b{display:block;color:#176b70;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#17364c;color:white}th,td{padding:11px;border:1px solid #dce5ec;text-align:${en?'left':'right'}}tbody tr:nth-child(even){background:#f7fafb}.totals{margin-${en?'left':'right'}:auto;max-width:340px}.totals p{display:flex;justify-content:space-between;margin:7px 0;padding:5px}.net{font-size:23px;font-weight:bold;color:#176b70;border-top:2px solid #176b70;padding-top:12px!important}.footer{text-align:center;border-top:1px solid #dce5ec;margin-top:20px;padding-top:16px}.footer img{width:115px;height:115px}.thanks{font-weight:bold;color:#176b70;margin:10px}@media print{body{padding:0;background:#fff}.invoice{border:0;border-top:6px solid #176b70;border-radius:0;max-width:none;padding:10px;box-shadow:none}@page{margin:10mm}}@media(max-width:520px){.meta{grid-template-columns:1fr}.invoice{padding:14px}}
-  </style></head><body><main class="invoice"><header class="head">${settings.logo ? `<img src="${escapeHTML(settings.logo)}" alt="logo" style="max-width:90px;max-height:70px;object-fit:contain">` : ''}<h1>${shopName}</h1><div>${en?'Phone':'الهاتف'}: ${phone} &nbsp; | &nbsp; ${en?'Address':'العنوان'}: ${address}</div></header><section class="meta"><div><b>${labels.invoice}</b>${escapeHTML(sale.id)}</div><div><b>${labels.date}</b>${dateText}</div><div><b>${labels.customer}</b>${customerName}</div></section><table><thead><tr><th>${labels.item}</th><th>${labels.qty}</th><th>${labels.price}</th><th>${labels.total}</th></tr></thead><tbody>${(sale.items||[]).map(i=>`<tr><td>${escapeHTML(i.name||'')}</td><td>${Number(i.qty||0)}</td><td>${Number(i.price||0).toFixed(2)} ${currency}</td><td>${(Number(i.qty||0)*Number(i.price||0)).toFixed(2)} ${currency}</td></tr>`).join('')}</tbody></table><section class="totals"><p><span>${labels.subtotal}</span><b>${subtotal.toFixed(2)} ${currency}</b></p><p><span>${labels.discount}</span><b>${discount.toFixed(2)} ${currency}</b></p><p class="net"><span>${labels.net}</span><span>${total.toFixed(2)} ${currency}</span></p><p><span>${labels.paid}</span><b>${paid.toFixed(2)} ${currency}</b></p><p><span>${labels.remaining}</span><b>${remaining.toFixed(2)} ${currency}</b></p><p><span>${labels.payment}</span><b>${escapeHTML(paymentMethod)}</b></p></section><footer class="footer">${qrDataUrl?`<img src="${qrDataUrl}" alt="QR Code">`:''}<p class="thanks">${labels.thanks}</p><p>${labels.cashier}: <b>${cashier}</b></p></footer></main><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
+  </style></head><body><main class="invoice"><header class="head">${safeLogo ? `<img src="${safeLogo}" alt="logo" style="max-width:90px;max-height:70px;object-fit:contain">` : ''}<h1>${shopName}</h1><div>${en?'Phone':'الهاتف'}: ${phone} &nbsp; | &nbsp; ${en?'Address':'العنوان'}: ${address}</div></header><section class="meta"><div><b>${labels.invoice}</b>${escapeHTML(sale.id)}</div><div><b>${labels.date}</b>${dateText}</div><div><b>${labels.customer}</b>${customerName}</div></section><table><thead><tr><th>${labels.item}</th><th>${labels.qty}</th><th>${labels.price}</th><th>${labels.total}</th></tr></thead><tbody>${(sale.items||[]).map(i=>`<tr><td>${escapeHTML(i.name||'')}</td><td>${Number(i.qty||0)}</td><td>${Number(i.price||0).toFixed(2)}${currencyLabel}</td><td>${(Number(i.qty||0)*Number(i.price||0)).toFixed(2)}${currencyLabel}</td></tr>`).join('')}</tbody></table><section class="totals"><p><span>${labels.subtotal}</span><b>${subtotal.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.discount}</span><b>${discount.toFixed(2)}${currencyLabel}</b></p><p class="net"><span>${labels.net}</span><span>${total.toFixed(2)}${currencyLabel}</span></p><p><span>${labels.paid}</span><b>${paid.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.remaining}</span><b>${remaining.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.payment}</span><b>${escapeHTML(payText)}</b></p></section><footer class="footer">${qrDataUrl?`<img src="${qrDataUrl}" alt="QR Code">`:''}<p class="thanks">${labels.thanks}</p><p>${labels.cashier}: <b>${cashier}</b></p></footer></main><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
   w.document.close();
 }
 
+function sendInvoiceWhatsApp(saleId) {
+  const sale = state.sales.find(function(s) { return s.id === saleId; });
+  if (!sale) return showNotification('الفاتورة غير موجودة', 'error');
+
+  const cust = state.customers.find(function(c) { return c.id === sale.customerId; });
+  const custName = cust ? cust.name : 'عميل نقدي';
+
+  const settings = state.storeSettings || {};
+  const storeName = settings.name || 'متجري';
+  const currency = settings.currency || 'ج.م';
+
+  // قيم آمنة ضد undefined
+  const items = Array.isArray(sale.items) ? sale.items : [];
+  const total = Number(sale.total || 0);
+  const paid = Number(sale.paid || 0);
+  const remaining = Math.max(0, total - paid);
+
+  let message = `أهلاً ${custName}،\n`;
+  message += `شكراً لتعاملك مع ${storeName}.\n\n`;
+  message += `تفاصيل فاتورتك رقم (${sale.id}):\n`;
+
+  items.forEach(function(item) {
+    const qty = Number(item.qty || 0);
+    const price = Number(item.price || 0);
+    message += `- ${item.name} × ${qty} = ${(price * qty).toFixed(2)} ${currency}\n`;
+  });
+
+  message += `\nالإجمالي: ${total.toFixed(2)} ${currency}\n`;
+  message += `المدفوع: ${paid.toFixed(2)} ${currency}\n`;
+  if (remaining > 0) {
+    message += `المتبقي (دين): ${remaining.toFixed(2)} ${currency}\n`;
+  }
+  message += `\nنتمنى لك يوماً سعيداً! 🌟`;
+
+  // كود الدولة قابل للتخصيص من الإعدادات
+  const countryCode = settings.countryCode || '20';
+  const phone = cust && cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
+  const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
+
+  const whatsappUrl = `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
+}
 /* ============ النسخ الاحتياطي (XOR + Base64) ============ */
 /*
  * ملاحظة أمنية مهمة:
