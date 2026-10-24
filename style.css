@@ -946,3 +946,56 @@ html[dir="ltr"] .compare-table td.label-cell { text-align: left; }
   margin-top: 12px;
 }
 .compare-summary .stat-card p { font-size: 18px; }
+/* ============ ستايل الكروت (Stickers) ============ */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.sticker-btn {
+  background: #ffffff;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+  text-align: center;
+}
+
+.sticker-btn:hover {
+  transform: translateY(-3px);
+  border-color: var(--teal);
+  box-shadow: 0 8px 20px rgba(20, 125, 128, 0.15);
+}
+
+.sticker-btn .sticker-icon {
+  font-size: 36px; /* حجم الأيقونة الكبيرة */
+  line-height: 1;
+}
+
+.sticker-btn .sticker-text {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+/* الوضع الليلي للاستيكرات */
+body.dark-mode .sticker-btn {
+  background: #1a2632;
+  border-color: #2a3a48;
+}
+body.dark-mode .sticker-btn:hover {
+  border-color: #147d80;
+}
+body.dark-mode .sticker-btn .sticker-text {
+  color: #e8eef5;
+}
