@@ -274,7 +274,8 @@ const translations = {
     compare_title: "نتائج المقارنة",
     compare_sales: "المبيعات",
     compare_profit: "الأرباح",
-    barcode_no_support: "المتصفح لا يدعم المسح. اكتب الباركود يدوياً."
+        barcode_no_support: "المتصفح لا يدعم المسح. اكتب الباركود يدوياً.",
+
 subscription_page: "💳 اشتراكي",
 current_status_title: "📊 الحالة الحالية",
 current_plan: "الخطة الحالية",
@@ -564,7 +565,7 @@ days_word: "يوم",
     compare_title: "Comparison Results",
     compare_sales: "Sales",
     compare_profit: "Profit",
-    barcode_no_support: "Browser does not support scanning. Type the barcode manually."
+    barcode_no_support: "Browser does not support scanning. Type the barcode manually.",
 subscription_page: "💳 My Subscription",
 current_status_title: "📊 Current Status",
 current_plan: "Current Plan",
@@ -1177,8 +1178,8 @@ async function openUserSession(user) {
     checkSubscriptionStatus();
 
     const lastPage = getLastPage();
-    const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
-    const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
+    const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settSubscription', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
+     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
   } catch (e) {
     console.error(e);
@@ -4236,7 +4237,7 @@ function renderSubscriptionPage() {
   html += '<h3>' + tr('current_plan') + '</h3><p>' + planName + '</p></div>';
 
   html += '<div class="stat-card ' + (isActive ? 'active' : 'expired') + '">';
-  html += '<h3>' + tr('status_label') + '</h3><p>' + (isActive ? tr('active_status') : tr('expired_status')) + '</p></div>';
+  html += '<h3>' + tr('th_status') + '</h3><p>' + (isActive ? tr('active_status') : tr('expired_status')) + '</p></div>';
 
   if (endDate) {
     html += '<div class="stat-card">';
