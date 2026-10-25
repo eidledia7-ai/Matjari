@@ -4529,14 +4529,55 @@ function enforceSubscriptionBlock() {
   document.body.style.overflow = 'hidden';
 }
 
-function startSubscription(planId) {
-  // TODO (Phase 3): wire to Paymob
-  showNotification(
-    currentLang === 'en'
-      ? 'Payment integration coming soon! We are setting up Paymob.'
-      : 'الدفع هيتوفر قريباً! جاري ربط Paymob.',
-    'info'
-  );
+async function startSubscription(planId) {
+  const plan = PLANS.find(p => p.id === planId);
+  if (!plan) return;
+  
+  showLoading(currentLang === 'en' ? 'Connecting to payment...' : 'جارٍ الاتصال ببوابة الدفع...');
+
+  try {
+    // 1. الاتصال بدالة Supabase اللي عملناها
+    const { data, error } = await supabaseClient.functions.invoke('create-payment', {
+      body: {
+        amount: plan.price,
+        planId: planId,
+        userEmail: state.currentUser ? state.currentUser.email : '',
+        userName: 'Customer'
+      }
+    });
+
+    if (error) throw error;
+    if (!data || !data.token) throw new Error('لم يتم استلام توكن الدفع');
+
+    hideLoading();
+
+    // 2. عرض شاشة الدفع (Iframe) جوه التطبيق
+    const iframeId = '1090930'; // الـ ID بتاع شاشة البطاقات
+    const iframeUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${data.token}`;
+
+    // إنشاء نافذة منبثقة (Modal) للدفع
+    const oldModal = document.getElementById('paymobIframeModal');
+    if (oldModal) oldModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'paymobIframeModal';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '9999999'; // عشان تظهر فوق أي حاجة
+    modal.innerHTML = `
+      <div class="modal-card" style="max-width: 600px; width: 100%; padding: 0; overflow: hidden; height: 85vh;">
+        <div style="padding: 15px; background: #17364c; color: white; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; color: white;">💳 ${currentLang === 'en' ? 'Secure Payment' : 'الدفع الآمن'}</h3>
+          <button onclick="document.getElementById('paymobIframeModal').remove()" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
+        </div>
+        <iframe src="${iframeUrl}" width="100%" height="100%" style="border: none;"></iframe>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+  } catch (err) {
+    hideLoading();
+    showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + err.message, 'error');
+  }
 }
 /* ============ عرض تفاصيل باقة ============ */
 function showPlanDetail(planId, context) {
