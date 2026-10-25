@@ -298,6 +298,20 @@ per_month: "شهر",
 per_year: "سنة",
 or_text: "أو",
 days_word: "يوم",
+landing_subtitle: "نظام إدارة المبيعات والمخازن المتكامل",
+landing_tagline: "جرب 14 يوم مجاناً — بدون بطاقة ائتمان",
+feature_pos: "✅ نقطة بيع سريعة",
+feature_inventory: "✅ إدارة مخزون",
+feature_whatsapp: "✅ فواتير واتساب",
+feature_reports: "✅ تقارير مالية",
+landing_plans_title: "💎 اختر خطتك",
+start_free_trial: "✨ ابدأ 14 يوم تجربة مجانية",
+login_btn_simple: "🔐 تسجيل الدخول",
+back_btn: "← رجوع",
+trial_ended_title: "انتهت فترة التجربة",
+trial_ended_desc: "اشترك للاستمرار في استخدام التطبيق.",
+trial_ended_days: "انتهت تجربتك منذ {days} يوم. اشترك للاستمرار.",
+subscribe_now: "اشترك الآن",
     },
   
   en: {
@@ -588,9 +602,28 @@ per_month: "month",
 per_year: "year",
 or_text: "or",
 days_word: "days",
+landing_subtitle: "Integrated POS & Inventory System",
+landing_tagline: "Try 14 days free — No credit card required",
+feature_pos: "✅ Fast POS",
+feature_inventory: "✅ Inventory Management",
+feature_whatsapp: "✅ WhatsApp Invoices",
+feature_reports: "✅ Financial Reports",
+landing_plans_title: "💎 Choose Your Plan",
+start_free_trial: "✨ Start 14-Day Free Trial",
+login_btn_simple: "🔐 Login",
+back_btn: "← Back",
+trial_ended_title: "Trial Ended",
+trial_ended_desc: "Subscribe to continue using the app.",
+trial_ended_days: "Your trial ended {days} days ago. Subscribe to continue.",
+subscribe_now: "Subscribe Now",
       }
 };
-
+/* ============ خطط الاشتراك (مركزية) ============ */
+const PLANS = [
+  { id: 'starter', name_ar: 'البداية', name_en: 'Starter', price: 299, yearly: 2990 },
+  { id: 'growth', name_ar: 'النمو', name_en: 'Growth', price: 699, yearly: 6990, popular: true },
+  { id: 'pro', name_ar: 'الاحترافي', name_en: 'Pro', price: 1499, yearly: 14990 }
+];
 let currentLang = localStorage.getItem('matjari_lang') || 'ar';
 
 function tr(key) { const dict = translations[currentLang] || translations.ar; return dict[key] || translations.ar[key] || key; }
@@ -621,6 +654,10 @@ function setLanguage(lang) {
   if (langDisp) langDisp.textContent = lang === 'ar' ? 'العربية (Arabic)' : 'English';
   const langSwText = document.getElementById('langSwitchText');
   if (langSwText) langSwText.textContent = lang === 'ar' ? 'English' : 'العربية';
+
+  const landing = document.getElementById('landingView');
+  if (landing && landing.style.display !== 'none') renderLandingView();
+  if (document.getElementById('subscriptionBlock')) enforceSubscriptionBlock();
 }
 
 function toggleLanguage() {
@@ -986,12 +1023,24 @@ async function saveNewPassword() {
   }
 }
 
-function showLoggedOutUI() {
+function showLoggedOutUI(showAuthForm) {
   state.currentUser = null;
   state.role = 'employee';
   document.body.classList.add('auth-locked');
+  document.body.style.overflow = '';
+
+  const block = document.getElementById('subscriptionBlock');
+  if (block) block.remove();
+
   const ls = document.getElementById('loginScreen');
   if (ls) ls.classList.add('active');
+
+  if (showAuthForm) {
+    showAuthView('login');
+  } else {
+    showLandingView();
+  }
+
   const rb = document.getElementById('recoveryPanel');
   if (rb) rb.style.display = 'none';
   const lb = document.getElementById('loginButtons');
@@ -1176,7 +1225,7 @@ async function openUserSession(user) {
 
     // فحص الاشتراك قبل عرض الصفحة
     checkSubscriptionStatus();
-
+    enforceSubscriptionBlock();
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settSubscription', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
      const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
@@ -1290,7 +1339,7 @@ if (location.hash.includes('type=recovery') || location.hash.includes('type=invi
 const result = await supabaseClient.auth.getSession();
     if (result.error) throw result.error;
     if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
-      showLoggedOutUI();
+      showLoggedOutUI(true);
       document.getElementById('recoveryPanel').style.display = 'block';
       document.getElementById('loginButtons').style.display = 'none';
       document.getElementById('authTitle').textContent = 'تعيين كلمة مرور جديدة';
@@ -4272,4 +4321,151 @@ function renderSubscriptionPage() {
   html += '<div class="notice info mt-20">💳 <b>' + tr('payment_coming_soon') + '</b> ' + tr('payment_coming_desc') + '</div>';
 
   container.innerHTML = html;
+}
+/* ============ صفحة الهبوط للزوار ============ */
+function renderLandingView() {
+  const container = document.getElementById('landingView');
+  if (!container) return;
+
+  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+  const dict = translations[currentLang] || translations.ar;
+
+  let plansHtml = '';
+  PLANS.forEach(plan => {
+    plansHtml += '<div class="plan-card' + (plan.popular ? ' popular' : '') + '">';
+    if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
+    plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
+    plansHtml += '<div class="plan-price">';
+    plansHtml += '<span class="price-amount">' + plan.price + '</span>';
+    plansHtml += '<span class="price-currency">' + cur + '</span>';
+    plansHtml += '<span class="price-period">/' + dict.per_month + '</span>';
+    plansHtml += '</div>';
+    plansHtml += '<div class="plan-yearly">' + (en ? 'or ' : 'أو ') + plan.yearly + ' ' + cur + ' / ' + dict.per_year + '</div>';
+    plansHtml += '</div>';
+  });
+
+  container.innerHTML =
+    '<div class="landing-card">' +
+      '<div class="landing-hero">' +
+        '<h1>🏪 ' + (en ? 'Matjari' : 'متجري') + '</h1>' +
+        '<p class="landing-subtitle">' + dict.landing_subtitle + '</p>' +
+        '<div class="landing-tagline">' + dict.landing_tagline + '</div>' +
+      '</div>' +
+      '<div class="landing-features">' +
+        '<div class="landing-feature">' + dict.feature_pos + '</div>' +
+        '<div class="landing-feature">' + dict.feature_inventory + '</div>' +
+        '<div class="landing-feature">' + dict.feature_whatsapp + '</div>' +
+        '<div class="landing-feature">' + dict.feature_reports + '</div>' +
+      '</div>' +
+      '<div class="landing-plans">' +
+        '<h2>' + dict.landing_plans_title + '</h2>' +
+        '<div class="plans-grid">' + plansHtml + '</div>' +
+      '</div>' +
+      '<div class="landing-cta">' +
+        '<button class="btn green w-100" onclick="showAuthView(\'signup\')">' + dict.start_free_trial + '</button>' +
+        '<button class="btn secondary w-100 mt-10" onclick="showAuthView(\'login\')">' + dict.login_btn_simple + '</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function showLandingView() {
+  const landing = document.getElementById('landingView');
+  if (landing) landing.style.display = 'block';
+  const auth = document.getElementById('authView');
+  if (auth) auth.style.display = 'none';
+  renderLandingView();
+}
+
+function showAuthView(mode) {
+  const landing = document.getElementById('landingView');
+  if (landing) landing.style.display = 'none';
+  const auth = document.getElementById('authView');
+  if (auth) auth.style.display = 'block';
+
+  const rb = document.getElementById('recoveryPanel');
+  if (rb) rb.style.display = 'none';
+  const lb = document.getElementById('loginButtons');
+  if (lb) lb.style.display = 'block';
+
+  if (mode === 'signup') {
+    setAuthMessage(currentLang === 'en'
+      ? 'Fill in your info, then click "✨ Create Account ✨" below'
+      : 'املأ بياناتك ثم اضغط "✨ إنشاء حساب جديد ✨" بالأسفل');
+  } else {
+    setAuthMessage('');
+  }
+
+  setTimeout(() => {
+    const email = document.getElementById('authEmail');
+    if (email) email.focus();
+  }, 100);
+}
+
+/* ============ قفل التطبيق عند انتهاء الاشتراك ============ */
+function enforceSubscriptionBlock() {
+  const existing = document.getElementById('subscriptionBlock');
+  if (existing) existing.remove();
+  document.body.style.overflow = '';
+
+  const sub = state.subscription || {};
+  let endDate = null;
+  if (sub.plan === 'trial' && sub.trial_ends_at) endDate = new Date(sub.trial_ends_at).getTime();
+  else if (sub.expires_at) endDate = new Date(sub.expires_at).getTime();
+
+  const now = Date.now();
+  const isActive = sub.status === 'active' && (!endDate || endDate > now);
+  if (isActive) return;
+
+  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+  const dict = translations[currentLang] || translations.ar;
+  const daysAgo = endDate ? Math.max(0, Math.ceil((now - endDate) / (1000 * 60 * 60 * 24))) : 0;
+
+  let plansHtml = '';
+  PLANS.forEach(plan => {
+    plansHtml += '<div class="sub-block-plan' + (plan.popular ? ' popular' : '') + '">';
+    if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
+    plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
+    plansHtml += '<div class="plan-price">';
+    plansHtml += '<span class="price-amount">' + plan.price + '</span>';
+    plansHtml += '<span class="price-currency">' + cur + '</span>';
+    plansHtml += '<span class="price-period">/' + dict.per_month + '</span>';
+    plansHtml += '</div>';
+    plansHtml += '<button class="btn green w-100 mt-10" onclick="startSubscription(\'' + plan.id + '\')">' + dict.subscribe_now + '</button>';
+    plansHtml += '</div>';
+  });
+
+  const desc = daysAgo > 0
+    ? dict.trial_ended_days.replace('{days}', daysAgo)
+    : dict.trial_ended_desc;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'subscriptionBlock';
+  overlay.className = 'subscription-block-overlay';
+  overlay.innerHTML =
+    '<div class="subscription-block-card">' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:5px">' +
+        '<button class="small-btn gray" onclick="toggleLanguage()">🌐 ' + (en ? 'العربية' : 'English') + '</button>' +
+      '</div>' +
+      '<div class="sub-block-icon">🔒</div>' +
+      '<h2>' + dict.trial_ended_title + '</h2>' +
+      '<p class="sub-block-desc">' + desc + '</p>' +
+      '<div class="sub-block-plans">' + plansHtml + '</div>' +
+      '<div class="sub-block-actions">' +
+        '<button class="btn gray w-100" onclick="handleLogout()">🚪 ' + dict.logout_btn + '</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+}
+
+function startSubscription(planId) {
+  // TODO (Phase 3): wire to Paymob
+  showNotification(
+    currentLang === 'en'
+      ? 'Payment integration coming soon! We are setting up Paymob.'
+      : 'الدفع هيتوفر قريباً! جاري ربط Paymob.',
+    'info'
+  );
 }
