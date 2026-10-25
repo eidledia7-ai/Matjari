@@ -879,6 +879,24 @@ async function signUp() {
   try {
     const result = await supabaseClient.auth.signUp({ email: email, password: password });
     if (result.error) throw result.error;
+
+    // ✅ جديد: إنشاء اشتراك Trial تلقائياً
+    if (result.data.user) {
+      const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      try {
+        await supabaseClient
+          .from('shop_subscriptions')
+          .upsert({
+            user_id: result.data.user.id,
+            plan: 'trial',
+            status: 'active',
+            trial_ends_at: trialEnd
+          }, { onConflict: 'user_id' });
+      } catch (subErr) {
+        console.warn('Could not create trial subscription:', subErr);
+      }
+    }
+
     if (result.data.session && result.data.user) {
       await openUserSession(result.data.user);
     } else {
@@ -974,7 +992,6 @@ async function changePasswordPrompt() {
     hideLoading();
   }
 }
-
 async function openUserSession(user) {
   state.currentUser = user;
   showLoading('جارٍ تحميل بياناتك...');
@@ -985,7 +1002,7 @@ async function openUserSession(user) {
       .select('role, owner_id, email')
       .eq('user_id', user.id)
       .maybeSingle();
-      
+
     // نبدأ بالافتراضي الأأمن (موظف)
     state.role = 'employee';
     state.ownerId = null;
@@ -1034,11 +1051,21 @@ async function openUserSession(user) {
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle();
+
     if (subRes.data) {
       state.subscription = {
         plan: subRes.data.plan || 'trial',
         status: subRes.data.status || 'active',
-        expires_at: subRes.data.expires_at
+        expires_at: subRes.data.expires_at,
+        trial_ends_at: subRes.data.trial_ends_at,
+        payment_method: subRes.data.payment_method
+      };
+    } else {
+      // لو مفيش اشتراك، نفترض trial 14 يوم
+      state.subscription = {
+        plan: 'trial',
+        status: 'active',
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       };
     }
 
@@ -1063,7 +1090,7 @@ async function openUserSession(user) {
     // بنجيب البيانات من السيرفر لو موجودة، أو من الكاش
     if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
       d = dataRes.data.shop_data;
-      try { localStorage.setItem('matjari_cache_' + cacheOwnerId, JSON.stringify(d)); } catch(e) {}
+      try { localStorage.setItem('matjari_cache_' + cacheOwnerId, JSON.stringify(d)); } catch (e) {}
     } else if (localCache && (localCache.products || localCache.sales)) {
       d = localCache;
     }
@@ -1100,7 +1127,10 @@ async function openUserSession(user) {
     showLoggedInUI();
     applyRolePermissions();
     renderAll();
-    
+
+    // فحص الاشتراك قبل عرض الصفحة
+    checkSubscriptionStatus();
+
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
@@ -1114,6 +1144,52 @@ async function openUserSession(user) {
   }
 }
 
+/* ============ فحص حالة الاشتراك ============ */
+function checkSubscriptionStatus() {
+  const sub = state.subscription || {};
+  const en = currentLang === 'en';
+
+  // حالة غير نشطة
+  if (sub.status !== 'active') {
+    showNotification(
+      en ? 'Your subscription is inactive. Please renew.' : 'اشتراكك غير نشط. جدد الآن.',
+      'error'
+    );
+    return;
+  }
+
+  const now = Date.now();
+  let endDate = null;
+
+  if (sub.plan === 'trial' && sub.trial_ends_at) {
+    endDate = new Date(sub.trial_ends_at).getTime();
+  } else if (sub.expires_at) {
+    endDate = new Date(sub.expires_at).getTime();
+  }
+
+  if (!endDate) return; // مفيش تاريخ انتهاء (اشتراك دائم)
+
+  const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft < 0) {
+    showNotification(
+      en ? 'Your trial has expired. Please subscribe to continue.'
+         : 'انتهت فترة التجربة. اشترك للاستمرار.',
+      'error'
+    );
+  } else if (daysLeft === 0) {
+    showNotification(
+      en ? 'Your trial expires today!' : 'تجربتك تنتهي اليوم!',
+      'warning'
+    );
+  } else if (daysLeft <= 3) {
+    showNotification(
+      en ? `Your trial expires in ${daysLeft} days. Subscribe now!`
+         : `تجربتك تنتهي خلال ${daysLeft} أيام. اشترك الآن!`,
+      'warning'
+    );
+  }
+}
 function applyRolePermissions() {
   const employee = state.role === 'employee';
   document.querySelectorAll('.sidebar-nav button, .nav-group').forEach(function(btn) {
