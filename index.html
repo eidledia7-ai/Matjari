@@ -125,7 +125,8 @@
         <div id="settSubMenu" class="sub-menu">
           <button data-page="settStore" onclick="showPage('settStore')" data-i18n="store_data_page">🏪 بيانات المحل</button>
           <button data-page="settLang" onclick="showPage('settLang')" data-i18n="lang_page">🌐 لغة التطبيق</button>
-        
+   
+             <button data-page="settSubscription" onclick="showPage('settSubscription')" data-i18n="subscription_page">💳 اشتراكي</button>
           <button data-page="settStaff" onclick="showPage('settStaff')" data-i18n="staff_page">👥 إدارة الموظفين</button>
           
               <button data-page="settBackup" onclick="showPage('settBackup')" data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</button>
@@ -811,6 +812,11 @@
         <div id="shiftsTable" class="mt-15"></div>
       </div>
     </div>
+<!-- 6. الإعدادات - اشتراكي -->
+<div id="settSubscription" class="page">
+  <h2 data-i18n="subscription_page">💳 اشتراكي</h2>
+  <div id="subscriptionContent"></div>
+</div>
 
     <!-- 6. الإعدادات - بيانات المحل -->
     <div id="settStore" class="page">
@@ -866,6 +872,7 @@
         </div>
       </div>
     </div>
+    
 <!-- 6. الإعدادات - صفحة إدارة الموظفين -->
 <div id="settStaff" class="page">
   <h2 data-i18n="staff_page">👥 إدارة الموظفين</h2>
