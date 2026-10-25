@@ -1250,3 +1250,128 @@ body.dark-mode .sub-block-plan h4 { color: #d6e3f0; }
 body.dark-mode .landing-feature { background: #16212c; color: #b0c4d6; }
 body.dark-mode .landing-hero h1,
 body.dark-mode .landing-plans h2 { color: #d6e3f0; }
+/* ============ صفحة تفاصيل الباقة ============ */
+.plan-detail-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(6px);
+  z-index: 10000001;
+  display: flex; align-items: center; justify-content: center;
+  padding: 15px; overflow-y: auto;
+}
+.plan-detail-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 30px 22px 22px;
+  max-width: 440px; width: 100%;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+  position: relative;
+  margin: auto;
+  max-height: 92vh; overflow-y: auto;
+  animation: pdIn 0.3s ease;
+}
+@keyframes pdIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pd-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px; min-height: 34px; padding: 0;
+  border-radius: 50%; background: #f0f4f7; color: #687b8b;
+  font-size: 16px; font-weight: bold; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+html[dir="ltr"] .pd-close { right: auto; left: 12px; }
+
+.pd-popular-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, #198754, #20a866);
+  color: #fff; padding: 5px 16px; border-radius: 20px;
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(25,135,84,0.4);
+}
+
+.pd-hero { text-align: center; margin-bottom: 18px; }
+.pd-icon {
+  font-size: 60px; line-height: 1;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+}
+.pd-name { color: #17364c; font-size: 26px; font-weight: 900; margin: 0 0 4px; }
+.pd-subtitle { color: #687b8b; font-size: 13px; margin: 0; }
+
+.pd-price-block {
+  text-align: center; padding: 16px;
+  background: linear-gradient(135deg, #f0f6f7, #e5eef0);
+  border-radius: 14px; margin-bottom: 15px;
+}
+.pd-price {
+  display: flex; align-items: baseline; justify-content: center; gap: 5px;
+  margin-bottom: 4px;
+}
+.pd-amount { font-size: 44px; font-weight: 900; color: #176b70; line-height: 1; }
+.pd-cur { font-size: 18px; font-weight: 700; color: #176b70; }
+.pd-period { font-size: 14px; color: #687b8b; }
+.pd-yearly {
+  font-size: 13px; color: #687b8b;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; flex-wrap: wrap;
+}
+.pd-save-badge {
+  background: #c8e6c9; color: #17643a;
+  padding: 3px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 800;
+}
+
+.pd-divider { height: 1px; background: #e8edf3; margin: 15px 0; }
+.pd-includes {
+  text-align: center; font-size: 13px; font-weight: 800;
+  color: #3d5669; margin-bottom: 10px;
+}
+.pd-features { list-style: none; padding: 0; margin: 0 0 20px; }
+.pd-features li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 6px; border-bottom: 1px solid #f0f4f7;
+  font-size: 14px;
+}
+.pd-features li:last-child { border-bottom: 0; }
+.pd-features .pd-fi { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+.pd-features .pd-off { color: #93a1ad; text-decoration: line-through; opacity: 0.6; }
+.pd-features .pd-on { color: #3d5669; }
+.pd-features .pd-on b { color: #176b70; }
+
+.pd-cta {
+  font-size: 15px; font-weight: 900;
+  min-height: 54px; padding: 14px;
+  box-shadow: 0 8px 20px rgba(25,135,84,0.3);
+  margin-bottom: 14px;
+}
+.pd-trust {
+  display: flex; justify-content: space-around;
+  font-size: 11px; color: #687b8b;
+  padding-top: 12px; border-top: 1px dashed #e8edf3;
+  flex-wrap: wrap; gap: 8px;
+}
+
+.pd-theme-starter .pd-icon { animation: float 3s ease-in-out infinite; }
+.pd-theme-growth { border: 3px solid #198754; }
+.pd-theme-growth .pd-name { color: #17643a; }
+.pd-theme-pro { border: 3px solid #d6a84f; }
+.pd-theme-pro .pd-name {
+  background: linear-gradient(90deg, #d6a84f, #b8893a);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+body.dark-mode .plan-detail-card { background: #1a2632; color: #e8eef5; }
+body.dark-mode .pd-name { color: #d6e3f0; }
+body.dark-mode .pd-close { background: #2a3a48; color: #b0c4d6; }
+body.dark-mode .pd-price-block { background: linear-gradient(135deg, #1e2a3a, #16212c); }
+body.dark-mode .pd-amount, body.dark-mode .pd-cur { color: #4ecdc4; }
+body.dark-mode .pd-features li { border-bottom-color: #2a3a48; }
+body.dark-mode .pd-features .pd-on { color: #d6e3f0; }
+body.dark-mode .pd-includes { color: #b0c4d6; }
