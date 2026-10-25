@@ -999,3 +999,136 @@ body.dark-mode .sticker-btn:hover {
 body.dark-mode .sticker-btn .sticker-text {
   color: #e8eef5;
 }
+/* ============ صفحة الاشتراك ============ */
+.sub-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.stat-card.active { background: linear-gradient(135deg, #c8e5d2, #a9d5bb); border-color: #8ab99f; }
+.stat-card.expired { background: linear-gradient(135deg, #ffd0d0, #ffb8b8); border-color: #c0392b; }
+.stat-card.inactive { background: #f0f4f7; border-color: #dce5ec; }
+
+.sub-progress-wrap {
+  padding: 12px;
+  background: #f8fbfc;
+  border-radius: 10px;
+}
+.sub-progress-label {
+  font-size: 13px;
+  color: #687b8b;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.sub-progress-bar {
+  width: 100%;
+  height: 16px;
+  background: #e8edf3;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.sub-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #198754, #20a866);
+  transition: width 0.5s;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.plan-card {
+  background: #fff;
+  border: 2px solid #dce5ec;
+  border-radius: 14px;
+  padding: 20px;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.plan-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+.plan-card.popular {
+  border-color: #198754;
+  box-shadow: 0 4px 15px rgba(25, 135, 84, 0.15);
+}
+.plan-card.current {
+  border-color: #1769aa;
+  background: #f0f7ff;
+}
+
+.plan-badge {
+  position: absolute;
+  top: -10px;
+  left: 20px;
+  background: #198754;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+}
+html[dir="ltr"] .plan-badge { left: auto; right: 20px; }
+.plan-badge.current-badge {
+  background: #1769aa;
+}
+
+.plan-card h4 {
+  margin: 8px 0 12px;
+  color: #17364c;
+  font-size: 18px;
+  text-align: center;
+}
+
+.plan-price {
+  text-align: center;
+  margin: 15px 0 8px;
+}
+.plan-price .price-amount {
+  font-size: 32px;
+  font-weight: 900;
+  color: #176b70;
+}
+.plan-price .price-currency {
+  font-size: 14px;
+  color: #687b8b;
+  margin: 0 4px;
+}
+.plan-price .price-period {
+  font-size: 13px;
+  color: #687b8b;
+}
+.plan-yearly {
+  text-align: center;
+  font-size: 12px;
+  color: #687b8b;
+  margin-bottom: 15px;
+}
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 15px 0;
+  border-top: 1px solid #e8edf3;
+  padding-top: 15px;
+}
+.plan-features li {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #3d5669;
+}
+
+body.dark-mode .plan-card {
+  background: #1a2632;
+  border-color: #2a3a48;
+}
+body.dark-mode .plan-card h4 { color: #d6e3f0; }
+body.dark-mode .plan-card.current { background: #1a2a3a; }
+body.dark-mode .plan-features li { color: #b0c4d6; }
+body.dark-mode .sub-progress-wrap { background: #16212c; }
+body.dark-mode .sub-progress-bar { background: #2a3a48; }
