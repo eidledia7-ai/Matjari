@@ -16,12 +16,19 @@
 <body class="auth-locked">
 
   <!-- شاشة تسجيل الدخول -->
-  <div id="loginScreen" class="login-screen active">
-    <div class="login-card">
-      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-        <button type="button" class="small-btn gray" onclick="toggleLanguage()">🌐 <span id="langSwitchText">English</span></button>
-      </div>
-      <h2 id="authTitle" data-i18n="login_title">🔐 تسجيل الدخول</h2>
+ <!-- شاشة تسجيل الدخول -->
+<div id="loginScreen" class="login-screen active">
+  <!-- صفحة الهبوط للزوار -->
+  <div id="landingView" class="landing-view"></div>
+
+  <!-- نموذج الدخول / التسجيل -->
+  <div id="authView" class="login-card" style="display:none">
+    <button type="button" class="small-btn gray" onclick="showLandingView()" style="margin-bottom:15px;" data-i18n="back_btn">← رجوع</button>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+      <button type="button" class="small-btn gray" onclick="toggleLanguage()">🌐 <span id="langSwitchText">English</span></button>
+    </div>
+    <h2 id="authTitle" data-i18n="login_title">🔐 تسجيل الدخول</h2>
+    ...
       <p class="notice info mb-15" id="authHint" data-i18n="login_hint">سجّل دخولك للوصول لبيانات محلك</p>
 
       <div class="form-group mb-15">
