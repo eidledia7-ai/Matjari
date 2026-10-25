@@ -624,6 +624,43 @@ const PLANS = [
   { id: 'growth', name_ar: 'النمو', name_en: 'Growth', price: 699, yearly: 6990, popular: true },
   { id: 'pro', name_ar: 'الاحترافي', name_en: 'Pro', price: 1499, yearly: 14990 }
 ];
+/* ============ مميزات كل باقة ============ */
+const PLAN_FEATURES = [
+  { key: 'products',  label_ar: 'عدد المنتجات',            label_en: 'Products',           values: { starter: '500 منتج',    growth: '3,000 منتج', pro: 'غير محدود' } },
+  { key: 'users',     label_ar: 'عدد المستخدمين',           label_en: 'Users',              values: { starter: 'مستخدم واحد', growth: '3 مستخدمين', pro: 'غير محدود' } },
+  { key: 'whatsapp',  label_ar: 'إرسال الفواتير واتساب',     label_en: 'WhatsApp Invoices',  values: { starter: false,         growth: true,         pro: true } },
+  { key: 'compare',   label_ar: 'مقارنة الفترات',           label_en: 'Compare Periods',    values: { starter: false,         growth: true,         pro: true } },
+  { key: 'reports',   label_ar: 'تقارير مالية متقدمة',       label_en: 'Advanced Reports',   values: { starter: true,          growth: true,         pro: true } },
+  { key: 'export',    label_ar: 'تصدير Excel / CSV',        label_en: 'Excel Export',       values: { starter: true,          growth: true,         pro: true } },
+  { key: 'support',   label_ar: 'الدعم الفني',              label_en: 'Support',            values: { starter: 'واتساب',      growth: 'أولوية',     pro: 'مدير حساب' } }
+];
+
+/* ============ حدود كل باقة ============ */
+const PLAN_LIMITS = {
+  trial:   { products: 500,      users: 1,        whatsapp: false, compare: false, reports: true, export: true },
+  starter: { products: 500,      users: 1,        whatsapp: false, compare: false, reports: true, export: true },
+  growth:  { products: 3000,     users: 3,        whatsapp: true,  compare: true,  reports: true, export: true },
+  pro:     { products: Infinity, users: Infinity, whatsapp: true,  compare: true,  reports: true, export: true }
+};
+
+function canUse(feature) {
+  const plan = (state.subscription && state.subscription.plan) || 'trial';
+  return PLAN_LIMITS[plan] && PLAN_LIMITS[plan][feature] === true;
+}
+
+function checkLimit(type, currentCount) {
+  const plan = (state.subscription && state.subscription.plan) || 'trial';
+  const max = (PLAN_LIMITS[plan] && PLAN_LIMITS[plan][type]) || 0;
+  return { allowed: currentCount < max, current: currentCount, max: max };
+}
+
+function upgradePrompt(featureLabel) {
+  const en = currentLang === 'en';
+  const msg = en
+    ? featureLabel + ' is not available in your plan. Upgrade to unlock!'
+    : featureLabel + ' غير متاح في باقتك الحالية. رقّي باقتك للفتح!';
+  showNotification(msg, 'warning');
+}
 let currentLang = localStorage.getItem('matjari_lang') || 'ar';
 
 function tr(key) { const dict = translations[currentLang] || translations.ar; return dict[key] || translations.ar[key] || key; }
@@ -786,7 +823,7 @@ function showNotification(msg, type) {
   div.className = 'notification-toast ' + type;
   div.innerHTML = '<span style="font-size:18px">' + (icons[type] || '') + '</span> ' + escapeHTML(msg);
   div.style.cssText =
-    'position:fixed;bottom:20px;left:20px;z-index:99999;' +
+   'position:fixed;bottom:20px;left:20px;z-index:10000000;' +
     'padding:12px 20px;border-radius:10px;color:#fff;font-weight:bold;' +
     'background:' + (colors[type] || colors.success) + ';' +
     'box-shadow:0 6px 20px rgba(0,0,0,0.25);transition:opacity 0.3s;max-width:90vw;' +
@@ -859,7 +896,10 @@ if (state.role === 'employee' && pageId !== 'sales') {
   showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
   pageId = 'sales';
 }
-
+if (pageId === 'finCompare' && !canUse('compare')) {
+  upgradePrompt(currentLang === 'en' ? 'Compare Periods' : 'مقارنة الفترات');
+  return;
+}
   document.querySelectorAll('.page').forEach(function(p) {
     p.classList.remove('active');
     p.style.display = 'none';
@@ -2176,6 +2216,17 @@ function saveProduct() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('productId').value;
+  if (!id) {
+    const lim = checkLimit('products', state.products.length);
+    if (!lim.allowed) {
+      return showNotification(
+        currentLang === 'en'
+          ? 'Product limit reached (' + lim.max + '). Upgrade your plan.'
+          : 'وصلت لحد المنتجات (' + lim.max + '). رقّي باقتك.',
+        'warning'
+      );
+    }
+  }
   const name = document.getElementById('productName').value.trim();
   const barcode = document.getElementById('productBarcode').value.trim();
   const category = document.getElementById('productCategory').value.trim();
@@ -3636,6 +3687,9 @@ async function printInvoice(sale) {
 }
 
 function sendInvoiceWhatsApp(saleId) {
+  if (!canUse('whatsapp')) {
+    return upgradePrompt(currentLang === 'en' ? 'WhatsApp invoices' : 'فواتير الواتساب');
+  }
   const sale = state.sales.find(function(s) { return s.id === saleId; });
   if (!sale) return showNotification('الفاتورة غير موجودة', 'error');
 
@@ -4102,6 +4156,21 @@ async function inviteStaff() {
   const email = document.getElementById('staffEmail').value.trim();
   if (!email) return showNotification('أدخل إيميل الموظف', 'error');
 
+  const { count } = await supabaseClient
+    .from('shop_user_roles')
+    .select('*', { count: 'exact', head: true })
+    .eq('owner_id', state.currentUser.id);
+
+  const lim = checkLimit('users', count || 0);
+  if (!lim.allowed) {
+    return showNotification(
+      currentLang === 'en'
+        ? 'User limit reached (' + lim.max + '). Upgrade your plan.'
+        : 'وصلت لحد المستخدمين (' + lim.max + '). رقّي باقتك.',
+      'warning'
+    );
+  }
+
   const defaultPassword = '123456';
 
   showLoading('جارٍ إنشاء الحساب...');
@@ -4299,7 +4368,7 @@ function renderSubscriptionPage() {
 
   plans.forEach(plan => {
     const isCurrent = sub.plan === plan.id;
-    html += '<div class="plan-card' + (plan.popular ? ' popular' : '') + (isCurrent ? ' current' : '') + '">';
+    html += '<div class="plan-card' + (plan.popular ? ' popular' : '') + (isCurrent ? ' current' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'subscription\')" style="cursor:pointer">';
     if (plan.popular) html += '<div class="plan-badge">' + tr('most_popular') + '</div>';
     if (isCurrent) html += '<div class="plan-badge current-badge">' + tr('your_current_plan') + '</div>';
     html += '<h4>' + plan.name + '</h4>';
@@ -4333,7 +4402,7 @@ function renderLandingView() {
 
   let plansHtml = '';
   PLANS.forEach(plan => {
-    plansHtml += '<div class="plan-card' + (plan.popular ? ' popular' : '') + '">';
+    plansHtml += '<div class="plan-card' + (plan.popular ? ' popular' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'landing\')" style="cursor:pointer">';
     if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
     plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
     plansHtml += '<div class="plan-price">';
@@ -4424,7 +4493,7 @@ function enforceSubscriptionBlock() {
 
   let plansHtml = '';
   PLANS.forEach(plan => {
-    plansHtml += '<div class="sub-block-plan' + (plan.popular ? ' popular' : '') + '">';
+    plansHtml += '<div class="sub-block-plan' + (plan.popular ? ' popular' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'block\')" style="cursor:pointer">';
     if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
     plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
     plansHtml += '<div class="plan-price">';
@@ -4468,4 +4537,84 @@ function startSubscription(planId) {
       : 'الدفع هيتوفر قريباً! جاري ربط Paymob.',
     'info'
   );
+}
+/* ============ عرض تفاصيل باقة ============ */
+function showPlanDetail(planId, context) {
+  const plan = PLANS.find(p => p.id === planId);
+  if (!plan) return;
+
+  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+  const dict = translations[currentLang] || translations.ar;
+
+  const old = document.getElementById('planDetailModal');
+  if (old) old.remove();
+
+  const names = { starter: en ? 'Starter' : 'البداية', growth: en ? 'Growth' : 'النمو', pro: en ? 'Pro' : 'الاحترافي' };
+  const icons = { starter: '🚀', growth: '⭐', pro: '👑' };
+  const subtitles = {
+    starter: en ? 'Perfect to get started' : 'مناسبة للبداية والاحتياج الأساسي',
+    growth:  en ? 'Best for growing shops' : 'الأفضل للمحلات النامية',
+    pro:     en ? 'For large stores & chains' : 'للمحلات الكبيرة والسلاسل'
+  };
+
+  const includesText = planId === 'growth'
+    ? (en ? '✅ Everything in Starter +' : '✅ كل مميزات البداية +')
+    : planId === 'pro'
+    ? (en ? '✅ Everything in Growth +' : '✅ كل مميزات النمو +')
+    : (en ? 'This plan includes:' : 'هذه الباقة تشمل:');
+
+  let featuresHtml = '';
+  PLAN_FEATURES.forEach(f => {
+    const val = f.values[planId];
+    let icon, text, cls;
+    if (val === true)  { icon = '✅'; text = en ? f.label_en : f.label_ar; cls = 'pd-on'; }
+    else if (val === false) { icon = '❌'; text = en ? f.label_en : f.label_ar; cls = 'pd-off'; }
+    else { icon = '✓'; text = (en ? f.label_en : f.label_ar) + ': <b>' + val + '</b>'; cls = 'pd-on'; }
+    featuresHtml += '<li class="' + cls + '"><span class="pd-fi">' + icon + '</span><span>' + text + '</span></li>';
+  });
+
+  const ctaHtml = context === 'landing'
+    ? '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); showAuthView(\'signup\')">' + dict.start_free_trial + '</button>'
+    : '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); startSubscription(\'' + planId + '\')">' + dict.subscribe_now + ' — ' + plan.price + ' ' + cur + '/' + dict.per_month + '</button>';
+
+  const modal = document.createElement('div');
+  modal.id = 'planDetailModal';
+  modal.className = 'plan-detail-overlay';
+  modal.setAttribute('onclick', 'if(event.target===this)hidePlanDetail()');
+  modal.innerHTML =
+    '<div class="plan-detail-card pd-theme-' + planId + '">' +
+      '<button class="pd-close" onclick="hidePlanDetail()">✕</button>' +
+      (plan.popular ? '<div class="pd-popular-badge">⭐ ' + dict.most_popular + '</div>' : '') +
+      '<div class="pd-hero">' +
+        '<div class="pd-icon">' + icons[planId] + '</div>' +
+        '<h2 class="pd-name">' + names[planId] + '</h2>' +
+        '<p class="pd-subtitle">' + subtitles[planId] + '</p>' +
+      '</div>' +
+      '<div class="pd-price-block">' +
+        '<div class="pd-price"><span class="pd-amount">' + plan.price + '</span><span class="pd-cur">' + cur + '</span><span class="pd-period">/' + dict.per_month + '</span></div>' +
+        '<div class="pd-yearly">' + (en ? 'or ' : 'أو ') + '<b>' + plan.yearly + ' ' + cur + '</b>/' + dict.per_year +
+          '<span class="pd-save-badge">' + (en ? 'Save 2 months' : 'وفّر شهرين') + '</span></div>' +
+      '</div>' +
+      '<div class="pd-divider"></div>' +
+      '<div class="pd-includes">' + includesText + '</div>' +
+      '<ul class="pd-features">' + featuresHtml + '</ul>' +
+      ctaHtml +
+      '<div class="pd-trust">' +
+        '<span>🔒 ' + (en ? 'Secure' : 'دفع آمن') + '</span>' +
+        '<span>↩️ ' + (en ? '7-day guarantee' : 'ضمان 7 أيام') + '</span>' +
+        '<span>📞 ' + (en ? '24/7 support' : 'دعم 24/7') + '</span>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+}
+
+function hidePlanDetail() {
+  const m = document.getElementById('planDetailModal');
+  if (m) m.remove();
+  if (!document.getElementById('subscriptionBlock')) {
+    document.body.style.overflow = '';
+  }
 }
