@@ -4532,17 +4532,27 @@ function enforceSubscriptionBlock() {
 async function startSubscription(planId) {
   const plan = PLANS.find(p => p.id === planId);
   if (!plan) return;
+
+  // إظهار مودال بسيط لاختيار طريقة الدفع
+  const chooseMethod = confirm(
+    currentLang === 'en' 
+      ? "Click OK to pay by Card (Visa/Mastercard), or Cancel to pay by Mobile Wallet (Vodafone Cash, etc)."
+      : "اضغط موافق للدفع بالبطاقة (فيزا/ماستركارد)، أو إلغاء للدفع بالمحفظة (فودافون كاش، إلخ)."
+  );
   
+  // لو داس OK يبقى بطاقة، لو داس Cancel يبقى محفظة
+  const integrationId = chooseMethod ? 6019268 : 6019746;
+
   showLoading(currentLang === 'en' ? 'Connecting to payment...' : 'جارٍ الاتصال ببوابة الدفع...');
 
   try {
-    // 1. الاتصال بدالة Supabase اللي عملناها
     const { data, error } = await supabaseClient.functions.invoke('create-payment', {
       body: {
         amount: plan.price,
         planId: planId,
         userEmail: state.currentUser ? state.currentUser.email : '',
-        userName: 'Customer'
+        userName: 'Customer',
+        integrationId: integrationId // بنبعت الـ ID اللي اتختار
       }
     });
 
@@ -4551,18 +4561,16 @@ async function startSubscription(planId) {
 
     hideLoading();
 
-    // 2. عرض شاشة الدفع (Iframe) جوه التطبيق
-    const iframeId = '1090930'; // الـ ID بتاع شاشة البطاقات
+    const iframeId = '1090930'; 
     const iframeUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${data.token}`;
 
-    // إنشاء نافذة منبثقة (Modal) للدفع
     const oldModal = document.getElementById('paymobIframeModal');
     if (oldModal) oldModal.remove();
 
     const modal = document.createElement('div');
     modal.id = 'paymobIframeModal';
     modal.className = 'modal-overlay';
-    modal.style.zIndex = '9999999'; // عشان تظهر فوق أي حاجة
+    modal.style.zIndex = '9999999';
     modal.innerHTML = `
       <div class="modal-card" style="max-width: 600px; width: 100%; padding: 0; overflow: hidden; height: 85vh;">
         <div style="padding: 15px; background: #17364c; color: white; display: flex; justify-content: space-between; align-items: center;">
