@@ -4536,12 +4536,14 @@ async function startSubscription(planId) {
   showLoading(currentLang === 'en' ? 'Connecting to payment...' : 'جارٍ الاتصال ببوابة الدفع...');
 
   try {
+    // 1. الاتصال بدالة Supabase وتمرير الـ userId
     const { data, error } = await supabaseClient.functions.invoke('create-payment', {
       body: {
         amount: plan.price,
         planId: planId,
         userEmail: state.currentUser ? state.currentUser.email : '',
-        userName: 'Customer'
+        userName: 'Customer',
+        userId: state.currentUser ? state.currentUser.id : '' // 🚨 السطر الجديد المهم جداً
       }
     });
 
@@ -4550,6 +4552,7 @@ async function startSubscription(planId) {
 
     hideLoading();
 
+    // 2. عرض شاشة الدفع (Iframe) جوه التطبيق
     const iframeId = '1090930'; 
     const iframeUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${data.token}`;
 
