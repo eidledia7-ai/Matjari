@@ -2388,8 +2388,9 @@ function renderProducts() {
       '<td>' + p.cost + '</td>' +
       '<td><b>' + p.stock + '</b></td>' +
       '<td>' +
-        '<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">تعديل</button>' +
-        '<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">حذف</button>' +
+       '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="إضافة كمية سريعة">+</button>' +
+'<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">تعديل</button>' +
+'<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">حذف</button>' +
       '</td>' +
       '</tr>';
   });
@@ -4868,4 +4869,40 @@ function deleteHeldSale(id) {
   updateHeldCartsCount();
   saveData();
   showNotification('تم حذف الفاتورة المعلقة', 'info');
+}
+/* ============ إضافة كمية سريعة للمخزون ============ */
+function quickAddStock(id) {
+  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
+  
+  const prod = state.products.find(p => p.id === id);
+  if (!prod) return;
+
+  // استخدام شاشة الإدخال السريعة (Prompt) عشان ننجز ومنبوظش الشكل
+  const qtyInput = prompt('إضافة كمية للمنتج: "' + prod.name + '"\n\nالمخزون الحالي: ' + prod.stock + '\n\nأدخل الكمية اللي هتضيفها (مثال: 10):');
+  
+  if (qtyInput === null) return; // لو داس إلغاء
+  const qty = parseInt(qtyInput);
+  
+  if (isNaN(qty) || qty <= 0) {
+    return showNotification('أدخل رقم صحيح أكبر من صفر', 'error');
+  }
+
+  const oldStock = prod.stock;
+  prod.stock += qty;
+
+  // تسجيل الحركة في سجل المخزون
+  state.stockMoves.unshift({
+    id: uid('SM'), date: new Date().toISOString(),
+    productId: prod.id, productName: prod.name,
+    type: 'in', qty: qty, oldStock: oldStock, newStock: prod.stock,
+    reason: 'إضافة سريعة من قائمة المنتجات'
+  });
+
+  saveData();
+  renderProducts();
+  renderStockMoves();
+  renderDashboard();
+  updateStockBadge();
+  showNotification('تم إضافة ' + qty + ' قطعة لمخزون "' + prod.name + '" ✅', 'success');
 }
