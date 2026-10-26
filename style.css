@@ -784,3 +784,9 @@ body.dark-mode #darkModeBtn { background: var(--warning); color: #0f172a; }
   .landing-mockup-wrap { margin: 30px auto; }
   .landing-plan-card { width: 100%; max-width: 320px; }
 }
+/* تصغير عرض الجداول اللي جوه الكروت عشان تظهر على الموبايل */
+.card .data-table, 
+#activityDetailsReport .data-table, 
+#topProductsReport .data-table {
+    min-width: 100% !important;
+}
