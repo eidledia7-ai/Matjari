@@ -4,35 +4,35 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./fonts/Cairo-Regular.ttf') format('truetype');
+  src: url('./fonts/cairo-regular.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Cairo';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('./fonts/Cairo-SemiBold.ttf') format('truetype');
+  src: url('./fonts/cairo-semibold.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Cairo';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('./fonts/Cairo-Bold.ttf') format('truetype');
+  src: url('./fonts/cairo-bold.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Cairo';
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url('./fonts/Cairo-ExtraBold.ttf') format('truetype');
+  src: url('./fonts/cairo-extrabold.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Cairo';
   font-style: normal;
   font-weight: 900;
   font-display: swap;
-  src: url('./fonts/Cairo-Black.ttf') format('truetype');
+  src: url('./fonts/cairo-black.ttf') format('truetype');
 }
 
 /* ================================
