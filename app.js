@@ -4464,44 +4464,83 @@ function renderLandingView() {
 
   const en = currentLang === 'en';
   const cur = state.storeSettings.currency || 'ج.م';
-  const dict = translations[currentLang] || translations.ar;
 
   let plansHtml = '';
   PLANS.forEach(plan => {
-    plansHtml += '<div class="plan-card' + (plan.popular ? ' popular' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'landing\')" style="cursor:pointer">';
-    if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
+    plansHtml += '<div class="landing-plan-card' + (plan.popular ? ' popular' : '') + '">';
+    if (plan.popular) plansHtml += '<div class="landing-popular-badge">الأكثر شعبية ⭐</div>';
     plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
-    plansHtml += '<div class="plan-price">';
-    plansHtml += '<span class="price-amount">' + plan.price + '</span>';
-    plansHtml += '<span class="price-currency">' + cur + '</span>';
-    plansHtml += '<span class="price-period">/' + dict.per_month + '</span>';
-    plansHtml += '</div>';
-    plansHtml += '<div class="plan-yearly">' + (en ? 'or ' : 'أو ') + plan.yearly + ' ' + cur + ' / ' + dict.per_year + '</div>';
+    plansHtml += '<div class="landing-plan-price"><span>' + plan.price + '</span> ' + cur + ' / شهر</div>';
     plansHtml += '</div>';
   });
 
-  container.innerHTML =
-    '<div class="landing-card">' +
-      '<div class="landing-hero">' +
-        '<h1>🏪 ' + (en ? 'Matjari' : 'متجري') + '</h1>' +
-        '<p class="landing-subtitle">' + dict.landing_subtitle + '</p>' +
-        '<div class="landing-tagline">' + dict.landing_tagline + '</div>' +
-      '</div>' +
-      '<div class="landing-features">' +
-        '<div class="landing-feature">' + dict.feature_pos + '</div>' +
-        '<div class="landing-feature">' + dict.feature_inventory + '</div>' +
-        '<div class="landing-feature">' + dict.feature_whatsapp + '</div>' +
-        '<div class="landing-feature">' + dict.feature_reports + '</div>' +
-      '</div>' +
-      '<div class="landing-plans">' +
-        '<h2>' + dict.landing_plans_title + '</h2>' +
-        '<div class="plans-grid">' + plansHtml + '</div>' +
-      '</div>' +
-      '<div class="landing-cta">' +
-        '<button class="btn green w-100" onclick="showAuthView(\'signup\')">' + dict.start_free_trial + '</button>' +
-        '<button class="btn secondary w-100 mt-10" onclick="showAuthView(\'login\')">' + dict.login_btn_simple + '</button>' +
-      '</div>' +
-    '</div>';
+  container.innerHTML = `
+    <div class="landing-hero">
+      <div class="landing-badge">🚀 نظام إدارة المبيعات رقم 1 للتجار</div>
+      <h1 class="landing-title">المحل بتاعك في جيبك.<br><span class="text-gradient">بدون ورق، وبدون تعقيد.</span></h1>
+      <p class="landing-subtitle">نظام كاشير سحابي، إدارة مخزون، حسابات عملاء، وتقارير بتوريك ربحك الحقيقي. ابدأ في دقائق.</p>
+      
+      <div class="landing-cta-group">
+        <button class="landing-btn-primary" onclick="showAuthView('signup')">
+          ابدأ 14 يوم مجاناً ←
+        </button>
+        <span class="landing-trust-text">✅ بدون بطاقة ائتمان • ✅ إلغاء في أي وقت</span>
+      </div>
+    </div>
+
+    <!-- محاكاة شكل التطبيق -->
+    <div class="landing-mockup-wrap">
+      <div class="landing-mockup-phone">
+        <div class="landing-mockup-header">💳 الدفع الآمن</div>
+        <div class="landing-mockup-body">
+          <div class="mockup-line"></div>
+          <div class="mockup-line short"></div>
+          <div class="mockup-box">فاتورة رقم #1092<br><b>150.00 ج.م</b></div>
+          <div class="mockup-btn">تأكيد البيع</div>
+        </div>
+      </div>
+      <!-- أيقونات طايرة -->
+      <div class="floating-icon icon-1">📦</div>
+      <div class="floating-icon icon-2">📈</div>
+      <div class="floating-icon icon-3">💬</div>
+    </div>
+
+    <div class="landing-features">
+      <div class="landing-feature-card">
+        <div class="feat-icon" style="background:#eff6ff; color:#2563eb;">🛒</div>
+        <h3>نقطة بيع سريعة</h3>
+        <p>بيع بالباركود، طباعة فواتير، وإرسالها للعميل على الواتساب بضغطة زر.</p>
+      </div>
+      <div class="landing-feature-card">
+        <div class="feat-icon" style="background:#ecfdf5; color:#059669;">📦</div>
+        <h3>إدارة مخزون ذكية</h3>
+        <p>تتبع الكميات، تنبيهات النواقص، وتعديل المخزون مع معرفة السبب بالظبط.</p>
+      </div>
+      <div class="landing-feature-card">
+        <div class="feat-icon" style="background:#fffbeb; color:#d97706;">💎</div>
+        <h3>برنامج ولاء للعملاء</h3>
+        <p>خلي عميلك يرجعلك تاني. نظام نقاط بيحول كل عملية شراء لخصم في المرة الجاية.</p>
+      </div>
+      <div class="landing-feature-card">
+        <div class="feat-icon" style="background:#fef2f2; color:#dc2626;">📈</div>
+        <h3>تقارير مالية دقيقة</h3>
+        <p>اعرف مبيعاتك، مصروفاتك، وصافي ربحك في أي وقت ومن أي مكان.</p>
+      </div>
+    </div>
+
+    <div class="landing-pricing-section">
+      <h2>خطط تناسب كل تاجر</h2>
+      <div class="landing-plans-grid">
+        ${plansHtml}
+      </div>
+    </div>
+
+    <div class="landing-footer-cta">
+      <h2>جاهز تطور تجارتك؟</h2>
+      <p>انضم لمئات التجار اللي بيديروا محلاتهم بذكاء.</p>
+      <button class="landing-btn-primary" onclick="showAuthView('signup')">أنشئ حسابك المجاني الآن</button>
+    </div>
+  `;
 }
 
 function showLandingView() {
