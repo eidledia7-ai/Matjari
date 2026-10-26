@@ -976,7 +976,10 @@ function setAuthBusy(busy) {
 
 async function signIn() {
   const email = (document.getElementById('authEmail').value || '').trim();
-  const password = document.getElementById('authPassword').value || '';
+  const password = document.
+  if (!supabaseClient) initSupabase(); 
+if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  getElementById('authPassword').value || '';
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   setAuthBusy(true);
   showLoading(currentLang === 'en' ? 'Signing in...' : 'جارٍ تسجيل الدخول...');
@@ -995,7 +998,10 @@ async function signIn() {
 
 async function signUp() {
   const email = (document.getElementById('authEmail').value || '').trim();
-  const password = document.getElementById('authPassword').value || '';
+  const password = document.
+  if (!supabaseClient) initSupabase(); 
+if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  getElementById('authPassword').value || '';
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
   setAuthBusy(true);
@@ -2080,7 +2086,7 @@ const total = Math.max(0, subtotal - discountAmount - pointsDiscount);
   });
 
   const saleObj = {
-    id: 'INV-' + Date.now().toString().slice(-8),
+ id: 'INV-' + new Date().getFullYear() + (new Date().getMonth()+1).toString().padStart(2,'0') + new Date().getDate().toString().padStart(2,'0') + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
     date: new Date().toISOString(),
     items: JSON.parse(JSON.stringify(state.cart)),
     subtotal: subtotal,
@@ -2190,10 +2196,9 @@ function renderSales() {
       '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
       '<td>' + escapeHTML(payText) + '</td>' +
       '<td>' +
-        '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')">طباعة</button>' +
-        '<button class="small-btn" onclick="sendInvoiceWhatsApp(\'' + s.id + '\')" style="background:#25D366; color:white;">واتساب 💬</button>' +
-        '<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">حذف</button>' +
-      '</td>' +
+        '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')" title="طباعة">🖨️</button>' +
+'<button class="small-btn" onclick="sendInvoiceWhatsApp(\'' + s.id + '\')" style="background:#25D366; color:white;" title="واتساب">💬</button>' +
+'<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')" title="حذف">🗑️</button>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -3179,9 +3184,9 @@ function renderReports() {
     const salesByProduct = {};
     filteredSales.forEach(function(s) {
       s.items.forEach(function(i) {
-        if (!salesByProduct[i.id]) salesByProduct[i.id] = { name: i.name, qty: 0, total: 0 };
-        salesByProduct[i.id].qty += i.qty;
-        salesByProduct[i.id].total += i.price * i.qty;
+        if (!salesByProduct[i.name]) salesByProduct[i.name] = { name: i.name, qty: 0, total: 0 };
+salesByProduct[i.name].qty += i.qty;
+salesByProduct[i.name].total += i.price * i.qty;
       });
     });
     const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
