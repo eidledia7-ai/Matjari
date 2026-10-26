@@ -647,6 +647,11 @@ body.dark-mode #darkModeBtn { background: var(--warning); color: #0f172a; }
   flex-direction: column;
   transform: rotateX(5deg) rotateY(-5deg);
   transition: transform 0.5s ease;
+  animation: floatUpDown 6s ease-in-out infinite; /* السطر الجديد */
+}
+@keyframes floatUpDown {
+  0%, 100% { transform: translateY(0) rotateX(5deg) rotateY(-5deg); }
+  50% { transform: translateY(-15px) rotateX(5deg) rotateY(-5deg); }
 }
 .landing-mockup-phone:hover { transform: rotateX(0) rotateY(0); }
 
@@ -702,6 +707,7 @@ body.dark-mode #darkModeBtn { background: var(--warning); color: #0f172a; }
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
   transition: transform 0.3s ease;
+  text-align: right; /* السطر الجديد */
 }
 .landing-feature-card:hover { transform: translateY(-5px); border-color: #bfdbfe; }
 
