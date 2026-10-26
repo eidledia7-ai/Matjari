@@ -1040,18 +1040,6 @@ async function signUp() {
   }
 }
 
-    if (result.data.session && result.data.user) {
-      await openUserSession(result.data.user);
-    } else {
-      setAuthMessage('تم إنشاء الحساب. تحقق من بريدك ثم سجّل دخول.');
-    }
-  } catch (e) {
-    setAuthMessage('تعذر الإنشاء: ' + (e.message || ''), true);
-  } finally {
-    setAuthBusy(false);
-  }
-}
-
 async function sendPasswordReset() {
   const email = (document.getElementById('authEmail').value || '').trim();
   if (!email) return setAuthMessage('أدخل البريد أولاً', true);
