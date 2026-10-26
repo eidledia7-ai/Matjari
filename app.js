@@ -976,10 +976,10 @@ function setAuthBusy(busy) {
 
 async function signIn() {
   const email = (document.getElementById('authEmail').value || '').trim();
- const password = document.
-if (!supabaseClient) initSupabase(); 
-if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
-getElementById('authPassword').value || '';
+  const password = document.getElementById('authPassword').value || '';
+  
+  if (!supabaseClient) initSupabase(); 
+  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
 
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   setAuthBusy(true);
@@ -999,10 +999,10 @@ getElementById('authPassword').value || '';
 
 async function signUp() {
   const email = (document.getElementById('authEmail').value || '').trim();
-  const password = document.
-if (!supabaseClient) initSupabase(); 
-if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
-getElementById('authPassword').value || '';
+  const password = document.getElementById('authPassword').value || '';
+  
+  if (!supabaseClient) initSupabase(); 
+  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
 
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
@@ -1012,7 +1012,6 @@ getElementById('authPassword').value || '';
     const result = await supabaseClient.auth.signUp({ email: email, password: password });
     if (result.error) throw result.error;
 
-    // ✅ جديد: إنشاء اشتراك Trial تلقائياً
     if (result.data.user) {
       const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
       try {
@@ -1028,6 +1027,18 @@ getElementById('authPassword').value || '';
         console.warn('Could not create trial subscription:', subErr);
       }
     }
+
+    if (result.data.session && result.data.user) {
+      await openUserSession(result.data.user);
+    } else {
+      setAuthMessage('تم إنشاء الحساب. تحقق من بريدك ثم سجّل دخول.');
+    }
+  } catch (e) {
+    setAuthMessage('تعذر الإنشاء: ' + (e.message || ''), true);
+  } finally {
+    setAuthBusy(false);
+  }
+}
 
     if (result.data.session && result.data.user) {
       await openUserSession(result.data.user);
