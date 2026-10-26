@@ -546,3 +546,231 @@ body.dark-mode #darkModeBtn { background: var(--warning); color: #0f172a; }
   .main-content { max-width: none; padding: 0; }
   .card, .panel { box-shadow: none !important; border: 1px solid #ccc !important; background: #fff !important; }
 }
+/* =========================================
+   Landing Page Styles (Premium Marketing)
+   ========================================= */
+
+/* إخفاء شاشة الدخول القديمة وجعل صفحة الهبوط تاخد الشاشة كلها */
+#loginScreen { background: #ffffff !important; padding: 0 !important; align-items: flex-start !important; }
+.landing-view { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+#authView { display: none; /* بتظهر بس لما يدوس تسجيل دخول */ }
+.landing-card { max-width: 460px !important; margin: 40px auto !important; }
+
+/* الحاوية الرئيسية */
+.landing-hero {
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  padding: 80px 20px 60px;
+  text-align: center;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* بادج صغير فوق */
+.landing-badge {
+  display: inline-block;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 8px 16px;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 24px;
+  border: 1px solid #bfdbfe;
+}
+
+/* العنوان الرئيسي */
+.landing-title {
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.2;
+  margin: 0 0 20px;
+  letter-spacing: -1px;
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-subtitle {
+  font-size: clamp(16px, 2vw, 20px);
+  color: #64748b;
+  max-width: 600px;
+  margin: 0 auto 40px;
+  line-height: 1.6;
+}
+
+/* زرار الإطلاق */
+.landing-cta-group { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+.landing-btn-primary {
+  background: #2563eb;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  padding: 18px 40px;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4);
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 340px;
+}
+.landing-btn-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-3px);
+  box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.5);
+}
+
+.landing-trust-text { font-size: 14px; color: #64748b; font-weight: 600; }
+
+/* محاكاة الموبايل */
+.landing-mockup-wrap {
+  position: relative;
+  max-width: 300px;
+  margin: -30px auto 60px;
+  perspective: 1000px;
+}
+
+.landing-mockup-phone {
+  background: #ffffff;
+  border: 8px solid #0f172a;
+  border-radius: 40px;
+  height: 500px;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: rotateX(5deg) rotateY(-5deg);
+  transition: transform 0.5s ease;
+}
+.landing-mockup-phone:hover { transform: rotateX(0) rotateY(0); }
+
+.landing-mockup-header {
+  background: #0f172a;
+  color: white;
+  padding: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  text-align: center;
+}
+
+.landing-mockup-body { padding: 20px; flex: 1; background: #f8fafc; }
+.mockup-line { height: 12px; background: #e2e8f0; border-radius: 10px; margin-bottom: 12px; width: 100%; }
+.mockup-line.short { width: 60%; }
+.mockup-box { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 20px 0; text-align: center; font-weight: bold; color: #0f172a; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+.mockup-btn { background: #059669; color: white; text-align: center; padding: 12px; border-radius: 12px; font-weight: bold; margin-top: auto; }
+
+/* الأيقونات الطايرة */
+.floating-icon {
+  position: absolute;
+  background: #fff;
+  width: 60px; height: 60px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+  font-size: 28px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  animation: float 4s ease-in-out infinite;
+}
+.icon-1 { top: 50px; left: -30px; animation-delay: 0s; }
+.icon-2 { top: 200px; right: -40px; animation-delay: 1s; }
+.icon-3 { bottom: 80px; left: -20px; animation-delay: 2s; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+/* قسم الميزات */
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  padding: 60px 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.landing-feature-card {
+  background: #fff;
+  padding: 32px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+  transition: transform 0.3s ease;
+}
+.landing-feature-card:hover { transform: translateY(-5px); border-color: #bfdbfe; }
+
+.feat-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  margin-bottom: 20px;
+}
+.landing-feature-card h3 { margin: 0 0 12px; font-size: 20px; color: #0f172a; font-weight: 800; }
+.landing-feature-card p { margin: 0; color: #64748b; line-height: 1.6; }
+
+/* قسم الأسعار */
+.landing-pricing-section {
+  background: #f8fafc;
+  padding: 80px 20px;
+  text-align: center;
+}
+.landing-pricing-section h2 { font-size: 36px; font-weight: 900; color: #0f172a; margin: 0 0 40px; }
+
+.landing-plans-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.landing-plan-card {
+  background: #fff;
+  padding: 32px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  width: 260px;
+  position: relative;
+}
+.landing-plan-card.popular { border-color: #2563eb; box-shadow: 0 20px 40px -10px rgba(37, 99, 235, 0.2); }
+
+.landing-popular-badge {
+  position: absolute;
+  top: -14px; left: 50%; transform: translateX(-50%);
+  background: #2563eb; color: #fff;
+  padding: 6px 16px; border-radius: 20px;
+  font-size: 13px; font-weight: bold;
+}
+
+.landing-plan-card h4 { margin: 10px 0; font-size: 22px; color: #0f172a; font-weight: 800; }
+.landing-plan-price { font-size: 16px; color: #64748b; margin-top: 10px; }
+.landing-plan-price span { font-size: 36px; font-weight: 900; color: #0f172a; }
+
+/* قسم الإطلاق الأخير */
+.landing-footer-cta {
+  padding: 80px 20px;
+  text-align: center;
+  background: #0f172a;
+  color: #fff;
+}
+.landing-footer-cta h2 { font-size: 36px; font-weight: 900; margin: 0 0 16px; }
+.landing-footer-cta p { font-size: 18px; color: #94a3b8; margin: 0 0 32px; }
+.landing-footer-cta .landing-btn-primary { background: #10b981; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4); }
+.landing-footer-cta .landing-btn-primary:hover { background: #059669; }
+
+/* الموبايل */
+@media (max-width: 768px) {
+  .landing-hero { padding: 50px 20px 40px; }
+  .landing-title { font-size: 32px; }
+  .floating-icon { display: none; /* نخفيها في الموبايل عشان متزحمش */ }
+  .landing-mockup-wrap { margin: 30px auto; }
+  .landing-plan-card { width: 100%; max-width: 320px; }
+}
