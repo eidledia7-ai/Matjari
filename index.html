@@ -263,6 +263,10 @@
             <label data-i18n="notes_label">ملاحظات</label>
             <input type="text" id="saleNotes" placeholder="ملاحظات الفاتورة...">
           </div>
+          <div class="form-group span-3" id="pointsRedeemGroup" style="display:none; background: var(--primary-light); padding: 10px; border-radius: 8px; border: 1px solid var(--primary);">
+  <label style="color: var(--primary);">💎 استبدال نقاط العميل (المتاح: <span id="custAvailPoints" style="font-weight:900;">0</span> نقطة)</label>
+  <input type="number" id="salePointsUsed" value="0" min="0" step="1" onchange="renderCart()">
+</div>
         </div>
 
         <div class="btn-group mt-15">
@@ -860,6 +864,14 @@
             <label data-i18n="monthly_goal">🎯 هدف المبيعات الشهري (اختياري)</label>
             <input type="number" id="storeMonthlyGoal" min="0" step="any" placeholder="مثال: 50000">
           </div>
+          <div class="form-group">
+  <label>💎 كل كام جنيه يكسب العميل نقطة؟ (اتركه 0 للإلغاء)</label>
+  <input type="number" id="storePointsRate" min="0" placeholder="مثال: 10">
+</div>
+<div class="form-group">
+  <label>💎 النقطة بتساوي كام جنيه خصم؟</label>
+  <input type="number" id="storePointValue" min="0" step="any" placeholder="مثال: 1">
+</div>
         </div>
         <div class="btn-group mt-15">
           <button class="btn primary" onclick="saveStoreSettings()" data-i18n="save_store_btn">حفظ بيانات المحل</button>
