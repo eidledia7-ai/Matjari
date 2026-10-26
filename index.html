@@ -688,47 +688,55 @@
       </div>
     </div>
 
-    <!-- 5. المالية - التقارير -->
-    <div id="finReports" class="page">
-      <h2 data-i18n="tab_reports">📈 التقارير المالية</h2>
-      <div class="card">
-        <h3 data-i18n="quick_period">الفترة السريعة</h3>
-        <div class="btn-group">
-          <button class="btn secondary" onclick="setReportPeriod('today')" data-i18n="period_today">📅 اليوم</button>
-          <button class="btn secondary" onclick="setReportPeriod('week')" data-i18n="period_week">📆 الأسبوع</button>
-          <button class="btn secondary" onclick="setReportPeriod('month')" data-i18n="period_month">🗓️ آخر 30 يوم</button>
-          <button class="btn secondary" onclick="setReportPeriod('currentMonth')" data-i18n="period_curr_month">📊 الشهر الحالي</button>
-          <button class="btn secondary" onclick="setReportPeriod('year')" data-i18n="period_year">📈 السنة</button>
-          <button class="btn grey" onclick="clearReportPeriod()" data-i18n="period_all">الكل</button>
-        </div>
+ 
+ <!-- 5. المالية - التقارير -->
+<div id="finReports" class="page">
+  <h2 data-i18n="tab_reports">📈 التقارير المالية</h2>
+  
+  <div class="card">
+    <h3 data-i18n="quick_period">الفترة السريعة</h3>
+    <div class="btn-group mb-15">
+      <button class="btn secondary" onclick="setReportPeriod('today')" data-i18n="period_today">📅 اليوم</button>
+      <button class="btn secondary" onclick="setReportPeriod('week')" data-i18n="period_week">📆 الأسبوع</button>
+      <button class="btn secondary" onclick="setReportPeriod('month')" data-i18n="period_month">🗓️ آخر 30 يوم</button>
+      <button class="btn secondary" onclick="setReportPeriod('currentMonth')" data-i18n="period_curr_month">📊 الشهر الحالي</button>
+      <button class="btn secondary" onclick="setReportPeriod('year')" data-i18n="period_year">📈 السنة</button>
+      <button class="btn grey" onclick="clearReportPeriod()" data-i18n="period_all">الكل</button>
+    </div>
+
+    <h3 data-i18n="custom_range" class="mt-20">نطاق مخصص</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label data-i18n="from_date">من تاريخ</label>
+        <input type="date" id="reportFrom">
       </div>
-      <div class="card mt-15">
-        <h3 data-i18n="custom_range">نطاق مخصص</h3>
-        <div class="form-grid">
-          <div class="form-group">
-            <label data-i18n="from_date">من تاريخ</label>
-            <input type="date" id="reportFrom" onchange="renderReports()">
-          </div>
-          <div class="form-group">
-            <label data-i18n="to_date">إلى تاريخ</label>
-            <input type="date" id="reportTo" onchange="renderReports()">
-          </div>
-        </div>
-        <div class="btn-group mt-10">
-          <button class="btn green" onclick="renderReports()" data-i18n="refresh_btn">🔄 تحديث</button>
-          <button class="btn secondary" onclick="printReportSummary()" data-i18n="print_report">🖨️ طباعة التقرير</button>
-        </div>
-      </div>
-      <div id="reportCards" class="grid-cards mt-20"></div>
-      <div class="card mt-20">
-        <h3 data-i18n="performance_summary">📊 ملخص الأداء</h3>
-        <div id="dailyReport"></div>
-      </div>
-      <div class="card mt-20" style="background:linear-gradient(135deg,#d0e2ed,#bcd5e4)">
-        <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3>
-        <div ></div>
+      <div class="form-group">
+        <label data-i18n="to_date">إلى تاريخ</label>
+        <input type="date" id="reportTo">
       </div>
     </div>
+    <div class="btn-group mt-15">
+      <button class="btn green w-100" style="font-size: 16px; font-weight: 900;" onclick="renderReports()">📊 عرض التقرير</button>
+      <button class="btn secondary" onclick="printReportSummary()" data-i18n="print_report">🖨️ طباعة التقرير</button>
+    </div>
+  </div>
+
+  <!-- هنا هتظهر الكروت الأساسية (المبيعات، التكلفة، الربح...) -->
+  <div id="reportCards" class="grid-cards mt-20"></div>
+  
+  <!-- هنا هتظهر كروت تفاصيل الدفع وأفضل العملاء -->
+  <div id="activityDetailsReport"></div>
+
+  <div class="card mt-20">
+    <h3 data-i18n="performance_summary">📊 ملخص الأداء</h3>
+    <div id="dailyReport"></div>
+  </div>
+  
+  <div class="card mt-20" style="background:linear-gradient(135deg,#d0e2ed,#bcd5e4)">
+    <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3>
+    <div id="topProductsReport"></div>
+  </div>
+</div>
 
     <!-- 5. المالية - المقارنة -->
     <div id="finCompare" class="page">
