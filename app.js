@@ -3084,6 +3084,8 @@ function renderReports() {
   const filteredExpenses = filterByPeriod(state.expenses, 'date', from, to);
   const filteredReturns = filterByPeriod(state.returns, 'date', from, to);
 
+  const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   const totalSales = filteredSales.reduce(function(sum, s) { return sum + s.total; }, 0);
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + (s.discount || 0); }, 0);
 
@@ -3099,14 +3101,14 @@ function renderReports() {
   const cardsContainer = document.getElementById('reportCards');
   if (cardsContainer) {
     cardsContainer.innerHTML =
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_total_sales + '</h3><p>' + totalSales.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_total_sales + '</h3><p>' + fmt(totalSales) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card"><h3>عدد الفواتير</h3><p>' + filteredSales.length + '</p></div>' +
-      '<div class="stat-card"><h3>متوسط الفاتورة</h3><p>' + avgInvoice.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + totalCost.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + totalExpenses.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>متوسط الفاتورة</h3><p>' + fmt(avgInvoice) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(totalCost) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + fmt(totalExpenses) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
       '<h3>' + (translations[currentLang] || translations.ar).dash_net_profit + '</h3>' +
-      '<p style="color:' + (netProfit >= 0 ? '#17643a' : '#c0392b') + '">' + netProfit.toFixed(2) + ' ' + state.storeSettings.currency + '</p>' +
+      '<p style="color:' + (netProfit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(netProfit) + ' ' + state.storeSettings.currency + '</p>' +
       '</div>';
   }
 
@@ -3114,9 +3116,62 @@ function renderReports() {
   if (daily) {
     daily.innerHTML =
       '<p>عدد الفواتير: <b>' + filteredSales.length + '</b></p>' +
-      '<p>' + tr('total_discounts') + ': <b>' + totalDiscount.toFixed(2) + ' ' + state.storeSettings.currency + '</b></p>' +
+      '<p>' + tr('total_discounts') + ': <b>' + fmt(totalDiscount) + ' ' + state.storeSettings.currency + '</b></p>' +
       '<p>عدد المرتجعات: <b>' + filteredReturns.length + '</b></p>' +
       '<p>عدد المصروفات: <b>' + filteredExpenses.length + '</b></p>';
+  }
+
+  const cashSales = filteredSales.filter(s => s.payMethod === 'cash').reduce((sum, s) => sum + s.paid, 0);
+  const cardSales = filteredSales.filter(s => s.payMethod === 'visa' || s.payMethod === 'card').reduce((sum, s) => sum + s.paid, 0);
+  const transferSales = filteredSales.filter(s => s.payMethod === 'transfer').reduce((sum, s) => sum + s.paid, 0);
+  const debtSales = filteredSales.reduce((sum, s) => sum + s.remaining, 0);
+
+  const customerTotals = {};
+  filteredSales.forEach(s => {
+    if (s.customerId) {
+      const custName = state.customers.find(c => c.id === s.customerId)?.name || 'نقدي';
+      if (custName !== 'عميل نقدي عام') {
+        customerTotals[custName] = (customerTotals[custName] || 0) + s.total;
+      }
+    }
+  });
+  const topCustomers = Object.entries(customerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  let detailsHtml = `
+    <div class="grid-2 mt-20">
+      <div class="card">
+        <h3>💵 تفاصيل طرق الدفع</h3>
+        <table class="data-table">
+          <tbody>
+            <tr><td>💵 مبيعات كاش</td><td><b>${fmt(cashSales)}</b></td></tr>
+            <tr><td>💳 مبيعات فيزا</td><td><b>${fmt(cardSales)}</b></td></tr>
+            <tr><td>📲 تحويلات بنكية</td><td><b>${fmt(transferSales)}</b></td></tr>
+            <tr style="background:#fef2f2"><td>⚠️ ديون (متبقي في الفواتير)</td><td><b class="red-text">${fmt(debtSales)}</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="card">
+        <h3>🏆 أفضل العملاء في الفترة</h3>
+        ${topCustomers.length > 0 ? `
+        <table class="data-table">
+          <tbody>
+            ${topCustomers.map((c, idx) => `
+              <tr>
+                <td>${idx + 1}. ${escapeHTML(c[0])}</td>
+                <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : '<p class="text-muted text-center" style="padding: 20px;">لا توجد مبيعات لعملاء مسجلين في هذه الفترة.</p>'}
+      </div>
+    </div>
+  `;
+
+  let activityContainer = document.getElementById('activityDetailsReport');
+  if (activityContainer) {
+    activityContainer.innerHTML = detailsHtml;
   }
 
   const topContainer = document.getElementById('topProductsReport');
@@ -3132,80 +3187,17 @@ function renderReports() {
     const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
 
     if (top.length === 0) {
-      topContainer.innerHTML = '<p class="text-muted">لا توجد مبيعات في الفترة.</p>';
+      topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">لا توجد مبيعات مسجلة في هذه الفترة.</p>';
     } else {
       let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>#</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_value">القيمة</th></tr></thead><tbody>';
       top.forEach(function(t, i) {
-        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHTML(t.name) + '</td><td><b>' + t.qty + '</b></td><td>' + t.total.toFixed(2) + '</td></tr>';
+        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHTML(t.name) + '</td><td><b>' + t.qty + '</b></td><td>' + fmt(t.total) + '</td></tr>';
       });
       html += '</tbody></table></div>';
       topContainer.innerHTML = html;
     }
   }
-  // حساب تفاصيل إضافية
-const cashSales = filteredSales.filter(s => s.payMethod === 'cash').reduce((sum, s) => sum + s.paid, 0);
-const cardSales = filteredSales.filter(s => s.payMethod === 'visa' || s.payMethod === 'card').reduce((sum, s) => sum + s.paid, 0);
-const transferSales = filteredSales.filter(s => s.payMethod === 'transfer').reduce((sum, s) => sum + s.paid, 0);
-
-const debtSales = filteredSales.reduce((sum, s) => sum + s.remaining, 0);
-
-// أفضل 5 عملاء
-const customerTotals = {};
-filteredSales.forEach(s => {
-  if (s.customerId) {
-    const custName = state.customers.find(c => c.id === s.customerId)?.name || 'نقدي';
-    if (custName !== 'عميل نقدي عام') {
-      customerTotals[custName] = (customerTotals[custName] || 0) + s.total;
-    }
-  }
-});
-const topCustomers = Object.entries(customerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-let detailsHtml = `
-  <div class="grid-2 mt-20">
-    <div class="card">
-      <h3>💵 تفاصيل طرق الدفع</h3>
-      <table class="data-table">
-        <tbody>
-          <tr><td>💵 مبيعات كاش</td><td><b>${cashSales.toFixed(2)}</b></td></tr>
-          <tr><td>💳 مبيعات فيزا</td><td><b>${cardSales.toFixed(2)}</b></td></tr>
-          <tr><td>📲 تحويلات بنكية</td><td><b>${transferSales.toFixed(2)}</b></td></tr>
-          <tr style="background:#fef2f2"><td>⚠️ ديون (متبقي في الفواتير)</td><td><b class="red-text">${debtSales.toFixed(2)}</b></td></tr>
-        </tbody>
-      </table>
-    </div>
-    
-    <div class="card">
-      <h3>🏆 أفضل العملاء في الفترة</h3>
-      ${topCustomers.length > 0 ? `
-      <table class="data-table">
-        <tbody>
-          ${topCustomers.map((c, idx) => `
-            <tr>
-              <td>${idx + 1}. ${escapeHTML(c[0])}</td>
-              <td><b>${c[1].toFixed(2)}</b> ${state.storeSettings.currency}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ` : '<p class="text-muted text-center">لا توجد مبيعات لعملاء مسجلين في هذه الفترة.</p>'}
-    </div>
-  </div>
-`;
-
-// البحث عن مكان في الصفحة نحط فيه التفاصيل دي
-let activityContainer = document.getElementById('activityDetailsReport');
-if (!activityContainer) {
-  activityContainer = document.createElement('div');
-  activityContainer.id = 'activityDetailsReport';
-  const reportCards = document.getElementById('reportCards');
-  if (reportCards && reportCards.parentNode) {
-    reportCards.parentNode.insertBefore(activityContainer, reportCards.nextSibling);
-  }
 }
-activityContainer.innerHTML = detailsHtml;
-}
-
 
 function setReportPeriod(period) {
   const end = today();
