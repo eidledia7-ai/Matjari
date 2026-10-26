@@ -268,7 +268,7 @@ input[readonly], input:disabled, select:disabled, textarea:disabled { background
   width: 100%; overflow-x: auto; border-radius: var(--radius-md);
   border: 1px solid var(--border); background: var(--bg-card); box-shadow: var(--shadow-sm);
 }
-table, .data-table { width: 100%; border-collapse: collapse; min-width: 650px; }
+table, .data-table { width: 100%; border-collapse: collapse; min-width: 100%; }
 th, td {
   padding: 14px 16px; border-bottom: 1px solid var(--border);
   text-align: right; font-size: 14px; color: var(--text-main);
