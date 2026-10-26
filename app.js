@@ -3176,8 +3176,15 @@ function clearReportPeriod() {
 function calcExpectedShiftCash() {
   const shift = state.currentShift;
   if (!shift) {
-    const el = document.getElementById('shiftExpectedCash');
-    if (el) el.value = '0.00 ' + state.storeSettings.currency;
+   // خصم مصروفات الدرج من الكاش المتوقع
+let drawerExpensesTotal = 0;
+if (shift.drawerExpenses) {
+  drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+}
+const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+
+const el = document.getElementById('shiftExpectedCash');
+if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
     calculateShiftDiff();
     return;
   }
@@ -4905,4 +4912,44 @@ function quickAddStock(id) {
   renderDashboard();
   updateStockBadge();
   showNotification('تم إضافة ' + qty + ' قطعة لمخزون "' + prod.name + '" ✅', 'success');
+}
+/* ============ مصروفات الدرج ============ */
+function openDrawerExpenseModal() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً', 'error');
+  if (!state.currentShift) {
+    return showNotification('لا توجد وردية مفتوحة حالياً. ابدأ بيع أولاً.', 'warning');
+  }
+  document.getElementById('drawerExpenseAmount').value = '';
+  document.getElementById('drawerExpenseReason').value = '';
+  document.getElementById('drawerExpenseModal').style.display = 'flex';
+}
+
+function saveDrawerExpense() {
+  const amount = parseFloat(document.getElementById('drawerExpenseAmount').value);
+  const reason = document.getElementById('drawerExpenseReason').value.trim();
+
+  if (isNaN(amount) || amount <= 0 || !reason) {
+    return showNotification('أدخل مبلغاً صحيحاً وسبباً للمصروف', 'error');
+  }
+
+  // 1. تسجيله في جدول المصروفات العام (عشان يخصم من الربح)
+  state.expenses.unshift({
+    id: uid('EXP'),
+    name: 'مصروف وردية: ' + reason,
+    amount: amount,
+    date: today(),
+    notes: 'تم سحبه من درج الكاشير أثناء الوردية'
+  });
+
+  // 2. حفظه في الوردية الحالية (عشان نخصمه من الكاش المتوقع)
+  if (!state.currentShift.drawerExpenses) state.currentShift.drawerExpenses = [];
+  state.currentShift.drawerExpenses.push({ amount: amount, reason: reason, time: new Date().toISOString() });
+
+  // 3. تحديث الكاش المتوقع
+  calcExpectedShiftCash();
+  
+  saveData();
+  renderExpenses(); // تحديث صفحة المصروفات
+  document.getElementById('drawerExpenseModal').style.display = 'none';
+  showNotification('تم تسجيل المصروف وخصمه من الدرج ✅', 'success');
 }
