@@ -1544,6 +1544,8 @@ function loadStoreSettings() {
   set('storeTaxNumber', s.taxNumber);
   set('storeCurrency', s.currency);
   set('storeMonthlyGoal', s.monthlyGoal);
+  set('storePointsRate', s.pointsRate);
+set('storePointValue', s.pointValue);
   const preview = document.getElementById('storeLogoPreview');
   if (preview && s.logo) { preview.src = s.logo; preview.style.display = 'block'; }
   else if (preview) { preview.style.display = 'none'; }
@@ -1560,6 +1562,8 @@ function saveStoreSettings() {
   state.storeSettings.taxNumber = (document.getElementById('storeTaxNumber').value || '').trim();
   state.storeSettings.currency = (document.getElementById('storeCurrency').value || 'ج.م').trim();
   state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
+state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
+state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
 
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
@@ -1899,7 +1903,8 @@ function populateSalesDropdowns() {
   state.customers.forEach(function(c) {
     const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
     const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
-    custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + '</option>';
+    const pointsLabel = (c.points && c.points > 0) ? ' (💎 ' + c.points + ' نقطة)' : '';
+custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + pointsLabel + '</option>';
   });
 }
 
@@ -1928,6 +1933,26 @@ function renderCart() {
   const container = document.getElementById('cartTable');
   if (!container) return;
 
+  const custId = document.getElementById('saleCustomer').value;
+  const cust = state.customers.find(c => c.id === custId);
+  const pointsGroup = document.getElementById('pointsRedeemGroup');
+  const pointsInput = document.getElementById('salePointsUsed');
+  const pointsLabel = document.getElementById('custAvailPoints');
+  
+  let availablePoints = (cust && cust.points) ? Number(cust.points) : 0;
+  let pointValue = state.storeSettings.pointValue || 0;
+
+  if (pointsGroup) {
+    if (availablePoints > 0 && pointValue > 0 && cust.name !== 'عميل نقدي عام') {
+      pointsGroup.style.display = 'flex';
+      if (pointsLabel) pointsLabel.innerText = availablePoints;
+      if (pointsInput) pointsInput.setAttribute('max', availablePoints);
+    } else {
+      pointsGroup.style.display = 'none';
+      if (pointsInput) pointsInput.value = 0;
+    }
+  }
+
   if (state.cart.length === 0) {
     container.innerHTML = '<p class="text-muted">سلة المبيعات فارغة.</p>';
     const t = document.getElementById('cartTotal');
@@ -1954,10 +1979,19 @@ function renderCart() {
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
   const discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
-  const finalTotal = Math.max(0, subtotal - discountAmount);
+  
+  let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
+  if (pointsUsed > availablePoints) { pointsUsed = availablePoints; pointsInput.value = pointsUsed; }
+  const pointsDiscount = pointsUsed * pointValue;
+
+  const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount);
 
   const t = document.getElementById('cartTotal');
-  if (t) t.innerText = tr('invoice_total') + ': ' + finalTotal.toFixed(2) + ' ' + state.storeSettings.currency + ' (' + tr('discount_short') + ': ' + discountAmount.toFixed(2) + ')';
+  if (t) {
+    let totalText = tr('invoice_total') + ': ' + finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
+    if (pointsDiscount > 0) totalText += ' (خصم نقاط: -' + pointsDiscount.toFixed(2) + ')';
+    t.innerText = totalText;
+  }
 }
 
 function updateCartQty(idx, val) {
@@ -1984,6 +2018,7 @@ function clearCart() {
   const p = document.getElementById('salePaid'); if (p) p.value = 0;
   const n = document.getElementById('saleNotes'); if (n) n.value = '';
   renderCart();
+  const pts = document.getElementById('salePointsUsed'); if (pts) pts.value = 0;
 }
 
 async function completeSale() {
@@ -1998,7 +2033,12 @@ async function completeSale() {
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
   const discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
-  const total = Math.max(0, subtotal - discountAmount);
+  const pointsInput = document.getElementById('salePointsUsed');
+const pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
+const pointValue = state.storeSettings.pointValue || 0;
+const pointsDiscount = pointsUsed * pointValue;
+
+const total = Math.max(0, subtotal - discountAmount - pointsDiscount);
 
   const paid = parseFloat(document.getElementById('salePaid').value) || total;
   const customerId = document.getElementById('saleCustomer').value;
@@ -2055,6 +2095,23 @@ async function completeSale() {
     const cust = state.customers.find(function(c) { return c.id === customerId; });
     if (cust) cust.openingDebt = (cust.openingDebt || 0) + saleObj.remaining;
   }
+  // 💎 برنامج الولاء
+if (customerId) {
+  const cust = state.customers.find(c => c.id === customerId);
+  if (cust && cust.name !== 'عميل نقدي عام') {
+    if (!cust.points) cust.points = 0;
+    cust.points = Math.max(0, cust.points - pointsUsed);
+    
+    const pointsRate = state.storeSettings.pointsRate || 0;
+    if (pointsRate > 0) {
+      const earnedPoints = Math.floor(total / pointsRate);
+      if (earnedPoints > 0) {
+        cust.points += earnedPoints;
+        setTimeout(() => showNotification('💎 العميل كسب ' + earnedPoints + ' نقطة!', 'info'), 1500);
+      }
+    }
+  }
+}
 await uploadToCloud();
   saveData();
   playBeep(true);
