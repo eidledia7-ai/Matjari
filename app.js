@@ -4571,16 +4571,15 @@ function renderLandingView() {
     if (plan.popular) plansHtml += '<div class="landing-popular-badge">الأكثر شعبية ⭐</div>';
     plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
     plansHtml += '<div class="landing-plan-price"><span>' + plan.price + '</span> ' + cur + ' / شهر</div>';
-    // الزرار الجديد اللي ضفناه
     plansHtml += '<button class="landing-btn-primary" style="margin-top:20px; padding: 12px 20px; font-size: 15px; width: 100%; box-shadow: none;" onclick="showAuthView(\'signup\')">اشترك الآن ←</button>';
     plansHtml += '</div>';
   });
 
   container.innerHTML = `
     <div class="landing-hero">
-      <div class="landing-badge">🚀 نظام إدارة المبيعات رقم 1 للتجار</div>
-      <h1 class="landing-title">المحل بتاعك في جيبك.<br><span class="text-gradient">بدون ورق، وبدون تعقيد.</span></h1>
-      <p class="landing-subtitle">نظام كاشير سحابي، إدارة مخزون، حسابات عملاء، وتقارير بتوريك ربحك الحقيقي. ابدأ في دقائق.</p>
+      <div class="landing-badge">🚀 النظام رقم 1 لإدارة المحلات</div>
+      <h1 class="landing-title">سيبك من الدفاتر والورق.<br><span class="text-gradient">محلك وحساباته في جيبك.</span></h1>
+      <p class="landing-subtitle">نظام الكاشير الأسهل في مصر. بيع، اطبع فاتورتك، وابعت للعميل واتساب في ثانية. واعرف أرباحك الحقيقية في أي وقت.</p>
       
       <div class="landing-cta-group">
         <button class="landing-btn-primary" onclick="showAuthView('signup')">
@@ -4607,26 +4606,37 @@ function renderLandingView() {
       <div class="floating-icon icon-3">💬</div>
     </div>
 
+    <!-- قسم مشاكل التاجر (جديد) -->
+    <div style="background: #fff; padding: 40px 20px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+      <h2 style="font-size: 28px; font-weight: 900; color: #0f172a; margin-bottom: 24px;">هل تعاني من هذه المشاكل في محلك؟</h2>
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; max-width: 900px; margin: 0 auto;">
+        <div style="background: #fef2f2; color: #991b1b; padding: 16px 24px; border-radius: 12px; font-weight: 700; flex: 1; min-width: 250px; border: 1px solid #fecaca;">❌ بتتعب في حصر مخزونك وبتكتشف إن فيه بضاعة ضايعة؟</div>
+        <div style="background: #fef2f2; color: #991b1b; padding: 16px 24px; border-radius: 12px; font-weight: 700; flex: 1; min-width: 250px; border: 1px solid #fecaca;">❌ العملاء اللي عليهم ديون بيتوهوا منك ومش فاكرهم؟</div>
+        <div style="background: #fef2f2; color: #991b1b; padding: 16px 24px; border-radius: 12px; font-weight: 700; flex: 1; min-width: 250px; border: 1px solid #fecaca;">❌ بتبيع طول اليوم ومش عارف صافي ربحك الحقيقي كام؟</div>
+      </div>
+    </div>
+
+    <!-- قسم المميزات (محدث) -->
     <div class="landing-features">
       <div class="landing-feature-card">
-        <div class="feat-icon" style="background:#eff6ff; color:#2563eb;">🛒</div>
-        <h3>نقطة بيع سريعة</h3>
-        <p>بيع بالباركود، طباعة فواتير، وإرسالها للعميل على الواتساب بضغطة زر.</p>
+        <div class="feat-icon" style="background:#eff6ff; color:#2563eb;">⚡</div>
+        <h3>كاشير بيطير</h3>
+        <p>امسح الباركود واطبع الفاتورة في ثانية. مفيش طوابير وهتخلص زباين أسرع.</p>
       </div>
       <div class="landing-feature-card">
         <div class="feat-icon" style="background:#ecfdf5; color:#059669;">📦</div>
-        <h3>إدارة مخزون ذكية</h3>
-        <p>تتبع الكميات، تنبيهات النواقص، وتعديل المخزون مع معرفة السبب بالظبط.</p>
+        <h3>مخزنك في أمان</h3>
+        <p>هيعرفك فوراً إيه اللي خلص، وهينبهك قبل ما تخلص، عشان مبيعاتك متقفش.</p>
       </div>
       <div class="landing-feature-card">
         <div class="feat-icon" style="background:#fffbeb; color:#d97706;">💎</div>
-        <h3>برنامج ولاء للعملاء</h3>
-        <p>خلي عميلك يرجعلك تاني. نظام نقاط بيحول كل عملية شراء لخصم في المرة الجاية.</p>
+        <h3>رجع عميلك تاني</h3>
+        <p>نظام نقاط ذكي بيخلي العميل بيشتري منك إنت بس، عشان يستفيد بخصمه.</p>
       </div>
       <div class="landing-feature-card">
         <div class="feat-icon" style="background:#fef2f2; color:#dc2626;">📈</div>
-        <h3>تقارير مالية دقيقة</h3>
-        <p>اعرف مبيعاتك، مصروفاتك، وصافي ربحك في أي وقت ومن أي مكان.</p>
+        <h3>اعرف ربحك صح</h3>
+        <p>تقارير بتوريك التكلفة والمصروفات وصافي الربح، عشان تاخد قرارات صح لمحلك.</p>
       </div>
     </div>
 
@@ -4639,7 +4649,7 @@ function renderLandingView() {
 
     <div class="landing-footer-cta">
       <h2>جاهز تطور تجارتك؟</h2>
-      <p>انضم لمئات التجار اللي بيديروا محلاتهم بذكاء.</p>
+      <p>انضم لمئات التجار اللي بيديروا محلاتهم بذكاء وأمان تام.</p>
       <button class="landing-btn-primary" onclick="showAuthView('signup')">أنشئ حسابك المجاني الآن</button>
     </div>
   `;
