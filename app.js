@@ -2022,6 +2022,8 @@ function clearCart() {
 }
 
 async function completeSale() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لتتمكن من البيع', 'error');
+
   if (state.cart.length === 0) {
     playBeep(false);
     return showNotification('السلة فارغة!', 'error');
@@ -2270,6 +2272,8 @@ function clearTableLog(logType) {
 // ▲▲▲ نهاية الجزء 1/3 — انسخ الجزء 2/3 بعد ده مباشرة ▲▲▲
 /* ============ المخزون والمنتجات ============ */
 function saveProduct() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
+ 
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('productId').value;
@@ -2605,6 +2609,8 @@ function renderReturns() {
 
 /* ============ العملاء ============ */
 function saveCustomer() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة عملاء', 'error');
+ 
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('customerId').value;
@@ -2687,6 +2693,7 @@ function deleteCustomer(id) {
 }
 
 function recordCustomerPayment() {
+if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const customerId = document.getElementById('customerPaymentCustomer').value;
@@ -2861,6 +2868,7 @@ function calcPurchaseTotal() {
 }
 
 function savePurchase() {
+if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const supplierId = document.getElementById('purchaseSupplier').value;
@@ -3012,6 +3020,7 @@ function renderSupplierPayments() {
 
 /* ============ المصروفات ============ */
 function saveExpense() {
+if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const name = document.getElementById('expenseName').value.trim();
@@ -4530,9 +4539,14 @@ function showAuthView(mode) {
 
 /* ============ قفل التطبيق عند انتهاء الاشتراك ============ */
 function enforceSubscriptionBlock() {
+  // 1. مسح أي شاشة قفل قديمة أو شريط قديم
   const existing = document.getElementById('subscriptionBlock');
   if (existing) existing.remove();
-  document.body.style.overflow = '';
+  
+  const oldBanner = document.getElementById('readOnlyBanner');
+  if (oldBanner) oldBanner.remove();
+  
+  document.body.style.overflow = ''; // إرجاع السكرول
 
   const sub = state.subscription || {};
   let endDate = null;
@@ -4541,49 +4555,31 @@ function enforceSubscriptionBlock() {
 
   const now = Date.now();
   const isActive = sub.status === 'active' && (!endDate || endDate > now);
-  if (isActive) return;
+  
+  // حفظ حالة الاشتراك في متغير عام عشان نستخدمه في منع الحفظ
+  window.isReadOnlyMode = !isActive; 
 
+  if (isActive) {
+    document.body.style.paddingTop = '0'; // تصفير المسافة لو الاشتراك سليم
+    return;
+  }
+
+  // 2. عمل الشريط الأحمر التحذيري
   const en = currentLang === 'en';
-  const cur = state.storeSettings.currency || 'ج.م';
-  const dict = translations[currentLang] || translations.ar;
-  const daysAgo = endDate ? Math.max(0, Math.ceil((now - endDate) / (1000 * 60 * 60 * 24))) : 0;
-
-  let plansHtml = '';
-  PLANS.forEach(plan => {
-    plansHtml += '<div class="sub-block-plan' + (plan.popular ? ' popular' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'block\')" style="cursor:pointer">';
-    if (plan.popular) plansHtml += '<div class="plan-badge">' + dict.most_popular + '</div>';
-    plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
-    plansHtml += '<div class="plan-price">';
-    plansHtml += '<span class="price-amount">' + plan.price + '</span>';
-    plansHtml += '<span class="price-currency">' + cur + '</span>';
-    plansHtml += '<span class="price-period">/' + dict.per_month + '</span>';
-    plansHtml += '</div>';
-    plansHtml += '<button class="btn green w-100 mt-10" onclick="startSubscription(\'' + plan.id + '\')">' + dict.subscribe_now + '</button>';
-    plansHtml += '</div>';
-  });
-
-  const desc = daysAgo > 0
-    ? dict.trial_ended_days.replace('{days}', daysAgo)
-    : dict.trial_ended_desc;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'subscriptionBlock';
-  overlay.className = 'subscription-block-overlay';
-  overlay.innerHTML =
-    '<div class="subscription-block-card">' +
-      '<div style="display:flex;justify-content:flex-end;margin-bottom:5px">' +
-        '<button class="small-btn gray" onclick="toggleLanguage()">🌐 ' + (en ? 'العربية' : 'English') + '</button>' +
-      '</div>' +
-      '<div class="sub-block-icon">🔒</div>' +
-      '<h2>' + dict.trial_ended_title + '</h2>' +
-      '<p class="sub-block-desc">' + desc + '</p>' +
-      '<div class="sub-block-plans">' + plansHtml + '</div>' +
-      '<div class="sub-block-actions">' +
-        '<button class="btn gray w-100" onclick="handleLogout()">🚪 ' + dict.logout_btn + '</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
-  document.body.style.overflow = 'hidden';
+  const banner = document.createElement('div');
+  banner.id = 'readOnlyBanner';
+  banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#ef4444; color:#fff; text-align:center; padding:12px; z-index:99999; font-weight:bold; font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;';
+  
+  banner.innerHTML = `
+    <span>⚠️ ${en ? 'Subscription expired. Read-Only mode.' : 'اشتراكك منتهي. أنت الآن في وضع القراءة فقط (لا يمكنك البيع أو التعديل).'}</span>
+    <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">
+      ${en ? 'Renew Now' : 'جدد الآن'}
+    </button>
+    <button onclick="this.parentElement.remove(); document.body.style.paddingTop='0';" style="background:transparent; border:none; color:#fff; cursor:pointer; font-size:18px; padding:0 5px;">✕</button>
+  `;
+  
+  document.body.prepend(banner);
+  document.body.style.paddingTop = '50px'; // عشان الشريط ميداريش الهيدر
 }
 
 async function startSubscription(planId) {
