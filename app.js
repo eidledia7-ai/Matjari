@@ -724,6 +724,7 @@ let state = {
   currentUser: null,
   role: 'employee',
   cart: [],
+  heldCarts: [],
   products: [],
   sales: [],
   customers: [],
@@ -1243,6 +1244,7 @@ async function openUserSession(user) {
       state.purchases = d.purchases || [];
       state.shifts = d.shifts || [];
       state.currentShift = d.currentShift || null;
+      state.heldCarts = d.heldCarts || [];
       if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
     } else {
       state.products = [];
@@ -1684,6 +1686,7 @@ function saveData() {
       purchases: state.purchases,
       shifts: state.shifts,
       currentShift: state.currentShift,
+      heldCarts: state.heldCarts,
       storeSettings: state.storeSettings
     };
     localStorage.setItem(key, JSON.stringify(cache));
@@ -1721,6 +1724,7 @@ async function uploadToCloud() {
       purchases: state.purchases,
       shifts: state.shifts,
       currentShift: state.currentShift,
+      heldCarts: state.heldCarts,
       storeSettings: state.storeSettings
     };
     const result = await supabaseClient
@@ -4752,4 +4756,116 @@ function hidePlanDetail() {
   if (!document.getElementById('subscriptionBlock')) {
     document.body.style.overflow = '';
   }
+}
+/* ============ نظام تعليق الفواتير (Hold Sale) ============ */
+function updateHeldCartsCount() {
+  const badge = document.getElementById('heldCartsCount');
+  if (badge) badge.innerText = state.heldCarts ? state.heldCarts.length : 0;
+}
+
+function holdCurrentSale() {
+  if (state.cart.length === 0) {
+    return showNotification('السلة فارغة، لا يوجد ما يتم تعليقه', 'warning');
+  }
+
+  const custId = document.getElementById('saleCustomer').value;
+  const cust = state.customers.find(c => c.id === custId);
+
+  const heldSale = {
+    id: uid('HOLD'),
+    time: new Date().toISOString(),
+    cart: JSON.parse(JSON.stringify(state.cart)),
+    customerId: custId,
+    customerName: cust ? cust.name : 'عميل نقدي',
+    discount: document.getElementById('saleDiscount').value || 0,
+    discountType: document.getElementById('saleDiscountType').value,
+    notes: document.getElementById('saleNotes').value || ''
+  };
+
+  if (!state.heldCarts) state.heldCarts = [];
+  state.heldCarts.unshift(heldSale);
+
+  clearCart();
+  updateHeldCartsCount();
+  saveData();
+  showNotification('تم تعليق الفاتورة بنجاح ✅', 'success');
+}
+
+function openHeldCartsModal() {
+  const modal = document.getElementById('heldCartsModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  renderHeldCartsList();
+}
+
+function closeHeldCartsModal() {
+  const modal = document.getElementById('heldCartsModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderHeldCartsList() {
+  const container = document.getElementById('heldCartsList');
+  if (!container) return;
+
+  if (!state.heldCarts || state.heldCarts.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center">لا توجد فواتير معلقة حالياً.</p>';
+    return;
+  }
+
+  let html = '';
+  state.heldCarts.forEach(sale => {
+    const date = new Date(sale.time).toLocaleTimeString(currentLang === 'en' ? 'en-US' : 'ar-EG');
+    const total = sale.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    
+    html += `
+      <div style="background:var(--bg-body); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-weight:bold; color:var(--text-main);">${escapeHTML(sale.customerName)} <span style="font-size:12px; color:var(--text-muted);">(${date})</span></div>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">${sale.cart.length} أصناف - الإجمالي: <b>${total.toFixed(2)} ${state.storeSettings.currency}</b></div>
+        </div>
+        <div style="display:flex; gap:5px;">
+          <button class="small-btn green" onclick="resumeHeldSale('${sale.id}')">استرجاع</button>
+          <button class="small-btn red" onclick="deleteHeldSale('${sale.id}')">حذف</button>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+function resumeHeldSale(id) {
+  if (state.cart.length > 0) {
+    if (!confirm('السلة الحالية بها أصناف. هل تريد تعليقها أولاً واسترجاع الفاتورة المحددة؟')) {
+      return;
+    }
+    holdCurrentSale();
+  }
+
+  const index = state.heldCarts.findIndex(s => s.id === id);
+  if (index === -1) return;
+  
+  const sale = state.heldCarts[index];
+  
+  state.cart = sale.cart;
+  document.getElementById('saleCustomer').value = sale.customerId;
+  document.getElementById('saleDiscount').value = sale.discount;
+  document.getElementById('saleDiscountType').value = sale.discountType;
+  document.getElementById('saleNotes').value = sale.notes;
+
+  state.heldCarts.splice(index, 1);
+  
+  closeHeldCartsModal();
+  renderCart();
+  updateHeldCartsCount();
+  saveData();
+  showNotification('تم استرجاع الفاتورة بنجاح ✅', 'success');
+}
+
+function deleteHeldSale(id) {
+  if (!confirm('هل أنت متأكد من حذف هذه الفاتورة المعلقة نهائياً؟')) return;
+  state.heldCarts = state.heldCarts.filter(s => s.id !== id);
+  renderHeldCartsList();
+  updateHeldCartsCount();
+  saveData();
+  showNotification('تم حذف الفاتورة المعلقة', 'info');
 }
