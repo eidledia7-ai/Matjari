@@ -3142,7 +3142,70 @@ function renderReports() {
       topContainer.innerHTML = html;
     }
   }
+  // حساب تفاصيل إضافية
+const cashSales = filteredSales.filter(s => s.payMethod === 'cash').reduce((sum, s) => sum + s.paid, 0);
+const cardSales = filteredSales.filter(s => s.payMethod === 'visa' || s.payMethod === 'card').reduce((sum, s) => sum + s.paid, 0);
+const transferSales = filteredSales.filter(s => s.payMethod === 'transfer').reduce((sum, s) => sum + s.paid, 0);
+
+const debtSales = filteredSales.reduce((sum, s) => sum + s.remaining, 0);
+
+// أفضل 5 عملاء
+const customerTotals = {};
+filteredSales.forEach(s => {
+  if (s.customerId) {
+    const custName = state.customers.find(c => c.id === s.customerId)?.name || 'نقدي';
+    if (custName !== 'عميل نقدي عام') {
+      customerTotals[custName] = (customerTotals[custName] || 0) + s.total;
+    }
+  }
+});
+const topCustomers = Object.entries(customerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+let detailsHtml = `
+  <div class="grid-2 mt-20">
+    <div class="card">
+      <h3>💵 تفاصيل طرق الدفع</h3>
+      <table class="data-table">
+        <tbody>
+          <tr><td>💵 مبيعات كاش</td><td><b>${cashSales.toFixed(2)}</b></td></tr>
+          <tr><td>💳 مبيعات فيزا</td><td><b>${cardSales.toFixed(2)}</b></td></tr>
+          <tr><td>📲 تحويلات بنكية</td><td><b>${transferSales.toFixed(2)}</b></td></tr>
+          <tr style="background:#fef2f2"><td>⚠️ ديون (متبقي في الفواتير)</td><td><b class="red-text">${debtSales.toFixed(2)}</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="card">
+      <h3>🏆 أفضل العملاء في الفترة</h3>
+      ${topCustomers.length > 0 ? `
+      <table class="data-table">
+        <tbody>
+          ${topCustomers.map((c, idx) => `
+            <tr>
+              <td>${idx + 1}. ${escapeHTML(c[0])}</td>
+              <td><b>${c[1].toFixed(2)}</b> ${state.storeSettings.currency}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : '<p class="text-muted text-center">لا توجد مبيعات لعملاء مسجلين في هذه الفترة.</p>'}
+    </div>
+  </div>
+`;
+
+// البحث عن مكان في الصفحة نحط فيه التفاصيل دي
+let activityContainer = document.getElementById('activityDetailsReport');
+if (!activityContainer) {
+  activityContainer = document.createElement('div');
+  activityContainer.id = 'activityDetailsReport';
+  const reportCards = document.getElementById('reportCards');
+  if (reportCards && reportCards.parentNode) {
+    reportCards.parentNode.insertBefore(activityContainer, reportCards.nextSibling);
+  }
 }
+activityContainer.innerHTML = detailsHtml;
+}
+
 
 function setReportPeriod(period) {
   const end = today();
@@ -4173,7 +4236,15 @@ function renderComparison() {
   if (!container) return;
 
   const diffSales = statsA.totalSales - statsB.totalSales;
-  const pctSales = statsB.totalSales > 0 ? (diffSales / statsB.totalSales) * 100 : 0;
+let pctSales = 0;
+let isNewSales = false;
+
+if (statsB.totalSales === 0 && statsA.totalSales > 0) {
+  isNewSales = true;
+  pctSales = 100;
+} else if (statsB.totalSales > 0) {
+  pctSales = (diffSales / statsB.totalSales) * 100;
+}
 
   const diffCount = statsA.count - statsB.count;
   const pctCount = statsB.count > 0 ? (diffCount / statsB.count) * 100 : 0;
@@ -4193,7 +4264,12 @@ function renderComparison() {
 
   const dict = translations[currentLang] || translations.ar;
   const titleText = (dict.compare_title || 'نتائج المقارنة').replace(/^[^\w\u0600-\u06FF]+/, '').trim();
-
+let pctSalesText = formatPct(pctSales);
+let salesStatusText = diffSales >= 0 ? 'ارتفاعاً' : 'انخفاضاً';
+if (isNewSales) {
+  pctSalesText = '100%';
+  salesStatusText = 'مبيعات جديدة';
+}
   container.innerHTML =
     '<div class="card mt-20">' +
       '<h3>📋 ' + escapeHTML(titleText) + '</h3>' +
@@ -4234,7 +4310,7 @@ function renderComparison() {
       '<div class="compare-summary mt-15" style="padding:12px;background:#f0f6f7;border-radius:8px;font-size:13px">' +
         '<b>ملخص المقارنة:</b> أظهرت الفترة الأولى (' + escapeHTML(ranges.labelA) + ') ' +
         '<span class="' + getDeltaClass(diffSales) + '">' + (diffSales >= 0 ? 'ارتفاعاً' : 'انخفاضاً') + '</span>' +
-        ' في المبيعات بنسبة ' + Math.abs(pctSales).toFixed(1) + '% مقارنة بـ (' + escapeHTML(ranges.labelB) + ').' +
+       (isNewSales ? ' (لم تكن هناك مبيعات في الفترة السابقة).' : ' في المبيعات بنسبة ' + Math.abs(pctSales).toFixed(1) + '% مقارنة بـ (' + escapeHTML(ranges.labelB) + ').') +
       '</div>' +
     '</div>';
 }
