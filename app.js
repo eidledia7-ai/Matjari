@@ -3176,15 +3176,8 @@ function clearReportPeriod() {
 function calcExpectedShiftCash() {
   const shift = state.currentShift;
   if (!shift) {
-   // خصم مصروفات الدرج من الكاش المتوقع
-let drawerExpensesTotal = 0;
-if (shift.drawerExpenses) {
-  drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-}
-const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
-
-const el = document.getElementById('shiftExpectedCash');
-if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
+    const el = document.getElementById('shiftExpectedCash');
+    if (el) el.value = '0.00 ' + state.storeSettings.currency;
     calculateShiftDiff();
     return;
   }
@@ -3197,8 +3190,19 @@ if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
       cashSales += s.paid;
     }
   });
+
+  // حساب مصروفات الدرج
+  let drawerExpensesTotal = 0;
+  if (shift.drawerExpenses) {
+    drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  }
+  
+  // الكاش المتوقع = المبيعات - مصروفات الدرج
+  const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+
   const el = document.getElementById('shiftExpectedCash');
-  if (el) el.value = cashSales.toFixed(2) + ' ' + state.storeSettings.currency;
+  if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
+  
   calculateShiftDiff();
 }
 
@@ -3248,24 +3252,34 @@ function closeShift() {
   });
 
   const cashSales = shiftSales
-    .filter(function(s) { return s.payMethod === 'cash'; })
-    .reduce(function(sum, s) { return sum + s.paid; }, 0);
+  .filter(function(s) { return s.payMethod === 'cash'; })
+  .reduce(function(sum, s) { return sum + s.paid; }, 0);
 
-  const totalSales = shiftSales.reduce(function(sum, s) { return sum + s.total; }, 0);
+const totalSales = shiftSales.reduce(function(sum, s) { return sum + s.total; }, 0);
 
-  const closedShift = {
-    id: state.currentShift.id,
-    name: cashierName,
-    cashierName: cashierName,
-    startTime: state.currentShift.startTime,
-    endTime: new Date().toISOString(),
-    saleCount: shiftSales.length,
-    totalSales: totalSales,
-    cashSales: cashSales,
-    actualCash: actualCash,
-    difference: actualCash - cashSales,
-    notes: notes
-  };
+// حساب مصروفات الدرج عشان نخصمها
+let drawerExpensesTotal = 0;
+if (state.currentShift.drawerExpenses) {
+  drawerExpensesTotal = state.currentShift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+}
+
+// الكاش المتوقع الحقيقي = مبيعات الكاش - مصروفات الدرج
+const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+
+const closedShift = {
+  id: state.currentShift.id,
+  name: cashierName,
+  cashierName: cashierName,
+  startTime: state.currentShift.startTime,
+  endTime: new Date().toISOString(),
+  saleCount: shiftSales.length,
+  totalSales: totalSales,
+  cashSales: cashSales, // بنسجل مبيعات الكاش الخام للتاريخ
+  drawerExpenses: drawerExpensesTotal, // نسجل المصروفات في التقرير
+  actualCash: actualCash,
+  difference: actualCash - expectedCash, // <--- الفرق بقى بيتحسب صح
+  notes: notes
+};
 
   state.shifts.unshift(closedShift);
   state.currentShift = null;
