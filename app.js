@@ -976,10 +976,11 @@ function setAuthBusy(busy) {
 
 async function signIn() {
   const email = (document.getElementById('authEmail').value || '').trim();
-  const password = document.
-  if (!supabaseClient) initSupabase(); 
+ const password = document.
+if (!supabaseClient) initSupabase(); 
 if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
-  getElementById('authPassword').value || '';
+getElementById('authPassword').value || '';
+
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   setAuthBusy(true);
   showLoading(currentLang === 'en' ? 'Signing in...' : 'جارٍ تسجيل الدخول...');
@@ -999,9 +1000,10 @@ if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرف
 async function signUp() {
   const email = (document.getElementById('authEmail').value || '').trim();
   const password = document.
-  if (!supabaseClient) initSupabase(); 
+if (!supabaseClient) initSupabase(); 
 if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
-  getElementById('authPassword').value || '';
+getElementById('authPassword').value || '';
+
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
   if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
   setAuthBusy(true);
