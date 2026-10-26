@@ -4471,6 +4471,8 @@ function renderLandingView() {
     if (plan.popular) plansHtml += '<div class="landing-popular-badge">الأكثر شعبية ⭐</div>';
     plansHtml += '<h4>' + (en ? plan.name_en : plan.name_ar) + '</h4>';
     plansHtml += '<div class="landing-plan-price"><span>' + plan.price + '</span> ' + cur + ' / شهر</div>';
+    // الزرار الجديد اللي ضفناه
+    plansHtml += '<button class="landing-btn-primary" style="margin-top:20px; padding: 12px 20px; font-size: 15px; width: 100%; box-shadow: none;" onclick="showAuthView(\'signup\')">اشترك الآن ←</button>';
     plansHtml += '</div>';
   });
 
@@ -4484,7 +4486,7 @@ function renderLandingView() {
         <button class="landing-btn-primary" onclick="showAuthView('signup')">
           ابدأ 14 يوم مجاناً ←
         </button>
-        <span class="landing-trust-text">✅ بدون بطاقة ائتمان • ✅ إلغاء في أي وقت</span>
+        <span class="landing-trust-text">✅ لن نطلب منك أي بيانات دفع الآن</span>
       </div>
     </div>
 
