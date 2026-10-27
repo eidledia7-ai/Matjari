@@ -2745,7 +2745,9 @@ function renderCustomers() {
       '<td class="' + debtClass + '"><b>' + (c.openingDebt || 0).toFixed(2) + '</b></td>' +
     '<td>' +
   (c.openingDebt > 0 ? '<button class="small-btn" onclick="sendDebtReminder(\'' + c.id + '\')" style="background:#25D366; color:#fff;" title="تذكير بالواتساب">💬 تذكير</button>' : '') +
-  '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️ حذف</button>' +
+  '<td style="white-space:nowrap;">' +
+  '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
+  '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
 '</td>' +
       '</tr>';
   });
@@ -5324,4 +5326,142 @@ function initiateReturnFromSale(saleId) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, 150);
+}
+/* ============ كشف حساب العميل ============ */
+let activeStatementCustomerId = null;
+
+function getStatementData(custId) {
+  const cust = state.customers.find(c => c.id === custId);
+  if (!cust) return null;
+
+  let transactions = [];
+  
+  // 1. الفواتير (الديون)
+  state.sales.filter(s => s.customerId === custId).forEach(s => {
+    if (s.remaining > 0) {
+      transactions.push({ date: s.date, desc: 'فاتورة رقم ' + s.id, debit: s.remaining, credit: 0 });
+    }
+  });
+
+  // 2. التحصيلات (المدفوعات)
+  state.customerPayments.filter(p => p.customerId === custId).forEach(p => {
+    transactions.push({ date: p.date, desc: 'دفعة (تحصيل)', debit: 0, credit: p.amount });
+  });
+
+  // ترتيب حسب التاريخ
+  transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // حساب الرصيد الافتتاحي
+  let totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
+  let totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
+  let currentDebt = cust.openingDebt || 0;
+  let initialBalance = currentDebt - totalDebit + totalCredit;
+
+  return { cust, transactions, initialBalance, currentDebt };
+}
+
+function showCustomerStatement(custId) {
+  activeStatementCustomerId = custId;
+  const data = getStatementData(custId);
+  if (!data) return;
+
+  const { cust, transactions, initialBalance, currentDebt } = data;
+  const cur = state.storeSettings.currency || 'ج.م';
+
+  document.getElementById('statementCustName').innerText = cust.name;
+
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>البيان</th><th>عليه (مدين)</th><th>له (دائن)</th><th>الرصيد</th></tr></thead><tbody>';
+  
+  let runningBalance = initialBalance;
+  html += `<tr><td>-</td><td>رصيد سابق</td><td>-</td><td>-</td><td><b>${runningBalance.toFixed(2)}</b></td></tr>`;
+
+  transactions.forEach(t => {
+    runningBalance += t.debit;
+    runningBalance -= t.credit;
+    html += `<tr>
+      <td>${new Date(t.date).toLocaleDateString('ar-EG')}</td>
+      <td>${escapeHTML(t.desc)}</td>
+      <td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td>
+      <td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td>
+      <td><b>${runningBalance.toFixed(2)}</b></td>
+    </tr>`;
+  });
+
+  html += `<tr style="background:#fef2f2;"><td colspan="4" style="text-align:left;"><b>الرصيد النهائي المتبقي:</b></td><td><b class="red-text">${currentDebt.toFixed(2)} ${cur}</b></td></tr>`;
+  html += '</tbody></table></div>';
+
+  document.getElementById('statementContent').innerHTML = html;
+  document.getElementById('customerStatementModal').style.display = 'flex';
+}
+
+function printCustomerStatement() {
+  if (!activeStatementCustomerId) return;
+  const data = getStatementData(activeStatementCustomerId);
+  if (!data) return;
+
+  const { cust, transactions, initialBalance, currentDebt } = data;
+  const cur = state.storeSettings.currency || 'ج.م';
+  const storeName = state.storeSettings.name || 'متجري';
+
+  const win = window.open('', '_blank');
+  if (!win) return showNotification('اسمح بالنوافذ المنبثقة للطباعة', 'warning');
+
+  let rows = '';
+  let runningBalance = initialBalance;
+  rows += `<tr><td>-</td><td>رصيد سابق</td><td>-</td><td>-</td><td>${runningBalance.toFixed(2)}</td></tr>`;
+
+  transactions.forEach(t => {
+    runningBalance += t.debit;
+    runningBalance -= t.credit;
+    rows += `<tr>
+      <td>${new Date(t.date).toLocaleDateString('ar-EG')}</td>
+      <td>${escapeHTML(t.desc)}</td>
+      <td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td>
+      <td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td>
+      <td>${runningBalance.toFixed(2)}</td>
+    </tr>`;
+  });
+
+  win.document.write(`
+    <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب - ${escapeHTML(cust.name)}</title>
+    <style>body{font-family:Tahoma,Arial;padding:20px;} h1,h2{text-align:center;color:#17364c;} table{width:100%;border-collapse:collapse;margin-top:20px;} th,td{border:1px solid #ccc;padding:10px;text-align:right;} th{background:#f8fafc;} .total{font-weight:bold;background:#fef2f2;}</style>
+    </head><body>
+    <h1>${escapeHTML(storeName)}</h1>
+    <h2>كشف حساب العميل: ${escapeHTML(cust.name)}</h2>
+    <table><thead><tr><th>التاريخ</th><th>البيان</th><th>عليه (مدين)</th><th>له (دائن)</th><th>الرصيد</th></tr></thead>
+    <tbody>${rows}<tr class="total"><td colspan="4" style="text-align:left;">الرصيد النهائي المتبقي:</td><td>${currentDebt.toFixed(2)} ${cur}</td></tr></tbody></table>
+    <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
+    </body></html>
+  `);
+  win.document.close();
+}
+function sendCustomerStatementWhatsApp() {
+  if (!activeStatementCustomerId) return;
+  const data = getStatementData(activeStatementCustomerId);
+  if (!data) return;
+
+  const { cust, transactions, currentDebt } = data;
+  const cur = state.storeSettings.currency || 'ج.م';
+  const storeName = state.storeSettings.name || 'متجري';
+
+  let message = `أهلاً ${cust.name}،\n`;
+  message += `كشف حسابكم في "${storeName}":\n\n`;
+  message += `الرصيد الحالي المتبقي: *${currentDebt.toFixed(2)} ${cur}*\n\n`;
+  message += `للتفاصيل:\n`;
+  
+  // بنعرض آخر 5 حركات بس عشان الرسالة متبقاش طويلة أوي
+  const recentTransactions = transactions.slice(-5).reverse();
+  recentTransactions.forEach(t => {
+    if (t.debit > 0) message += `- فاتورة بـ ${t.debit.toFixed(2)} ${cur}\n`;
+    if (t.credit > 0) message += `- دفعة بـ ${t.credit.toFixed(2)} ${cur}\n`;
+  });
+
+  message += `\nشاكرين تعاملكم معنا! 🌟`;
+
+  const countryCode = state.storeSettings.countryCode || '20';
+  const phone = cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
+  const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
+
+  const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
 }
