@@ -644,13 +644,12 @@ const PLAN_LIMITS = {
 };
 
 function canUse(feature) {
-  // لو الموظف داخل، ناخد باقة المدير
-  let plan = (state.role === 'employee' && state.ownerPlan) 
+  const plan = (state.role === 'employee' && state.ownerPlan) 
     ? state.ownerPlan 
     : ((state.subscription && state.subscription.plan) || 'trial');
   
-  plan = plan.toLowerCase().trim(); // تأكيد إن الاسم صغير عشان ميلبسش
-  return PLAN_LIMITS[plan] && PLAN_LIMITS[plan][feature] === true;
+  const cleanPlan = plan.toLowerCase().trim();
+  return PLAN_LIMITS[cleanPlan] && PLAN_LIMITS[cleanPlan][feature] === true;
 }
 
 function checkLimit(type, currentCount) {
@@ -1197,21 +1196,22 @@ async function openUserSession(user) {
      // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
     const subOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
     const subRes = await supabaseClient
-      .from('shop_subscriptions')
-      .select('*')
-      .eq('user_id', subOwnerId) // <--- التعديل هنا
-      .maybeSingle();
+  .from('shop_subscriptions')
+  .select('*')
+  .eq('user_id', subOwnerId) // <--- التعديل هنا
+  .maybeSingle();
 
-    if (subRes.data) {
-      state.subscription = {
-        plan: subRes.data.plan || 'trial',
-        status: subRes.data.status || 'active',
-        expires_at: subRes.data.expires_at,
-        trial_ends_at: subRes.data.trial_ends_at,
-        payment_method: subRes.data.payment_method
-      };
-      if (state.role === 'employee') state.ownerPlan = state.subscription.plan;
-    } else {
+   if (subRes.data) {
+  state.subscription = {
+    plan: subRes.data.plan || 'trial',
+    status: subRes.data.status || 'active',
+    expires_at: subRes.data.expires_at,
+    trial_ends_at: subRes.data.trial_ends_at,
+    payment_method: subRes.data.payment_method
+  };
+  // السطر ده هو اللي هيحل مشكلة الواتساب
+  if (state.role === 'employee') state.ownerPlan = state.subscription.plan;
+} else {
       // لو مفيش اشتراك، نفترض trial 14 يوم
       state.subscription = {
         plan: 'trial',
