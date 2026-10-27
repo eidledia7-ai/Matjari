@@ -900,6 +900,22 @@
   <input type="number" id="storePointValue" min="0" step="any" placeholder="مثال: 1">
 </div>
         </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: var(--bg-body); border-radius: var(--radius-md); border: 1px solid var(--border);">
+  <h4 style="margin-top:0; color:var(--text-main);">🔐 صلاحيات الموظف (الكاشير)</h4>
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;">
+    <input type="checkbox" id="perm_canDiscount" style="width:20px; height:20px;">
+    <span>السماح للموظف بعمل خصم على الفاتورة</span>
+  </label>
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;">
+    <input type="checkbox" id="perm_canDelete" style="width:20px; height:20px;">
+    <span>السماح للموظف بمسح الفواتير والعمليات</span>
+  </label>
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+    <input type="checkbox" id="perm_canEditPrice" style="width:20px; height:20px;">
+    <span>السماح للموظف بتعديل سعر المنتج في الكاشير</span>
+  </label>
+</div>
         <div class="btn-group mt-15">
           <button class="btn primary" onclick="saveStoreSettings()" data-i18n="save_store_btn">حفظ بيانات المحل</button>
         </div>
