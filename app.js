@@ -5561,3 +5561,55 @@ function sendCustomerStatementWhatsApp() {
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
 }
+// ⚠️ دالة مؤقتة لإنقاذ المبيعات القديمة من الكاش المحلي
+async function rescueOldSales() {
+  if (state.role !== 'manager') return showNotification('للمدير فقط', 'error');
+  
+  const cacheOwnerId = state.currentUser.id;
+  const localCacheStr = localStorage.getItem('matjari_cache_' + cacheOwnerId);
+  
+  if (!localCacheStr) {
+    return showNotification('لا يوجد كاش محلي لاسترجاع البيانات منه', 'warning');
+  }
+  
+  const localCache = JSON.parse(localCacheStr);
+  const oldSales = localCache.sales || [];
+  
+  if (oldSales.length === 0) {
+    return showNotification('لا توجد مبيعات قديمة في الكاش المحلي', 'info');
+  }
+
+  showLoading('جارٍ إنقاذ المبيعات القديمة...');
+  
+  try {
+    // تحويلها لشكل الجدول الجديد
+    const salesToSync = oldSales.map(s => ({
+      id: s.id,
+      user_id: cacheOwnerId,
+      date: s.date,
+      items: s.items,
+      subtotal: s.subtotal,
+      discount: s.discount || 0,
+      total: s.total,
+      paid: s.paid,
+      remaining: s.remaining,
+      customer_id: s.customerId,
+      pay_method: s.payMethod || 'cash',
+      notes: s.notes || '',
+      cashier: s.cashier || '',
+      shift_id: s.shiftId || null
+    }));
+
+    // رفعهم للسيرفر
+    const { error } = await supabaseClient.from('sales').upsert(salesToSync);
+    
+    if (error) throw error;
+    
+    showNotification('تم إنقاذ ' + oldSales.length + ' فاتورة قديمة بنجاح! اعمل Refresh.', 'success');
+  } catch (e) {
+    showNotification('فشل الإنقاذ: ' + e.message, 'error');
+    console.error(e);
+  } finally {
+    hideLoading();
+  }
+}
