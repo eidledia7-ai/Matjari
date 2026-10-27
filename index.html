@@ -884,6 +884,13 @@
             <label data-i18n="monthly_goal">🎯 هدف المبيعات الشهري (اختياري)</label>
             <input type="number" id="storeMonthlyGoal" min="0" step="any" placeholder="مثال: 50000">
           </div>
+             <div class="form-group">
+            <label>🖨️ نوع الفاتورة الافتراضي</label>
+            <select id="storePrintType">
+              <option value="thermal">فاتورة كاشير (حرارية 80mm)</option>
+              <option value="a4">فاتورة عادية (A4)</option>
+            </select>
+          </div>
           <div class="form-group">
   <label>💎 كل كام جنيه يكسب العميل نقطة؟ (اتركه 0 للإلغاء)</label>
   <input type="number" id="storePointsRate" min="0" placeholder="مثال: 10">
