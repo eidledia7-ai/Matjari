@@ -1188,11 +1188,12 @@ async function openUserSession(user) {
       }
     }
 
-    // 2. جلب بيانات الاشتراك
+     // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
+    const subOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
     const subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', subOwnerId) // <--- التعديل هنا
       .maybeSingle();
 
     if (subRes.data) {
