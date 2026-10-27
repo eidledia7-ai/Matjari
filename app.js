@@ -1236,7 +1236,19 @@ async function openUserSession(user) {
         if (dataRes.error) throw dataRes.error;
       } catch (e) { console.warn('Cloud fetch failed', e); }
     }
-
+// جلب الفواتير من الجدول الجديد
+if (navigator.onLine && supabaseClient) {
+  try {
+    const salesRes = await supabaseClient
+      .from('sales')
+      .select('*')
+      .eq('user_id', cacheOwnerId)
+      .order('date', { ascending: false });
+    if (salesRes.data) {
+      state.sales = salesRes.data;
+    }
+  } catch (e) { console.warn('Fetch sales failed', e); }
+}
     let d = null;
     // بنجيب البيانات من السيرفر لو موجودة، أو من الكاش
     if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
@@ -1639,7 +1651,7 @@ async function verifyCurrentUserPassword(password) {
 }
 
 function buildBackupData() {
-  return { version: 5, storeSettings: state.storeSettings, products: state.products, sales: state.sales, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses, stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
+  return { version: 5, storeSettings: state.storeSettings, products: state.products, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses,sales: state.sales,  stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
 }
 
 function downloadEncryptedBackup(pass, silent) {
@@ -1705,8 +1717,7 @@ function saveData() {
   try {
     const cache = {
       products: state.products,
-      sales: state.sales,
-      customers: state.customers,
+      customers: state.customers,sales: state.sales,
       suppliers: state.suppliers,
       expenses: state.expenses,
       stockMoves: state.stockMoves,
@@ -1744,7 +1755,6 @@ async function uploadToCloud() {
   try {
     const payload = {
       products: state.products,
-      sales: state.sales,
       customers: state.customers,
       suppliers: state.suppliers,
       expenses: state.expenses,
@@ -2138,7 +2148,26 @@ if (discountAmount > 0) {
   };
 
   state.sales.unshift(saleObj);
-
+// حفظ الفاتورة في جدول المبيعات المنفصل
+if (navigator.onLine && supabaseClient) {
+  const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  supabaseClient.from('sales').insert({
+    id: saleObj.id,
+    user_id: cacheOwnerId,
+    date: saleObj.date,
+    items: saleObj.items,
+    subtotal: saleObj.subtotal,
+    discount: saleObj.discount,
+    total: saleObj.total,
+    paid: saleObj.paid,
+    remaining: saleObj.remaining,
+    customer_id: saleObj.customerId,
+    pay_method: saleObj.payMethod,
+    notes: saleObj.notes,
+    cashier: saleObj.cashier,
+    shift_id: saleObj.shiftId
+  }).then(({error}) => { if(error) console.error('Sales Sync Error:', error); });
+}
   if (saleObj.remaining > 0 && customerId) {
     const cust = state.customers.find(function(c) { return c.id === customerId; });
     if (cust) cust.openingDebt = (cust.openingDebt || 0) + saleObj.remaining;
@@ -2297,6 +2326,10 @@ function safeDeleteRecord(type, id) {
       closedShift.difference = (Number(closedShift.actualCash) || 0) - (Number(closedShift.cashSales) || 0);
     }
     state.sales.splice(idx, 1);
+    // مسح الفاتورة من السيرفر
+if (navigator.onLine && supabaseClient) {
+  supabaseClient.from('sales').delete().eq('id', id).then();
+}
   } else if (type === 'expense') {
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
   } else if (type === 'purchase') {
