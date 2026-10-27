@@ -1805,7 +1805,40 @@ async function uploadToCloud() {
     isSyncing = false;
   }
 }
+// دالة مزامنة الفواتير المعلقة (للأوفلاين ولضمان تطابق الأجهزة)
+async function syncPendingSales() {
+  if (!navigator.onLine || !supabaseClient || !state.currentUser) return;
+  
+  try {
+    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+    
+    // تحويل الفواتير لشكل الأعمدة اللي في الداتا بيز
+    const salesToSync = state.sales.map(s => ({
+      id: s.id,
+      user_id: cacheOwnerId,
+      date: s.date,
+      items: s.items,
+      subtotal: s.subtotal,
+      discount: s.discount,
+      total: s.total,
+      paid: s.paid,
+      remaining: s.remaining,
+      customer_id: s.customerId,
+      pay_method: s.payMethod,
+      notes: s.notes,
+      cashier: s.cashier,
+      shift_id: s.shiftId
+    }));
 
+    // بنستخدم upsert عشان لو الفاتورة موجودة ميعملهاش Error ولو مش موجودة يضيفها
+    const { error } = await supabaseClient.from('sales').upsert(salesToSync);
+    
+    if (error) console.warn('Sync sales error:', error);
+    else console.log('All sales synced successfully');
+  } catch (e) {
+    console.warn('Failed to sync sales:', e);
+  }
+}
 async function syncNow() {
   if (!state.currentUser) return showNotification('سجّل الدخول أولاً', 'warning');
   showLoading('جارٍ المزامنة...');
@@ -1921,6 +1954,7 @@ function setupEventListeners() {
 
 window.addEventListener('online', function() {
   if (state.currentUser && state.role === 'manager') syncNow();
+  syncPendingSales();
 });
 
 function renderAll() {
