@@ -5308,3 +5308,20 @@ function renderAuditLogs() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+function initiateReturnFromSale(saleId) {
+  // 1. إغلاق قائمة الخيارات لو مفتوحة
+  document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
+  
+  // 2. الانتقال لصفحة المرتجعات
+  showPage('invReturns');
+  
+  // 3. مهلة صغيرة عشان القائمة تتحدث وبعدين نختار الفاتورة
+  setTimeout(() => {
+    const saleSel = document.getElementById('returnSale');
+    if (saleSel) {
+      saleSel.value = saleId;
+      updateReturnProducts(); // تحديث قائمة المنتجات
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, 150);
+}
