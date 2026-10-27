@@ -2224,10 +2224,17 @@ function renderSales() {
       '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
       '<td>' + escapeHTML(payText) + '</td>' +
       '<td>' +
-    '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')" title="طباعة A4">🖨️</button>' +
-'<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة حرارية 80mm">🧾</button>' + // <--- السطر الجديد
-'<button class="small-btn" onclick="sendInvoiceWhatsApp(\'' + s.id + '\')" style="background:#25D366; color:white;" title="واتساب">💬</button>' +
-'<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')" title="حذف">🗑️</button>' +
+  '<td style="white-space: nowrap;">' +
+  '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة">🧾</button>' +
+  '<div class="action-dropdown">' +
+    '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="خيارات">⋮</button>' +
+    '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
+      '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 إرسال واتساب</button>' +
+      '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 تسجيل مرتجع</button>' +
+      '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ حذف الفاتورة</button>' +
+    '</div>' +
+  '</div>' +
+'</td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -5229,3 +5236,19 @@ function importProductsCSV(event) {
   };
   reader.readAsText(file);
 }
+function toggleActionMenu(event, id) {
+  event.stopPropagation(); // عشان ميقفلش القائمة فوراً
+  const menu = document.getElementById('menu-' + id);
+  const isShowing = menu.classList.contains('show');
+  
+  // اقفل أي قائمة تانية مفتوحة
+  document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
+  
+  // افتح القائمة الحالية لو كانت مقفولة
+  if (!isShowing) menu.classList.add('show');
+}
+
+// اقفل القائمة لو المستخدم دوس في أي مكان في الشاشة
+document.addEventListener('click', function() {
+  document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
+});
