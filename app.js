@@ -644,7 +644,12 @@ const PLAN_LIMITS = {
 };
 
 function canUse(feature) {
-  const plan = (state.subscription && state.subscription.plan) || 'trial';
+  // لو الموظف داخل، ناخد باقة المدير
+  let plan = (state.role === 'employee' && state.ownerPlan) 
+    ? state.ownerPlan 
+    : ((state.subscription && state.subscription.plan) || 'trial');
+  
+  plan = plan.toLowerCase().trim(); // تأكيد إن الاسم صغير عشان ميلبسش
   return PLAN_LIMITS[plan] && PLAN_LIMITS[plan][feature] === true;
 }
 
@@ -893,7 +898,7 @@ function toggleSidebar(show) {
 function showPage(pageId) {
   // قائمة الصفحات الممنوعة صراحةً على الموظف
 // الموظف مسموح له بصفحة البيع فقط
-if (state.role === 'employee' && pageId !== 'sales') {
+if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'invReturns') {
   showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
   pageId = 'sales';
 }
@@ -1204,6 +1209,7 @@ async function openUserSession(user) {
         trial_ends_at: subRes.data.trial_ends_at,
         payment_method: subRes.data.payment_method
       };
+      if (state.role === 'employee') state.ownerPlan = state.subscription.plan;
     } else {
       // لو مفيش اشتراك، نفترض trial 14 يوم
       state.subscription = {
