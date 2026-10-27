@@ -1277,7 +1277,7 @@ async function openUserSession(user) {
       state.currentShift = null;
 } // <--- قفل الـ else (سطر 1290)
 
-// 🚨 الكود الجديد اللي هتحطه هنا (جلب المبيعات من الجدول الجديد وتحويل الأعمدة) 🚨
+// جلب الفواتير من الجدول الجديد ودمجها مع القديمة
 if (navigator.onLine && supabaseClient) {
   try {
     const salesRes = await supabaseClient
@@ -1285,8 +1285,9 @@ if (navigator.onLine && supabaseClient) {
       .select('*')
       .eq('user_id', cacheOwnerId)
       .order('date', { ascending: false });
+      
     if (salesRes.data && salesRes.data.length > 0) {
-      state.sales = salesRes.data.map(s => ({
+      const newSales = salesRes.data.map(s => ({
         id: s.id,
         date: s.date,
         items: s.items,
@@ -1301,6 +1302,11 @@ if (navigator.onLine && supabaseClient) {
         cashier: s.cashier,
         shiftId: s.shift_id
       }));
+      
+      // دمج المبيعات الجديدة مع القديمة بدون تكرار (باستخدام ID)
+      const newSalesIds = new Set(newSales.map(s => s.id));
+      const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
+      state.sales = [...newSales, ...oldSales];
     }
   } catch (e) { console.warn('Fetch sales failed', e); }
 }
