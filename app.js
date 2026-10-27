@@ -1236,19 +1236,7 @@ async function openUserSession(user) {
         if (dataRes.error) throw dataRes.error;
       } catch (e) { console.warn('Cloud fetch failed', e); }
     }
-// جلب الفواتير من الجدول الجديد
-if (navigator.onLine && supabaseClient) {
-  try {
-    const salesRes = await supabaseClient
-      .from('sales')
-      .select('*')
-      .eq('user_id', cacheOwnerId)
-      .order('date', { ascending: false });
-    if (salesRes.data) {
-      state.sales = salesRes.data;
-    }
-  } catch (e) { console.warn('Fetch sales failed', e); }
-}
+
     let d = null;
     // بنجيب البيانات من السيرفر لو موجودة، أو من الكاش
     if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
@@ -1287,9 +1275,37 @@ if (navigator.onLine && supabaseClient) {
       state.purchases = [];
       state.shifts = [];
       state.currentShift = null;
-    }
+} // <--- قفل الـ else (سطر 1290)
 
-    showLoggedInUI();
+// 🚨 الكود الجديد اللي هتحطه هنا (جلب المبيعات من الجدول الجديد وتحويل الأعمدة) 🚨
+if (navigator.onLine && supabaseClient) {
+  try {
+    const salesRes = await supabaseClient
+      .from('sales')
+      .select('*')
+      .eq('user_id', cacheOwnerId)
+      .order('date', { ascending: false });
+    if (salesRes.data && salesRes.data.length > 0) {
+      state.sales = salesRes.data.map(s => ({
+        id: s.id,
+        date: s.date,
+        items: s.items,
+        subtotal: s.subtotal,
+        discount: s.discount,
+        total: s.total,
+        paid: s.paid,
+        remaining: s.remaining,
+        customerId: s.customer_id,
+        payMethod: s.pay_method,
+        notes: s.notes,
+        cashier: s.cashier,
+        shiftId: s.shift_id
+      }));
+    }
+  } catch (e) { console.warn('Fetch sales failed', e); }
+}
+
+showLoggedInUI(); // <--- (سطر 1292)
     applyRolePermissions();
     renderAll();
 
@@ -2212,6 +2228,7 @@ await uploadToCloud();
     renderShifts();
     renderCustomers();
     renderCustomerPayments();
+    populateSalesDropdowns();
     hideLoading();
   }
 }
