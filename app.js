@@ -5440,14 +5440,19 @@ function sendCustomerStatementWhatsApp() {
   const data = getStatementData(activeStatementCustomerId);
   if (!data) return;
 
-  const { cust, transactions, currentDebt } = data;
+  const { cust, transactions, initialBalance, currentDebt } = data;
   const cur = state.storeSettings.currency || 'ج.م';
   const storeName = state.storeSettings.name || 'متجري';
 
   let message = `أهلاً ${cust.name}،\n`;
   message += `كشف حسابكم في "${storeName}":\n\n`;
-  message += `الرصيد الحالي المتبقي: *${currentDebt.toFixed(2)} ${cur}*\n\n`;
-  message += `للتفاصيل:\n`;
+  
+  // السطر الجديد ده (عرض الرصيد السابق)
+  if (initialBalance !== 0) {
+    message += `🔹 رصيد سابق: ${initialBalance.toFixed(2)} ${cur}\n`;
+  }
+  
+  message += `🔹 الحركات الأخيرة:\n`;
   
   // بنعرض آخر 5 حركات بس عشان الرسالة متبقاش طويلة أوي
   const recentTransactions = transactions.slice(-5).reverse();
@@ -5456,7 +5461,8 @@ function sendCustomerStatementWhatsApp() {
     if (t.credit > 0) message += `- دفعة بـ ${t.credit.toFixed(2)} ${cur}\n`;
   });
 
-  message += `\nشاكرين تعاملكم معنا! 🌟`;
+  message += `\n💰 الرصيد الحالي المتبقي: *${currentDebt.toFixed(2)} ${cur}*\n\n`;
+  message += `شاكرين تعاملكم معنا! 🌟`;
 
   const countryCode = state.storeSettings.countryCode || '20';
   const phone = cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
