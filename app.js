@@ -1555,6 +1555,8 @@ function loadStoreSettings() {
   set('storeMonthlyGoal', s.monthlyGoal);
   set('storePointsRate', s.pointsRate);
 set('storePointValue', s.pointValue);
+  const printTypeEl = document.getElementById('storePrintType');
+if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
   const preview = document.getElementById('storeLogoPreview');
   if (preview && s.logo) { preview.src = s.logo; preview.style.display = 'block'; }
   else if (preview) { preview.style.display = 'none'; }
@@ -1573,7 +1575,7 @@ function saveStoreSettings() {
   state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
 state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
 state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
-
+state.storeSettings.printType = document.getElementById('storePrintType').value;
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
 
@@ -2131,7 +2133,11 @@ await uploadToCloud();
   showNotification('تم حفظ الفاتورة بنجاح ✅');
 
   try {
-    printInvoice(saleObj);
+    if (state.storeSettings.printType === 'a4') {
+  printInvoice(saleObj);
+} else {
+  printThermalInvoice(saleObj.id);
+}
   } catch (printErr) {
     console.warn('Print invoice failed:', printErr);
   } finally {
