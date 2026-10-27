@@ -730,6 +730,7 @@ let state = {
   role: 'employee',
   cart: [],
   heldCarts: [],
+  auditLogs: [],
   products: [],
   sales: [],
   customers: [],
@@ -945,7 +946,7 @@ if (pageId === 'finCompare' && !canUse('compare')) {
   if (pageId === 'finShift') { calcExpectedShiftCash(); renderShifts(); }
 if (pageId === 'settSubscription') renderSubscriptionPage();
   if (pageId === 'settStore') loadStoreSettings();
-  if (pageId === 'settStaff') loadStaffList();
+ if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
 }
 
 /* ============ Supabase Auth ============ */
@@ -1259,6 +1260,7 @@ async function openUserSession(user) {
       state.shifts = d.shifts || [];
       state.currentShift = d.currentShift || null;
       state.heldCarts = d.heldCarts || [];
+      state.auditLogs = d.auditLogs || [];
       if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
     } else {
       state.products = [];
@@ -1715,6 +1717,7 @@ function saveData() {
       shifts: state.shifts,
       currentShift: state.currentShift,
       heldCarts: state.heldCarts,
+      auditLogs: state.auditLogs,
       storeSettings: state.storeSettings
     };
     localStorage.setItem(key, JSON.stringify(cache));
@@ -1753,6 +1756,7 @@ async function uploadToCloud() {
       shifts: state.shifts,
       currentShift: state.currentShift,
       heldCarts: state.heldCarts,
+      auditLogs: state.auditLogs,
       storeSettings: state.storeSettings
     };
     const result = await supabaseClient
@@ -2081,7 +2085,9 @@ const pointValue = state.storeSettings.pointValue || 0;
 const pointsDiscount = pointsUsed * pointValue;
 
 const total = Math.max(0, subtotal - discountAmount - pointsDiscount);
-
+if (discountAmount > 0) {
+  addAuditLog('خصم على فاتورة', 'خصم بقيمة ' + discountAmount + ' ' + state.storeSettings.currency);
+}
   const paid = parseFloat(document.getElementById('salePaid').value) || total;
   const customerId = document.getElementById('saleCustomer').value;
   const payMethod = document.getElementById('salePayMethod').value;
@@ -2305,9 +2311,13 @@ function safeDeleteRecord(type, id) {
     }
   }
 
-  saveData();
-  renderAll();
-  showNotification('تم حذف العملية وتعديل التأثير بنجاح ✅');
+if (type === 'sale') addAuditLog('حذف فاتورة', 'تم حذف الفاتورة رقم ' + id);
+else if (type === 'expense') addAuditLog('حذف مصروف', 'تم حذف مصروف');
+else if (type === 'purchase') addAuditLog('حذف مشتريات', 'تم حذف فاتورة مشتريات');
+
+saveData();
+renderAll();
+showNotification('تم حذف العملية وتعديل التأثير بنجاح ✅');
 }
 
 function clearTableLog(logType) {
@@ -5258,3 +5268,43 @@ function toggleActionMenu(event, id) {
 document.addEventListener('click', function() {
   document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
 });
+/* ============ سجل النشاط (Audit Log) ============ */
+function addAuditLog(action, details) {
+  const userEmail = state.currentUser ? state.currentUser.email : 'غير معروف';
+  const role = state.role === 'manager' ? 'مدير' : 'موظف';
+  const logEntry = {
+    id: uid('LOG'),
+    date: new Date().toISOString(),
+    userEmail: userEmail,
+    role: role,
+    action: action,
+    details: details
+  };
+  if (!state.auditLogs) state.auditLogs = [];
+  state.auditLogs.unshift(logEntry);
+  if (state.auditLogs.length > 500) state.auditLogs.pop(); // الاحتفاظ بآخر 500 حركة فقط
+  saveData();
+}
+
+function renderAuditLogs() {
+  const container = document.getElementById('auditLogTable');
+  if (!container) return;
+  
+  if (!state.auditLogs || state.auditLogs.length === 0) {
+    container.innerHTML = '<p class="text-muted">لا توجد سجلات نشاط حتى الآن.</p>';
+    return;
+  }
+  
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>المستخدم</th><th>الرتبة</th><th>الإجراء</th><th>التفاصيل</th></tr></thead><tbody>';
+  state.auditLogs.forEach(log => {
+    html += `<tr>
+      <td>${new Date(log.date).toLocaleString('ar-EG')}</td>
+      <td>${escapeHTML(log.userEmail)}</td>
+      <td>${log.role}</td>
+      <td><b>${escapeHTML(log.action)}</b></td>
+      <td>${escapeHTML(log.details)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
