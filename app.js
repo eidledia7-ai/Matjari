@@ -2686,7 +2686,10 @@ function renderCustomers() {
       '<td>' + escapeHTML(c.name) + '</td>' +
       '<td>' + escapeHTML(c.phone || '-') + '</td>' +
       '<td class="' + debtClass + '"><b>' + (c.openingDebt || 0).toFixed(2) + '</b></td>' +
-      '<td><button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')">حذف</button></td>' +
+    '<td>' +
+  (c.openingDebt > 0 ? '<button class="small-btn" onclick="sendDebtReminder(\'' + c.id + '\')" style="background:#25D366; color:#fff;" title="تذكير بالواتساب">💬 تذكير</button>' : '') +
+  '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️ حذف</button>' +
+'</td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -5050,4 +5053,31 @@ function saveDrawerExpense() {
   renderExpenses(); // تحديث صفحة المصروفات
   document.getElementById('drawerExpenseModal').style.display = 'none';
   showNotification('تم تسجيل المصروف وخصمه من الدرج ✅', 'success');
+}
+/* ============ تذكير العملاء بالديون ============ */
+function sendDebtReminder(customerId) {
+  const cust = state.customers.find(c => c.id === customerId);
+  if (!cust) return showNotification('العميل غير موجود', 'error');
+  
+  if (!cust.openingDebt || cust.openingDebt <= 0) {
+    return showNotification('هذا العميل ليس عليه أي ديون', 'info');
+  }
+
+  const storeName = state.storeSettings.name || 'متجري';
+  const currency = state.storeSettings.currency || 'ج.م';
+  
+  const message = `أهلاً ${cust.name}،\n\n` +
+                  `تذكير ودود بخصوص حسابكم معنا في "${storeName}".\n` +
+                  `المبلغ المتبقي: ${cust.openingDebt.toFixed(2)} ${currency}.\n\n` +
+                  `شاكرين تعاملكم معنا، ونتمنى لكم يوماً سعيداً! 🌟`;
+
+  // تجهيز رقم الموبايل
+  const countryCode = state.storeSettings.countryCode || '20';
+  const phone = cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
+  const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
+
+  // لو مفيش رقم، نفتح واتساب عادي
+  const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  
+  window.open(whatsappUrl, '_blank');
 }
