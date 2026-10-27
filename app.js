@@ -2197,7 +2197,8 @@ function renderSales() {
       '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
       '<td>' + escapeHTML(payText) + '</td>' +
       '<td>' +
-        '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')" title="طباعة">🖨️</button>' +
+    '<button class="small-btn primary" onclick="printInvoiceById(\'' + s.id + '\')" title="طباعة A4">🖨️</button>' +
+'<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة حرارية 80mm">🧾</button>' + // <--- السطر الجديد
 '<button class="small-btn" onclick="sendInvoiceWhatsApp(\'' + s.id + '\')" style="background:#25D366; color:white;" title="واتساب">💬</button>' +
 '<button class="small-btn red" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')" title="حذف">🗑️</button>' +
       '</tr>';
@@ -5080,4 +5081,118 @@ function sendDebtReminder(customerId) {
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
   
   window.open(whatsappUrl, '_blank');
+}
+function printThermalInvoice(saleId) {
+  const sale = state.sales.find(s => s.id === saleId);
+  if (!sale) return showNotification('الفاتورة غير موجودة', 'error');
+
+  const settings = state.storeSettings || {};
+  const cust = state.customers.find(c => c.id === sale.customerId);
+  const custName = cust ? cust.name : 'عميل نقدي';
+  const cur = settings.currency || 'ج.م';
+
+  const win = window.open('', '_blank');
+  if (!win) return showNotification('اسمح بالنوافذ المنبثقة', 'warning');
+
+  let itemsHtml = (sale.items || []).map(i => `
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+      <div style="flex:1; text-align:right;">${escapeHTML(i.name)}<br><small>${i.qty} × ${i.price.toFixed(2)}</small></div>
+      <div style="text-align:left;">${(i.qty * i.price).toFixed(2)}</div>
+    </div>
+  `).join('');
+
+  win.document.write(`
+    <!DOCTYPE html><html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8">
+      <title>فاتورة حرارية</title>
+      <style>
+        @page { margin: 0; size: 80mm auto; }
+        body { 
+          width: 72mm; margin: 0 auto; padding: 5px; 
+          font-family: 'Cairo', Tahoma, sans-serif; font-size: 12px; color: #000;
+        }
+        .text-center { text-align: center; }
+        .dashed-line { border-top: 1px dashed #000; margin: 8px 0; }
+        .bold { font-weight: 900; }
+        table { width: 100%; border-collapse: collapse; }
+      </style>
+    </head>
+    <body>
+      <div class="text-center">
+        <h2 style="margin:0 0 5px 0;">${escapeHTML(settings.name || 'متجري')}</h2>
+        <div>${escapeHTML(settings.phone || '')}</div>
+      </div>
+      <div class="dashed-line"></div>
+      <div>رقم الفاتورة: ${sale.id}</div>
+      <div>التاريخ: ${new Date(sale.date).toLocaleString('ar-EG')}</div>
+      <div>العميل: ${escapeHTML(custName)}</div>
+      <div class="dashed-line"></div>
+      ${itemsHtml}
+      <div class="dashed-line"></div>
+      <div style="display:flex; justify-content:space-between; font-weight:bold;">
+        <span>الإجمالي:</span><span>${sale.total.toFixed(2)} ${cur}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span>المدفوع:</span><span>${sale.paid.toFixed(2)} ${cur}</span>
+      </div>
+      ${sale.remaining > 0 ? `<div style="display:flex; justify-content:space-between;"><span>المتبقي:</span><span>${sale.remaining.toFixed(2)} ${cur}</span></div>` : ''}
+      <div class="dashed-line"></div>
+      <div class="text-center bold" style="margin-top:10px;">شكراً لتعاملكم معنا!</div>
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
+    </body></html>
+  `);
+  win.document.close();
+}
+/* ============ استيراد المنتجات من CSV ============ */
+function importProductsCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (state.role !== 'manager') return showNotification('للمدير فقط', 'error');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    const lines = text.split('\n');
+    let addedCount = 0;
+
+    lines.forEach((line, index) => {
+      // تخطي أول سطر (العناوين) والسطور الفاضية
+      if (index === 0 || !line.trim()) return;
+      
+      const cols = line.split(',');
+      if (cols.length >= 5) {
+        const name = cols[0].trim();
+        const barcode = cols[1].trim();
+        const price = parseFloat(cols[2]) || 0;
+        const cost = parseFloat(cols[3]) || 0;
+        const stock = parseInt(cols[4]) || 0;
+
+        if (name) {
+          state.products.push({
+            id: uid('PRD'),
+            name: name,
+            barcode: barcode,
+            category: 'عام',
+            price: price,
+            cost: cost,
+            stock: stock,
+            minStock: 5
+          });
+          addedCount++;
+        }
+      }
+    });
+
+    if (addedCount > 0) {
+      saveData();
+      renderProducts();
+      showNotification('تم استيراد ' + addedCount + ' منتج بنجاح ✅');
+    } else {
+      showNotification('لم يتم العثور على بيانات صالحة في الملف', 'warning');
+    }
+    event.target.value = ''; // تفريغ الحقل
+  };
+  reader.readAsText(file);
 }
