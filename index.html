@@ -955,7 +955,12 @@
   <div class="card mt-20">
     <h3>قائمة الموظفين الحاليين</h3>
     <div id="staffList" class="mt-15"></div>
-  </div> <!-- قفل كارت القائمة -->
+      </div> <!-- قفل كارت القائمة -->
+<div class="card mt-20">
+  <h3>📜 سجل النشاط (Audit Log)</h3>
+  <p class="muted" style="font-size: 13px; margin-bottom: 15px;">هنا يتم تسجيل العمليات الحساسة التي تمت على النظام.</p>
+  <div id="auditLogTable"></div>
+</div>
 </div> <!-- قفل الصفحة كلها -->
 
     <!-- 6. الإعدادات - النسخ الاحتياطي -->
@@ -977,6 +982,7 @@
         <p class="muted" data-i18n="danger_desc">مسح كافة بيانات التطبيق الحالية بشكل نهائي.</p>
         <button class="btn red" onclick="safeClearAllDataPrompt()" data-i18n="clear_all_data">مسح كافة بيانات التطبيق</button>
       </div>
+      
     </div>
 
     <!-- 6. الإعدادات - التحديثات -->
@@ -987,7 +993,7 @@
         <div class="btn-group mt-15">
           <button class="btn green" onclick="checkForUpdates()" data-i18n="update_now">🔄 تحديث الآن</button>
           <button class="btn orange" onclick="clearAppCache()" data-i18n="clear_cache">🗑️ مسح الكاش</button>
-        </div>
+           </div>
       </div>
     </div>
 
