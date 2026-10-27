@@ -1555,6 +1555,13 @@ function loadStoreSettings() {
   set('storeMonthlyGoal', s.monthlyGoal);
   set('storePointsRate', s.pointsRate);
 set('storePointValue', s.pointValue);
+const perms = s.permissions || {};
+const pDiscount = document.getElementById('perm_canDiscount');
+const pDelete = document.getElementById('perm_canDelete');
+const pEdit = document.getElementById('perm_canEditPrice');
+if (pDiscount) pDiscount.checked = perms.canDiscount || false;
+if (pDelete) pDelete.checked = perms.canDelete || false;
+if (pEdit) pEdit.checked = perms.canEditPrice || false;
   const printTypeEl = document.getElementById('storePrintType');
 if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
   const preview = document.getElementById('storeLogoPreview');
@@ -1575,6 +1582,11 @@ function saveStoreSettings() {
   state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
 state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
 state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
+state.storeSettings.permissions = {
+  canDiscount: document.getElementById('perm_canDiscount').checked,
+  canDelete: document.getElementById('perm_canDelete').checked,
+  canEditPrice: document.getElementById('perm_canEditPrice').checked
+};
 state.storeSettings.printType = document.getElementById('storePrintType').value;
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
@@ -1991,7 +2003,11 @@ function renderCart() {
 
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
-  const discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+  let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+if (state.role === 'employee') {
+  const perms = state.storeSettings.permissions || {};
+  if (!perms.canDiscount) discountAmount = 0;
+}
   
   let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
   if (pointsUsed > availablePoints) { pointsUsed = availablePoints; pointsInput.value = pointsUsed; }
@@ -2047,7 +2063,11 @@ async function completeSale() {
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
-  const discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+ let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+if (state.role === 'employee') {
+  const perms = state.storeSettings.permissions || {};
+  if (!perms.canDiscount) discountAmount = 0;
+}
   const pointsInput = document.getElementById('salePointsUsed');
 const pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
 const pointValue = state.storeSettings.pointValue || 0;
@@ -2215,7 +2235,10 @@ function renderSales() {
 
 /* ============ إدارة الحذف الآمن ============ */
 function safeDeleteRecord(type, id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role === 'employee') {
+  const perms = state.storeSettings.permissions || {};
+  if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
+}
   
   if (!confirm(tr('msg_delete_mistake'))) return;
 
@@ -2274,7 +2297,10 @@ function safeDeleteRecord(type, id) {
 }
 
 function clearTableLog(logType) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+ if (state.role === 'employee') {
+  const perms = state.storeSettings.permissions || {};
+  if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
+}
   if (!confirm(tr('msg_clear_log'))) return;
 
   if (logType === 'sales') state.sales = [];
