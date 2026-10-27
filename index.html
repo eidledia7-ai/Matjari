@@ -1201,5 +1201,24 @@
     </div>
   </div>
 </div>
+<!-- نافذة كشف حساب العميل -->
+<div id="customerStatementModal" class="modal-overlay" style="display: none;">
+  <div class="modal-card" style="max-width: 800px; width: 100%;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+      <h3 style="margin:0;">📄 كشف حساب: <span id="statementCustName"></span></h3>
+      <button onclick="document.getElementById('customerStatementModal').style.display='none'" style="background:transparent; border:none; font-size:24px; cursor:pointer;">✕</button>
+    </div>
+    
+    <div id="statementContent" style="max-height: 60vh; overflow-y: auto;">
+      <!-- الجدول هيظهر هنا -->
+    </div>
+    
+    <div class="btn-group mt-20" style="justify-content: flex-end;">
+      <button class="btn primary" onclick="printCustomerStatement()">🖨️ طباعة</button>
+      <button class="btn green" onclick="sendCustomerStatementWhatsApp()" style="background:#25D366;">💬 إرسال واتساب</button>
+      <button class="btn grey" onclick="document.getElementById('customerStatementModal').style.display='none'">إغلاق</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
