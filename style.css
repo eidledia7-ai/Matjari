@@ -840,3 +840,15 @@ body.dark-mode #darkModeBtn { background: var(--warning); color: #0f172a; }
 }
 .action-dropdown-menu button:hover { background: #f8fafc; }
 .action-dropdown-menu button.text-danger { color: #dc2626; }
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+body.dark-mode .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+}
