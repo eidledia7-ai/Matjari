@@ -1142,7 +1142,9 @@ async function changePasswordPrompt() {
 }
 async function openUserSession(user) {
   state.currentUser = user;
-  showLoading('جارٍ تحميل بياناتك...');
+  document.getElementById('skeletonLoader').style.display = 'block';
+const main = document.querySelector('.main-content');
+if (main) main.style.display = 'none';
   try {
     // 1. تحديد الدور (Role) ورقم المدير (owner_id) والإيميل
     const roleRes = await supabaseClient
@@ -1310,7 +1312,8 @@ if (navigator.onLine && supabaseClient) {
     }
   } catch (e) { console.warn('Fetch sales failed', e); }
 }
-
+document.getElementById('skeletonLoader').style.display = 'none';
+if (main) main.style.display = 'block';
 showLoggedInUI(); // <--- (سطر 1292)
     applyRolePermissions();
     renderAll();
@@ -1676,8 +1679,8 @@ function buildBackupData() {
   return { version: 5, storeSettings: state.storeSettings, products: state.products, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses,sales: state.sales,  stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
 }
 
-function downloadEncryptedBackup(pass, silent) {
-  const encrypted = simpleEncrypt(JSON.stringify(buildBackupData()), pass);
+async function downloadEncryptedBackup(pass, silent) {
+  const encrypted = await encryptData(JSON.stringify(buildBackupData()), pass);
   const blob = new Blob([JSON.stringify({ encrypted: true, data: encrypted })], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1879,11 +1882,10 @@ function loadOfflineSession() {
     chosenKey = 'matjari_cache_' + lastUserRaw.id;
     chosenId = lastUserRaw.id;
   } else {
-    // fallback: أول مفتاح مع تحذير
-    console.warn('[offline] لم يتم العثور على matjari_last_user صالح، يتم استخدام أول كاش متاح.');
-    chosenKey = keys[0];
-    chosenId = keys[0].replace('matjari_cache_', '');
-  }
+  console.warn('[offline] No valid user found. Redirecting to login.');
+  showLoggedOutUI();
+  return;
+}
 
   const cache = JSON.parse(localStorage.getItem(chosenKey));
   
@@ -2314,26 +2316,26 @@ function renderSales() {
     const cust = state.customers.find(function(c) { return c.id === s.customerId; });
     const payText = payLabels[s.payMethod] || s.payMethod || '-';
     html += '<tr>' +
-      '<td>' + escapeHTML(s.id) + '</td>' +
-      '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
-      '<td>' + (cust ? escapeHTML(cust.name) : 'نقدي') + '</td>' +
-      '<td>' + s.total.toFixed(2) + '</td>' +
-      '<td>' + s.paid.toFixed(2) + '</td>' +
-      '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
-      '<td>' + escapeHTML(payText) + '</td>' +
-      '<td>' +
+  '<td>' + escapeHTML(s.id) + '</td>' +
+  '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
+  '<td>' + (cust ? escapeHTML(cust.name) : 'نقدي') + '</td>' +
+  '<td>' + s.total.toFixed(2) + '</td>' +
+  '<td>' + s.paid.toFixed(2) + '</td>' +
+  '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
+  '<td>' + escapeHTML(payText) + '</td>' +
   '<td style="white-space: nowrap;">' +
-  '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة">🧾</button>' +
-  '<div class="action-dropdown">' +
-    '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="خيارات">⋮</button>' +
-    '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
-      '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 إرسال واتساب</button>' +
-      '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 تسجيل مرتجع</button>' +
-      '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ حذف الفاتورة</button>' +
+    '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة">🧾</button>' +
+    '<div class="action-dropdown">' +
+      '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="خيارات">⋮</button>' +
+      '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
+        '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 إرسال واتساب</button>' +
+        '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 تسجيل مرتجع</button>' +
+        '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ حذف الفاتورة</button>' +
+      '</div>' +
     '</div>' +
-  '</div>' +
-'</td>' +
-      '</tr>';
+  '</td>' +
+  '</tr>';
+      
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
@@ -2341,17 +2343,19 @@ function renderSales() {
 
 /* ============ إدارة الحذف الآمن ============ */
 function safeDeleteRecord(type, id) {
-  if (state.role === 'employee') {
-  const perms = state.storeSettings.permissions || {};
-  if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
-}
+  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   
-  if (!confirm(tr('msg_delete_mistake'))) return;
+  showCustomConfirm('تأكيد الحذف', tr('msg_delete_mistake'), () => {
+    executeDeleteRecord(type, id);
+  });
+}
 
+function executeDeleteRecord(type, id) {
   if (type === 'sale') {
     const idx = state.sales.findIndex(function(s) { return s.id === id; });
     if (idx === -1) return;
     const s = state.sales[idx];
+    
     s.items.forEach(function(item) {
       const prod = state.products.find(function(p) { return p.id === item.id; });
       if (prod) {
@@ -2383,10 +2387,11 @@ function safeDeleteRecord(type, id) {
       closedShift.difference = (Number(closedShift.actualCash) || 0) - (Number(closedShift.cashSales) || 0);
     }
     state.sales.splice(idx, 1);
-    // مسح الفاتورة من السيرفر
-if (navigator.onLine && supabaseClient) {
-  supabaseClient.from('sales').delete().eq('id', id).then();
-}
+    
+    if (navigator.onLine && supabaseClient) {
+      supabaseClient.from('sales').delete().eq('id', id).then();
+    }
+    
   } else if (type === 'expense') {
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
   } else if (type === 'purchase') {
@@ -2401,13 +2406,9 @@ if (navigator.onLine && supabaseClient) {
     }
   }
 
-if (type === 'sale') addAuditLog('حذف فاتورة', 'تم حذف الفاتورة رقم ' + id);
-else if (type === 'expense') addAuditLog('حذف مصروف', 'تم حذف مصروف');
-else if (type === 'purchase') addAuditLog('حذف مشتريات', 'تم حذف فاتورة مشتريات');
-
-saveData();
-renderAll();
-showNotification('تم حذف العملية وتعديل التأثير بنجاح ✅');
+  saveData();
+  renderAll();
+  showNotification('تم حذف العملية وتعديل التأثير بنجاح ✅');
 }
 
 function clearTableLog(logType) {
@@ -2830,16 +2831,14 @@ function renderCustomers() {
   filtered.forEach(function(c) {
     const debtClass = (c.openingDebt || 0) > 0 ? 'red-text' : '';
     html += '<tr>' +
-      '<td>' + escapeHTML(c.name) + '</td>' +
-      '<td>' + escapeHTML(c.phone || '-') + '</td>' +
-      '<td class="' + debtClass + '"><b>' + (c.openingDebt || 0).toFixed(2) + '</b></td>' +
-    '<td>' +
-  (c.openingDebt > 0 ? '<button class="small-btn" onclick="sendDebtReminder(\'' + c.id + '\')" style="background:#25D366; color:#fff;" title="تذكير بالواتساب">💬 تذكير</button>' : '') +
+  '<td>' + escapeHTML(c.name) + '</td>' +
+  '<td>' + escapeHTML(c.phone || '-') + '</td>' +
+  '<td class="' + debtClass + '"><b>' + (c.openingDebt || 0).toFixed(2) + '</b></td>' +
   '<td style="white-space:nowrap;">' +
-  '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
-  '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
-'</td>' +
-      '</tr>';
+    '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
+    '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
+  '</td>' +
+  '</tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
@@ -4036,33 +4035,36 @@ function sendInvoiceWhatsApp(saleId) {
   const whatsappUrl = `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
 }
-/* ============ النسخ الاحتياطي (XOR + Base64) ============ */
-/*
- * ملاحظة أمنية مهمة:
- * الدالتان simpleEncrypt / simpleDecrypt تعتمدان على XOR + Base64 وهما 
- * مناسبتان فقط لمنع القراءة العابرة أو الفتح الخاطئ للملف، وليستا 
- * تشفيراً آمناً. لا يُنصح بالاعتماد عليهما لحماية بيانات حساسة. 
- * للحماية الحقيقية يُفضّل استخدام Web Crypto API (AES-GCM).
- */
-function simpleEncrypt(text, password) {
-  if (!password) return text;
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    result += String.fromCharCode(text.charCodeAt(i) ^ password.charCodeAt(i % password.length));
-  }
-  return btoa(unescape(encodeURIComponent(result)));
+/* ============ التشفير الآمن (AES-GCM) ============ */
+async function encryptData(text, password) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('matjari_salt'), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text));
+  const combined = new Uint8Array(iv.length + encrypted.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(encrypted), iv.length);
+  return btoa(String.fromCharCode(...combined));
 }
 
-function simpleDecrypt(encoded, password) {
-  if (!password) return encoded;
+async function decryptData(encryptedBase64, password) {
   try {
-    const text = decodeURIComponent(escape(atob(encoded)));
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-      result += String.fromCharCode(text.charCodeAt(i) ^ password.charCodeAt(i % password.length));
-    }
-    return result;
-  } catch (e) { throw new Error('كلمة المرور غير صحيحة'); }
+    const enc = new TextEncoder();
+    const combined = new Uint8Array(atob(encryptedBase64).split('').map(c => c.charCodeAt(0)));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('matjari_salt'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    );
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) { throw new Error('كلمة المرور غير صحيحة أو الملف تالف'); }
 }
 
 async function exportBackup() {
@@ -4082,12 +4084,12 @@ async function importBackup(event) {
   if (!(await verifyCurrentUserPassword(pass))) { event.target.value = ''; return showNotification(currentLang === 'en' ? 'Password verification failed.' : 'فشل التحقق من كلمة المرور.', 'error'); }
 
   const reader = new FileReader();
-  reader.onload = function(e) {
+reader.onload = async function(e) {
     try {
       const parsed = JSON.parse(e.target.result);
       let backup;
       if (parsed && parsed.encrypted && parsed.data) {
-        backup = JSON.parse(simpleDecrypt(parsed.data, pass));
+    backup = JSON.parse(await decryptData(parsed.data, pass));
       } else {
         backup = parsed;
       }
@@ -4489,7 +4491,10 @@ async function inviteStaff() {
     );
   }
 
-  const defaultPassword = '123456';
+const defaultPassword = prompt('أدخل كلمة مرور مؤقتة للموظف (6 أحرف على الأقل):');
+if (!defaultPassword || defaultPassword.length < 6) {
+  return showNotification('يجب إدخال كلمة مرور من 6 أحرف على الأقل', 'error');
+}
 
   showLoading('جارٍ إنشاء الحساب...');
   try {
@@ -5239,8 +5244,20 @@ function printThermalInvoice(saleId) {
   const custName = cust ? cust.name : 'عميل نقدي';
   const cur = settings.currency || 'ج.م';
 
-  const win = window.open('', '_blank');
-  if (!win) return showNotification('اسمح بالنوافذ المنبثقة', 'warning');
+  const oldFrame = document.getElementById('thermalPrintFrame');
+if (oldFrame) oldFrame.remove();
+
+const iframe = document.createElement('iframe');
+iframe.id = 'thermalPrintFrame';
+iframe.style.position = 'fixed';
+iframe.style.bottom = '0';
+iframe.style.right = '0';
+iframe.style.width = '0';
+iframe.style.height = '0';
+iframe.style.border = '0';
+document.body.appendChild(iframe);
+
+const win = iframe.contentWindow;
 
   let itemsHtml = (sale.items || []).map(i => `
     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
@@ -5291,6 +5308,7 @@ function printThermalInvoice(saleId) {
     </body></html>
   `);
   win.document.close();
+  setTimeout(() => { iframe.remove(); }, 5000);
 }
 /* ============ استيراد المنتجات من CSV ============ */
 function importProductsCSV(event) {
@@ -5560,4 +5578,27 @@ function sendCustomerStatementWhatsApp() {
 
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
+}
+/* ============ مودال التأكيد المخصص ============ */
+function showCustomConfirm(title, message, onConfirm) {
+  const modalHtml = `
+    <div id="customConfirmModal" class="modal-overlay" style="display:flex; z-index:100000;">
+      <div class="modal-card" style="max-width:400px; text-align:center;">
+        <h3 style="color:var(--danger); margin-bottom:10px;">${title}</h3>
+        <p style="margin-bottom:20px;">${message}</p>
+        <div class="btn-group" style="justify-content:center;">
+          <button class="btn red" id="confirmBtn">تأكيد</button>
+          <button class="btn grey" id="cancelBtn">إلغاء</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  
+  document.getElementById('confirmBtn').onclick = () => {
+    document.getElementById('customConfirmModal').remove();
+    onConfirm();
+  };
+  document.getElementById('cancelBtn').onclick = () => {
+    document.getElementById('customConfirmModal').remove();
+  };
 }
