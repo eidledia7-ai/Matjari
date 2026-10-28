@@ -1,0 +1,162 @@
+/* ============ لوحة التحكم والهدف والتنبيهات ============ */
+function renderDashboard() {
+  const totalSales = state.sales.reduce(function(sum, s) { return sum + s.total; }, 0);
+  const totalExpenses = state.expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
+  const totalProducts = state.products.length;
+  const lowStockCount = state.products.filter(function(p) { return Number(p.stock) <= Number(p.minStock || 5); }).length;
+
+  let totalCost = 0;
+  state.sales.forEach(function(s) {
+    s.items.forEach(function(i) { totalCost += (i.cost || 0) * i.qty; });
+  });
+  const netProfit = totalSales - totalCost - totalExpenses;
+
+  const customerDebt = state.customers.reduce(function(sum, c) { return sum + (c.openingDebt || 0); }, 0);
+  const supplierDue = state.suppliers.reduce(function(sum, s) { return sum + (s.openingDebt || 0); }, 0);
+  const stockValue = state.products.reduce(function(sum, p) { return sum + (p.stock * p.cost); }, 0);
+
+  const cardsEl = document.getElementById('dashboardCards');
+  if (cardsEl) {
+    cardsEl.innerHTML =
+      '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f"><h3>' + (translations[currentLang] || translations.ar).dash_net_profit + '</h3><p style="color:' + (netProfit >= 0 ? '#17643a' : '#c0392b') + '">' + netProfit.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_net_sales') + '</h3><p>' + totalSales.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_cost') + '</h3><p>' + totalCost.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>';
+  }
+
+  const otherCards = document.getElementById('dashboardOtherCards');
+  if (otherCards) {
+    otherCards.innerHTML =
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_products + '</h3><p>' + totalProducts + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + totalExpenses.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_value + '</h3><p>' + stockValue.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_customer_debt + '</h3><p style="color:#c0392b">' + customerDebt.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_supplier_due + '</h3><p style="color:#198754">' + supplierDue.toFixed(2) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_alerts + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + (currentLang === 'en' ? 'items' : 'صنف') + '</p></div>'; 
+  }
+
+  renderSmartAlerts();
+  renderMonthlyGoal();
+  renderSalesChart();
+}
+
+function renderSmartAlerts() {
+  const container = document.getElementById('smartAlerts');
+  if (!container) return;
+  
+  let alerts = [];
+  const lowStock = state.products.filter(function(p) { return Number(p.stock) <= Number(p.minStock || 5); });
+  
+  if (lowStock.length > 0) {
+    alerts.push({
+      type: 'danger', icon: '📦',
+      title: currentLang === 'en' ? '⚠️ ' + lowStock.length + ' products reached the alert level' : '⚠️ ' + lowStock.length + ' منتج وصل لحد التنبيه',
+      subtitle: currentLang === 'en' ? 'Review inventory and reorder' : 'راجع المخزون وأعد الطلب',
+      actionText: currentLang === 'en' ? 'View Inventory' : 'عرض المخزون',
+      actionPage: 'invProducts'
+    });
+  }
+
+  if (alerts.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="card"><h3>' + (currentLang === 'en' ? '🔔 Smart Alerts' : '🔔 تنبيهات ذكية') + '</h3>'; 
+  alerts.forEach(function(a, i) {
+    html += '<div class="smart-alert ' + a.type + '">' +
+      '<span class="alert-icon">' + a.icon + '</span>' +
+      '<div class="alert-content"><div class="alert-title">' + a.title + '</div><div class="alert-subtitle">' + a.subtitle + '</div></div>' +
+      '<button class="alert-action" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>' +
+      '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderMonthlyGoal() {
+  const container = document.getElementById('monthlyGoalCard');
+  if (!container) return;
+  const goal = parseFloat(state.storeSettings.monthlyGoal) || 0;
+  if (goal <= 0) { container.innerHTML = ''; return; }
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd = now.toISOString().slice(0, 10);
+  const monthSales = state.sales.filter(s => {
+    const d = (s.date || '').split('T')[0];
+    return d >= monthStart && d <= monthEnd;
+  });
+
+  const actualSales = monthSales.reduce((sum, s) => sum + s.total, 0);
+  const percent = Math.min(100, (actualSales / goal * 100));
+  const remaining = Math.max(0, goal - actualSales);
+  const cur = state.storeSettings.currency;
+
+  container.innerHTML =
+    '<div class="goal-card">' +
+    '<h3>🎯 هدف المبيعات الشهري <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
+    '<div class="goal-header"><div class="goal-values">' +
+    '<div class="goal-value"><div class="label">المبيعات</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">الهدف</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">المتبقي</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
+    '</div></div>' +
+    '<div class="goal-bar-container"><div class="goal-bar" style="width: ' + percent + '%"></div></div>' +
+    '</div>';
+}
+
+function renderSalesChart() {
+  const container = document.getElementById('salesChart');
+  if (!container || typeof Chart === 'undefined') return;
+
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const data = days.map(function(day) {
+    return state.sales
+      .filter(function(s) { return (s.date || '').split('T')[0] === day; })
+      .reduce(function(sum, s) { return sum + s.total; }, 0);
+  });
+
+  const labels = days.map(function(day) {
+    const d = new Date(day + 'T12:00:00');
+    return d.toLocaleDateString(currentLang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short' });
+  });
+
+  if (salesChartInstance) salesChartInstance.destroy();
+
+  const canvas = document.createElement('canvas');
+  container.innerHTML = '';
+  container.appendChild(canvas);
+
+  salesChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'المبيعات',
+        data: data,
+        borderColor: '#147d80',
+        backgroundColor: 'rgba(20, 125, 128, 0.15)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#176b70',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
