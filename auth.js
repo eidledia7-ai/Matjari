@@ -252,7 +252,7 @@ if (main) main.style.display = 'none';
     const subRes = await supabaseClient
   .from('shop_subscriptions')
   .select('*')
-  .eq('user_id', subOwnerId) // <--- التعديل هنا
+  .eq('user_id', subOwnerId) 
   .maybeSingle();
 
    if (subRes.data) {
@@ -340,28 +340,23 @@ if (navigator.onLine && supabaseClient) {
       .eq('user_id', cacheOwnerId)
       .order('date', { ascending: false });
       
-    if (salesRes.data && salesRes.data.length > 0) {
-      const newSales = salesRes.data.map(s => ({
-        id: s.id,
-        date: s.date,
-        items: s.items,
-        subtotal: s.subtotal,
-        discount: s.discount,
-        total: s.total,
-        paid: s.paid,
-        remaining: s.remaining,
-        customerId: s.customer_id,
-        payMethod: s.pay_method,
-        notes: s.notes,
-        cashier: s.cashier,
-        shiftId: s.shift_id
-      }));
-      
-      // دمج المبيعات الجديدة مع القديمة بدون تكرار (باستخدام ID)
-      const newSalesIds = new Set(newSales.map(s => s.id));
-      const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
-      state.sales = [...newSales, ...oldSales];
-    }
+ if (salesRes.data) {
+  const newSales = salesRes.data.map(s => ({
+    id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
+    total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
+    payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
+  }));
+  
+  if (state.role === 'employee') {
+    // الموظف يعتمد على السيرفر فقط
+    state.sales = newSales; 
+  } else {
+    // المدير بيدمج عشان مفيش فاتورة تضيع في وضع الأوفلاين
+    const newSalesIds = new Set(newSales.map(s => s.id));
+    const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
+    state.sales = [...newSales, ...oldSales];
+  }
+}
   } catch (e) { console.warn('Fetch sales failed', e); }
 }
 document.getElementById('skeletonLoader').style.display = 'none';
