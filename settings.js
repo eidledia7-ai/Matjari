@@ -135,7 +135,11 @@ async function safeClearAllDataPrompt() {
   if (state.currentUser) {
     localStorage.removeItem('matjari_cache_' + state.currentUser.id);
   }
-
+// مسح الفواتير من الجدول المنفصل
+if (navigator.onLine && supabaseClient && state.currentUser) {
+  const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  await supabaseClient.from('sales').delete().eq('user_id', cacheOwnerId);
+}
   await uploadToCloud();
   renderAll();
   updateStockBadge();
