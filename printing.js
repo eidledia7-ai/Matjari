@@ -1293,10 +1293,18 @@ const win = iframe.contentWindow;
       <div>التاريخ: ${new Date(sale.date).toLocaleString('ar-EG')}</div>
       <div>العميل: ${escapeHTML(custName)}</div>
       <div class="dashed-line"></div>
-      ${itemsHtml}
+       ${itemsHtml}
       <div class="dashed-line"></div>
-      <div style="display:flex; justify-content:space-between; font-weight:bold;">
-        <span>الإجمالي:</span><span>${sale.total.toFixed(2)} ${cur}</span>
+      ${sale.discount > 0 ? `
+        <div style="display:flex; justify-content:space-between;">
+          <span>الإجمالي قبل الخصم:</span><span>${sale.subtotal.toFixed(2)} ${cur}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; color:red;">
+          <span>الخصم:</span><span>- ${sale.discount.toFixed(2)} ${cur}</span>
+        </div>
+      ` : ''}
+      <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:14px;">
+        <span>الصافي:</span><span>${sale.total.toFixed(2)} ${cur}</span>
       </div>
       <div style="display:flex; justify-content:space-between;">
         <span>المدفوع:</span><span>${sale.paid.toFixed(2)} ${cur}</span>
