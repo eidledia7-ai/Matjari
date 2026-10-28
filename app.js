@@ -1142,6 +1142,8 @@ async function changePasswordPrompt() {
 }
 async function openUserSession(user) {
   state.currentUser = user;
+  try { localStorage.setItem('matjari_last_user', JSON.stringify({ id: user.id, email: user.email, role: state.role })); } catch(e) {}
+  
   document.getElementById('skeletonLoader').style.display = 'block';
 const main = document.querySelector('.main-content');
 if (main) main.style.display = 'none';
@@ -4521,11 +4523,22 @@ if (!defaultPassword || defaultPassword.length < 6) {
     
     document.getElementById('staffEmail').value = '';
     loadStaffList();
-  } catch (e) {
-    showNotification('تعذر إنشاء الحساب: ' + (e.message || ''), 'error');
-  } finally {
-    hideLoading();
+} catch (e) {
+  let msg = 'تعذر إنشاء الحساب: ';
+  const errMsg = (e.message || '').toLowerCase();
+  
+  // لو الإيميل موجود بالفعل
+  if (errMsg.includes('already') || errMsg.includes('exists') || errMsg.includes('duplicate')) {
+    msg = 'هذا الإيميل مسجل بالفعل في النظام (حتى لو تم إلغاء تنشيطه). يرجى استخدام إيميل جديد.';
+  } else {
+    msg += (e.message || 'خطأ غير معروف');
   }
+  
+  showNotification(msg, 'error');
+  console.error(e);
+} finally {
+  hideLoading();
+}
 }
 async function loadStaffList() {
   const container = document.getElementById('staffList');
