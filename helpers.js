@@ -1,4 +1,3 @@
-/* ============ قفل التطبيق عند انتهاء الاشتراك ============ */
 function enforceSubscriptionBlock() {
   // 1. مسح أي شاشة قفل قديمة أو شريط قديم
   const existing = document.getElementById('subscriptionBlock');
@@ -589,7 +588,7 @@ function initiateReturnFromSale(saleId) {
   }, 150);
 }
 /* ============ كشف حساب العميل ============ */
-let activeStatementCustomerId = null;
+
 
 function getStatementData(custId) {
   const cust = state.customers.find(c => c.id === custId);
