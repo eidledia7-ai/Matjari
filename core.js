@@ -84,6 +84,8 @@ let state = {
     taxNumber: '',
     monthlyGoal: 0
   },
+  ownerId: null,
+ownerPlan: null,
   subscription: { plan: 'trial', status: 'active', expires_at: null }
 };
 
