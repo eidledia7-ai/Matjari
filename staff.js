@@ -28,7 +28,7 @@ if (!defaultPassword || defaultPassword.length < 6) {
   try {
     const session = await supabaseClient.auth.getSession();
     const token = session.data.session?.access_token || SUPABASE_KEY; 
-
+console.log("Sending to Edge Function:", { email: email, owner_id: state.currentUser.id });
     const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
       headers: {
         Authorization: `Bearer ${token}`,
