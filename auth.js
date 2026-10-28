@@ -10,7 +10,7 @@ function togglePassword(id, btn) {
   if (!field) return;
   const showing = field.type === 'password';
   field.type = showing ? 'text' : 'password';
-  btn.textContent = showing ? (currentLang === 'ar' ? 'إخفاء' : 'Hide') : (currentLang === 'ar' ? 'إظهار' : 'Show');
+  if (btn) btn.textContent = showing ? (currentLang === 'ar' ? 'إخفاء' : 'Hide') : (currentLang === 'ar' ? 'إظهار' : 'Show');
 }
 
 function setAuthMessage(msg, isError) {
@@ -98,6 +98,7 @@ async function signUp() {
 async function sendPasswordReset() {
   const email = (document.getElementById('authEmail').value || '').trim();
   if (!email) return setAuthMessage('أدخل البريد أولاً', true);
+  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
   setAuthBusy(true);
   try {
     const result = await supabaseClient.auth.resetPasswordForEmail(email, {
@@ -115,6 +116,7 @@ async function sendPasswordReset() {
 async function saveNewPassword() {
   const password = document.getElementById('newPassword').value || '';
   if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
+  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
   try {
     const result = await supabaseClient.auth.updateUser({ password: password });
     if (result.error) throw result.error;
@@ -159,15 +161,18 @@ function showLoggedInUI() {
 async function handleLogout() {
   if (!confirm(tr('msg_logout'))) return;
   try {
-   await supabaseClient.auth.signOut();
-localStorage.removeItem('matjari_last_user'); 
-showLoggedOutUI();
+    await supabaseClient.auth.signOut();
+    localStorage.removeItem('matjari_last_user'); 
+    showLoggedOutUI();
   } catch (e) {
     showNotification('تعذر الخروج', 'error');
   }
 }
 /* ============ تغيير كلمة المرور ============ */
 async function changePasswordPrompt() {
+  if (!supabaseClient) {
+    return showNotification(currentLang === 'en' ? 'No connection to server.' : 'لا يوجد اتصال بالسيرفر.', 'error');
+  }
   const newPass = prompt(currentLang === 'en' ? 'Enter new password (at least 6 characters):' : 'أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
   if (newPass === null) return; // لو المستخدم داس إلغاء
   
@@ -191,12 +196,13 @@ async function changePasswordPrompt() {
     hideLoading();
   }
 }
+
 async function openUserSession(user) {
   state.currentUser = user;
   
   document.getElementById('skeletonLoader').style.display = 'block';
-const main = document.querySelector('.main-content');
-if (main) main.style.display = 'none';
+  const main = document.querySelector('.main-content');
+  if (main) main.style.display = 'none';
   try {
     // 1. تحديد الدور (Role) ورقم المدير (owner_id) والإيميل
     const roleRes = await supabaseClient
@@ -247,25 +253,23 @@ if (main) main.style.display = 'none';
       }
     }
 
-     // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
+    // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
     const subOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
     const subRes = await supabaseClient
-  .from('shop_subscriptions')
-  .select('*')
-  .eq('user_id', subOwnerId) 
-  .maybeSingle();
+      .from('shop_subscriptions')
+      .select('*')
+      .eq('user_id', subOwnerId) 
+      .maybeSingle();
 
-   if (subRes.data) {
-  state.subscription = {
-    plan: subRes.data.plan || 'trial',
-    status: subRes.data.status || 'active',
-    expires_at: subRes.data.expires_at,
-    trial_ends_at: subRes.data.trial_ends_at,
-    payment_method: subRes.data.payment_method
-  };
-  // السطر ده هو اللي هيحل مشكلة الواتساب
-  if (state.role === 'employee') state.ownerPlan = state.subscription.plan;
-} else {
+    if (subRes.data) {
+      state.subscription = {
+        plan: subRes.data.plan || 'trial',
+        status: subRes.data.status || 'active',
+        expires_at: subRes.data.expires_at,
+        trial_ends_at: subRes.data.trial_ends_at,
+        payment_method: subRes.data.payment_method
+      };
+    } else {
       // لو مفيش اشتراك، نفترض trial 14 يوم
       state.subscription = {
         plan: 'trial',
@@ -273,6 +277,8 @@ if (main) main.style.display = 'none';
         trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       };
     }
+    // [إصلاح البند 1] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
+    state.ownerPlan = state.subscription.plan;
 
     // 3. تحديد مين صاحب البيانات (المدير) عشان نقرا كاشه ونحفظ فيه
     const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
@@ -302,7 +308,8 @@ if (main) main.style.display = 'none';
 
     if (d) {
       state.products = d.products || [];
-      state.sales = d.sales || [];
+      // [إصلاح البند 4] الموظف ميشوفش فواتير الكاش المحلي القديمة
+      state.sales = (state.role === 'employee') ? [] : (d.sales || []);
       state.customers = d.customers || [];
       state.suppliers = d.suppliers || [];
       state.expenses = d.expenses || [];
@@ -329,39 +336,47 @@ if (main) main.style.display = 'none';
       state.purchases = [];
       state.shifts = [];
       state.currentShift = null;
-} // <--- قفل الـ else (سطر 1290)
+    }
 
-// جلب الفواتير من الجدول الجديد ودمجها مع القديمة
-if (navigator.onLine && supabaseClient) {
-  try {
-    const salesRes = await supabaseClient
-      .from('sales')
-      .select('*')
-      .eq('user_id', cacheOwnerId)
-      .order('date', { ascending: false });
-      
- if (salesRes.data) {
-  const newSales = salesRes.data.map(s => ({
-    id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
-    total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
-    payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
-  }));
-  
-  if (state.role === 'employee') {
-    // الموظف يعتمد على السيرفر فقط
-    state.sales = newSales; 
-  } else {
-    // المدير بيدمج عشان مفيش فاتورة تضيع في وضع الأوفلاين
-    const newSalesIds = new Set(newSales.map(s => s.id));
-    const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
-    state.sales = [...newSales, ...oldSales];
-  }
-}
-  } catch (e) { console.warn('Fetch sales failed', e); }
-}
-document.getElementById('skeletonLoader').style.display = 'none';
-if (main) main.style.display = 'block';
-showLoggedInUI(); // <--- (سطر 1292)
+    // جلب الفواتير من الجدول الجديد ودمجها مع القديمة
+    if (navigator.onLine && supabaseClient) {
+      try {
+        const salesRes = await supabaseClient
+          .from('sales')
+          .select('*')
+          .eq('user_id', cacheOwnerId)
+          .order('date', { ascending: false });
+          
+        if (state.role === 'employee') {
+          // [إصلاح البند 4] الموظف: نستبدل دايماً ببيانات السيرفر، ولو فشل نمسح
+          if (salesRes.data && Array.isArray(salesRes.data)) {
+            state.sales = salesRes.data.map(s => ({
+              id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
+              total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
+              payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
+            }));
+          } else {
+            state.sales = [];
+          }
+        } else if (salesRes.data && Array.isArray(salesRes.data)) {
+          const newSales = salesRes.data.map(s => ({
+            id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
+            total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
+            payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
+          }));
+          const newSalesIds = new Set(newSales.map(s => s.id));
+          const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
+          state.sales = [...newSales, ...oldSales];
+        }
+      } catch (e) {
+        console.warn('Fetch sales failed', e);
+        // [إصلاح البند 4] لو فشل جلب فواتير الموظف: امسح كاشه فوراً
+        if (state.role === 'employee') state.sales = [];
+      }
+    }
+    document.getElementById('skeletonLoader').style.display = 'none';
+    if (main) main.style.display = 'block';
+    showLoggedInUI();
     applyRolePermissions();
     renderAll();
 
@@ -370,7 +385,7 @@ showLoggedInUI(); // <--- (سطر 1292)
     enforceSubscriptionBlock();
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settSubscription', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
-     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
+    const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
   } catch (e) {
     console.error(e);
@@ -399,13 +414,22 @@ function checkSubscriptionStatus() {
   const now = Date.now();
   let endDate = null;
 
-  if (sub.plan === 'trial' && sub.trial_ends_at) {
-    endDate = new Date(sub.trial_ends_at).getTime();
+  if (sub.plan === 'trial') {
+    if (sub.trial_ends_at) {
+      endDate = new Date(sub.trial_ends_at).getTime();
+    } else {
+      // [إصلاح] trial بدون تاريخ = بيانات تالفة، نعتبره منتهي
+      showNotification(
+        en ? 'Trial data corrupted. Please subscribe.' : 'بيانات التجربة تالفة. يرجى الاشتراك.',
+        'error'
+      );
+      return;
+    }
   } else if (sub.expires_at) {
     endDate = new Date(sub.expires_at).getTime();
   }
 
-  if (!endDate) return; // مفيش تاريخ انتهاء (اشتراك دائم)
+  if (!endDate) return; // اشتراك دائم بدون تاريخ انتهاء
 
   const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
 
@@ -428,6 +452,7 @@ function checkSubscriptionStatus() {
     );
   }
 }
+
 function applyRolePermissions() {
   const employee = state.role === 'employee';
   document.querySelectorAll('.sidebar-nav button, .nav-group').forEach(function(btn) {
@@ -459,41 +484,42 @@ async function startAuth() {
     return;
   }
 
-  initSupabase();
+  if (!supabaseClient) initSupabase();
   if (!supabaseClient) {
     setAuthMessage('فشل الاتصال بالسيرفر', true);
     return;
   }
   try {
-  // التعديل الجديد: لو الرابط فيه تغيير باسورد أو دعوة، نوقف أي جلسة تانية ونطلب الباسورد
-if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
-  await supabaseClient.auth.signOut();
-  
-  showLoggedOutUI();
-  document.getElementById('recoveryPanel').style.display = 'block';
-  document.getElementById('loginButtons').style.display = 'none';
-  document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
-  
-  // نمسح الهاش من الرابط عشان لو عمل Refresh ميفضلش يطلب باسورد
-  history.replaceState(null, null, ' ');
-  return;
-}
+    const isRecovery = location.hash.includes('type=recovery') ||
+                       location.hash.includes('type=invite') ||
+                       location.hash.includes('access_token');
 
-const result = await supabaseClient.auth.getSession();
-    if (result.error) throw result.error;
-    if (location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token')) {
-      showLoggedOutUI(true);
+    if (isRecovery) {
+      await supabaseClient.auth.signOut();
+      showLoggedOutUI();
       document.getElementById('recoveryPanel').style.display = 'block';
       document.getElementById('loginButtons').style.display = 'none';
-      document.getElementById('authTitle').textContent = 'تعيين كلمة مرور جديدة';
-    } else if (result.data.session && result.data.session.user) {
+      document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
+      // نمسح الهاش من الرابط عشان لو عمل Refresh ميفضلش يطلب باسورد
+      history.replaceState(null, null, ' ');
+      return;
+    }
+
+    const result = await supabaseClient.auth.getSession();
+    if (result.error) throw result.error;
+    if (result.data.session && result.data.session.user) {
       await openUserSession(result.data.session.user);
     } else {
       showLoggedOutUI();
     }
-} catch (e) {
-  // لو حصل إيرور في الاتصال (زي ما نت فصل)، جرب تفتح من الذاكرة
-  loadOfflineSession(); 
+  } catch (e) {
+    // [إصلاح] نفتح offline فقط لو المشكلة شبكة، مش مشكلة بيانات/دور
+    const isNetworkErr = !navigator.onLine || /network|fetch|timeout/i.test((e && e.message) || '');
+    if (isNetworkErr) {
+      loadOfflineSession();
+    } else {
+      setAuthMessage('تعذر الدخول: ' + (e.message || ''), true);
+      showLoggedOutUI();
+    }
+  }
 }
-}
-
