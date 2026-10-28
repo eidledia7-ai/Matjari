@@ -3492,7 +3492,7 @@ const closedShift = {
   cashSales: cashSales, 
  
   drawerExpenses: drawerExpensesTotal, 
-drawerExpensesList: state.currentShift.drawerExpenses
+drawerExpensesList: state.currentShift.drawerExpenses,
   actualCash: actualCash,
   difference: actualCash - expectedCash, // <--- الفرق بقى بيتحسب صح
   notes: notes
