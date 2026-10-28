@@ -1109,8 +1109,9 @@ function showLoggedInUI() {
 async function handleLogout() {
   if (!confirm(tr('msg_logout'))) return;
   try {
-    await supabaseClient.auth.signOut();
-    showLoggedOutUI();
+   await supabaseClient.auth.signOut();
+localStorage.removeItem('matjari_last_user'); 
+showLoggedOutUI();
   } catch (e) {
     showNotification('تعذر الخروج', 'error');
   }
@@ -1142,7 +1143,6 @@ async function changePasswordPrompt() {
 }
 async function openUserSession(user) {
   state.currentUser = user;
-  try { localStorage.setItem('matjari_last_user', JSON.stringify({ id: user.id, email: user.email, role: state.role })); } catch(e) {}
   
   document.getElementById('skeletonLoader').style.display = 'block';
 const main = document.querySelector('.main-content');
@@ -1334,6 +1334,7 @@ showLoggedInUI(); // <--- (سطر 1292)
   } finally {
     hideLoading();
   }
+  try { localStorage.setItem('matjari_last_user', JSON.stringify({ id: user.id, email: user.email, role: state.role })); } catch(e) {}
 }
 
 /* ============ فحص حالة الاشتراك ============ */
@@ -3488,8 +3489,10 @@ const closedShift = {
   endTime: new Date().toISOString(),
   saleCount: shiftSales.length,
   totalSales: totalSales,
-  cashSales: cashSales, // بنسجل مبيعات الكاش الخام للتاريخ
-  drawerExpenses: drawerExpensesTotal, // نسجل المصروفات في التقرير
+  cashSales: cashSales, 
+ 
+  drawerExpenses: drawerExpensesTotal, 
+drawerExpensesList: state.currentShift.drawerExpenses
   actualCash: actualCash,
   difference: actualCash - expectedCash, // <--- الفرق بقى بيتحسب صح
   notes: notes
