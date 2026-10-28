@@ -1,9 +1,13 @@
 /* ============ إدارة الموظفين (Edge Function) ============ */
 // ملاحظة: كلمة المرور '123456' مؤقتة للموظف عند الدعوة، ويجب عليه تغييرها فور أول دخول.
 async function inviteStaff() {
+  const btn = document.querySelector('button[onclick="inviteStaff()"]');
+  if (btn && btn.disabled) return; // منع الدوس مرتين
+  
   const email = document.getElementById('staffEmail').value.trim();
   if (!email) return showNotification('أدخل إيميل الموظف', 'error');
 
+  // التحقق من الحدود
   const { count } = await supabaseClient
     .from('shop_user_roles')
     .select('*', { count: 'exact', head: true })
@@ -19,16 +23,18 @@ async function inviteStaff() {
     );
   }
 
-const defaultPassword = prompt('أدخل كلمة مرور مؤقتة للموظف (6 أحرف على الأقل):');
-if (!defaultPassword || defaultPassword.length < 6) {
-  return showNotification('يجب إدخال كلمة مرور من 6 أحرف على الأقل', 'error');
-}
+  const defaultPassword = prompt('أدخل كلمة مرور مؤقتة للموظف (6 أحرف على الأقل):');
+  if (!defaultPassword || defaultPassword.length < 6) {
+    return showNotification('يجب إدخال كلمة مرور من 6 أحرف على الأقل', 'error');
+  }
 
+  if (btn) btn.disabled = true; // قفل الزرار
   showLoading('جارٍ إنشاء الحساب...');
+  
   try {
     const session = await supabaseClient.auth.getSession();
     const token = session.data.session?.access_token || SUPABASE_KEY; 
-console.log("Sending to Edge Function:", { email: email, owner_id: state.currentUser.id });
+
     const { data, error } = await supabaseClient.functions.invoke('invite-staff', {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -44,27 +50,26 @@ console.log("Sending to Edge Function:", { email: email, owner_id: state.current
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
 
-    // إظهار الباسورد والإيميل في Alert
-    alert(`Account Created!\nEmail: ${email}\nPassword: ${defaultPassword}`);
+    // استخدام الإشعار بدل الـ alert
+    showNotification(`تم إنشاء الحساب! الإيميل: ${email} | الباسورد: ${defaultPassword}`, 'success');
     
     document.getElementById('staffEmail').value = '';
-    loadStaffList();
-} catch (e) {
-  let msg = 'تعذر إنشاء الحساب: ';
-  const errMsg = (e.message || '').toLowerCase();
-  
-  // لو الإيميل موجود بالفعل
-  if (errMsg.includes('already') || errMsg.includes('exists') || errMsg.includes('duplicate')) {
-    msg = 'هذا الإيميل مسجل بالفعل في النظام (حتى لو تم إلغاء تنشيطه). يرجى استخدام إيميل جديد.';
-  } else {
-    msg += (e.message || 'خطأ غير معروف');
+    await loadStaffList();
+    
+  } catch (e) {
+    let errorMsg = e.message || 'خطأ غير معروف';
+    if (e.context && typeof e.context.json === 'function') {
+      try {
+        const errBody = await e.context.json();
+        if (errBody && errBody.error) errorMsg = errBody.error;
+      } catch (err) {}
+    }
+    showNotification('تعذر إنشاء الحساب: ' + errorMsg, 'error');
+    console.error("REAL ERROR:", e);
+  } finally {
+    if (btn) btn.disabled = false; // إرجاع الزرار شغال
+    hideLoading();
   }
-  
-  showNotification(msg, 'error');
-  console.error(e);
-} finally {
-  hideLoading();
-}
 }
 async function loadStaffList() {
   const container = document.getElementById('staffList');
