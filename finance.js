@@ -498,16 +498,20 @@ function printReportSummary() {
   const w = window.open('', '_blank');
   const cssUrl = new URL('style.css', location.href).href;
 
+  // بنجيب محتوى الأكثر مبيعاً كمان
+  const topProductsHtml = document.getElementById('topProductsReport') ? document.getElementById('topProductsReport').innerHTML : '';
+
   w.document.write(`
     <html dir="rtl"><head><title>تقرير مالي</title>
     <link rel="stylesheet" href="${cssUrl}">
-    <style>@media print { .no-print { display: none; } }</style>
+    <style>@media print { .no-print, button, input { display: none !important; } } body { padding: 20px; background: white; }</style>
     </head><body>
-    <h2>التقرير المالي - ${state.storeSettings.name}</h2>
+    <h2>التقرير المالي - ${escapeHTML(state.storeSettings.name)}</h2>
+    <br>
     ${container.outerHTML}
     <br>
     <h3>الأكثر مبيعاً</h3>
-    ${document.getElementById('topProductsReport').innerHTML}
+    ${topProductsHtml}
     <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
     </body></html>
   `);

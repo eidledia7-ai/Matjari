@@ -67,7 +67,7 @@ let state = {
   auditLogs: [],
   products: [],
   sales: [],
-  customers: [],
+  customers: [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }],
   suppliers: [], // سيتم إدارتها محلياً حالياً
   expenses: [],
   stockMoves: [],

@@ -243,8 +243,8 @@ const roleRes = await supabaseClient.from('shop_user_roles').select('role, owner
 
     // لو مفيش منتجات خالص، نضيف عميل افتراضي
     if (!state.customers || state.customers.length === 0) {
-      state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-    }
+  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
+}
 
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';

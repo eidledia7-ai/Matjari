@@ -388,6 +388,12 @@ async function savePurchase() {
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('products').update({ stock: p.stock, cost: cost }).eq('id', p.id);
       }
+      await supabaseClient.from('stock_moves').insert({
+  id: uid('SM'), user_id: ownerId, product_id: p.id, product_name: p.name,
+  type: 'in', qty: qty, old_stock: p.stock - qty, new_stock: p.stock,
+  reason: 'مشتريات', date: new Date().toISOString()
+});
+state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: p.id, productName: p.name, type: 'in', qty: qty, oldStock: p.stock - qty, newStock: p.stock, reason: 'مشتريات' });
     }
   } else if (newName) {
     targetProdId = uid('PRD');
@@ -400,6 +406,14 @@ async function savePurchase() {
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('products').insert(newProductData);
     }
+    if (navigator.onLine && supabaseClient) {
+  await supabaseClient.from('stock_moves').insert({
+    id: uid('SM'), user_id: ownerId, product_id: targetProdId, product_name: targetProdName,
+    type: 'in', qty: qty, old_stock: 0, new_stock: qty,
+    reason: 'منتج جديد - مشتريات', date: new Date().toISOString()
+  });
+  state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: targetProdId, productName: targetProdName, type: 'in', qty: qty, oldStock: 0, newStock: qty, reason: 'منتج جديد - مشتريات' });
+}
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
   }
