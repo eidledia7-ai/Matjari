@@ -20,7 +20,6 @@ function loadOfflineSession() {
   let chosenKey = null;
   let chosenId = null;
 
-  // [إصلاح] للموظف: الكاش على ownerId (المدير)، مش على id الموظف
   const ownerIdForCache = (lastUserRaw && lastUserRaw.role === 'employee' && lastUserRaw.ownerId)
     ? lastUserRaw.ownerId
     : (lastUserRaw ? lastUserRaw.id : null);
@@ -39,7 +38,6 @@ function loadOfflineSession() {
   
   state.currentUser = { id: chosenId, email: 'offline-user' };
   state.role = (lastUserRaw && lastUserRaw.role) ? lastUserRaw.role : 'manager';
-  // [إصلاح] نستخدم ownerId من lastUserRaw (لو موظف)
   state.ownerId = (state.role === 'employee' && lastUserRaw && lastUserRaw.ownerId)
     ? lastUserRaw.ownerId
     : null;
@@ -60,11 +58,9 @@ function loadOfflineSession() {
   if (cache.auditLogs) state.auditLogs = cache.auditLogs;
   if (cache.heldCarts) state.heldCarts = cache.heldCarts;
 
-  // [إصلاح] نحدد subscription و ownerPlan من الكاش عشان canUse يشتغل أوفلاين
   if (cache.subscription) state.subscription = cache.subscription;
   state.ownerPlan = state.subscription ? state.subscription.plan : null;
 
-  // [إصلاح] نحفظ الكاش من جديد للتأكد إن الحقول الجديدة موجودة
   try { if (typeof saveData === 'function') saveData(); } catch (e) { console.warn('saveData offline failed:', e); }
   
   showLoggedInUI(); 
@@ -86,9 +82,10 @@ window.onload = function() {
     loadOfflineSession();
   }
   
-  applySavedDarkMode();
+  if (typeof applySavedDarkMode === 'function') {
+    applySavedDarkMode();
+  }
 
-  // [إضافة] فحص دوري للتحديثات كل 30 دقيقة
   setInterval(function() {
     if (navigator.onLine && typeof checkForUpdates === 'function') {
       checkForUpdates().catch(function() {});
@@ -109,7 +106,6 @@ function setupEventListeners() {
     if (e.key === 'F9') { e.preventDefault(); if (typeof completeSale === 'function') completeSale(); }
   });
 
-  // [إصلاح] حماية من ReferenceError لو الدالة مش موجودة
   if (typeof setupBarcodeListener === 'function') {
     try { setupBarcodeListener(); } catch (e) { console.warn('setupBarcodeListener failed:', e); }
   }
@@ -130,7 +126,7 @@ function setupEventListeners() {
   setupBackButtonHandler();
 }
 
-/* ============ Pull-to-Refresh (البند 6) ============ */
+/* ============ Pull-to-Refresh ============ */
 function setupPullToRefresh() {
   if (typeof window === 'undefined' || !('ontouchstart' in window)) return;
 
@@ -200,7 +196,7 @@ function setupPullToRefresh() {
   }, { passive: true });
 }
 
-/* ============ Back Button (البند 7) ============ */
+/* ============ Back Button ============ */
 function setupBackButtonHandler() {
   try { history.pushState({ __matjari: true, page: 'home' }, ''); } catch (e) {}
 
@@ -279,5 +275,12 @@ function updateStockBadge() {
     badge.style.cssText = lowCount > 0
       ? 'display:inline-block;background:#c0392b;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-right:5px'
       : 'display:none';
+  }
+}
+
+/* ============ [إصلاح] الوضع الليلي ============ */
+function applySavedDarkMode() {
+  if (localStorage.getItem('matjari_dark') === '1') {
+    document.body.classList.add('dark-mode');
   }
 }
