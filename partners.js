@@ -163,7 +163,6 @@ async function recordCustomerPayment() {
   // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('customer_payments').insert(newPayment);
-    // تحديث دين العميل في السيرفر
     await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', customerId);
   }
 
@@ -376,7 +375,9 @@ async function savePurchase() {
   const ownerId = state.currentUser.id;
   let targetProdId = prodId;
   let targetProdName = '';
+  let newProductData = null;
 
+  // 1. تجهيز المنتج (موجود أو جديد)
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
     if (p) {
@@ -384,24 +385,20 @@ async function savePurchase() {
       p.cost = cost;
       targetProdName = p.name;
       
-      // تحديث المنتج في السيرفر
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('products').update({ stock: p.stock, cost: cost }).eq('id', p.id);
       }
     }
   } else if (newName) {
-    const newProdId = uid('PRD');
-    const newProd = { id: newProdId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 };
-    state.products.push(newProd);
-    targetProdId = newProd.id;
-    targetProdName = newProd.name;
+    targetProdId = uid('PRD');
+    newProductData = { id: targetProdId, user_id: ownerId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, min_stock: 5 };
+    
+    state.products.push({ id: targetProdId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 });
+    targetProdName = newName;
 
-    // إضافة المنتج الجديد في السيرفر
+    // [إصلاح] رفع المنتج الجديد للسيرفر فوراً عشان يظهر في صفحة المنتجات
     if (navigator.onLine && supabaseClient) {
-      await supabaseClient.from('products').insert({
-        id: newProdId, user_id: ownerId, name: newName, barcode: '', category: 'عام',
-        price: purchaseSalePrice, cost: cost, stock: qty, min_stock: 5
-      });
+      await supabaseClient.from('products').insert(newProductData);
     }
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
@@ -410,6 +407,7 @@ async function savePurchase() {
   const total = qty * cost;
   const remaining = Math.max(0, total - paid);
 
+  // 2. تحديث مديونية المورد
   if (remaining > 0) {
     const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
     if (sup) {
@@ -420,13 +418,13 @@ async function savePurchase() {
     }
   }
 
+  // 3. تسجيل الفاتورة
   const newPurchase = {
     id: uid('PUR'), user_id: ownerId, supplier_id: supplierId, product_id: targetProdId, product_name: targetProdName,
     qty: qty, cost: cost, total: total, paid: paid, remaining: remaining, date: new Date().toISOString()
   };
   state.purchases.unshift({ id: newPurchase.id, date: newPurchase.date, supplierId, productId: targetProdId, productName: targetProdName, qty, cost, total, paid, remaining });
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('purchases').insert(newPurchase);
   }
@@ -499,7 +497,6 @@ async function recordSupplierPayment() {
   };
   state.supplierPayments.unshift({ id: newPayment.id, supplierId, supplierName: sup.name, amount, date, notes });
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('supplier_payments').insert(newPayment);
     await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', supplierId);

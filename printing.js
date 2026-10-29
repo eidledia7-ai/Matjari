@@ -49,7 +49,6 @@ async function printInvoice(sale) {
 }
 
 function sendInvoiceWhatsApp(saleId) {
-  // [تعديل] الموظف يقدر يبعت لو باقة المدير تسمح
   const planToCheck = state.role === 'employee' ? state.ownerPlan : (state.subscription ? state.subscription.plan : 'trial');
   const cleanPlan = String(planToCheck || 'trial').toLowerCase().trim();
   const limits = { trial: { whatsapp: false }, starter: { whatsapp: false }, growth: { whatsapp: true }, pro: { whatsapp: true } };

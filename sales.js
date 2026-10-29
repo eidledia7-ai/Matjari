@@ -180,15 +180,25 @@ async function completeSale() {
   }
   
   const customerId = document.getElementById('saleCustomer').value;
+  const customer = state.customers.find(c => c.id === customerId);
+  
+  // [إصلاح هام] منع العميل النقدي من أخذ ديون
+  if (customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer') && paid < total) {
+    hideLoading();
+    return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
+  }
+
   const payMethod = document.getElementById('salePayMethod').value;
   const notes = document.getElementById('saleNotes').value.trim();
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
+  // [إصلاح] الوردية التلقائية
   if (!state.currentShift) {
     state.currentShift = { id: uid('SHIFT'), name: 'وردية تلقائية', cashierName: state.currentUser.email, startTime: new Date().toISOString() };
+    // ممكن نرفعها للسيرفر هنا لو حبينا
   }
 
-  // 1. خصم المخزون من الـ state (الواجهة)
+  // 1. خصم المخزون من الـ state
   state.cart.forEach(function(item) {
     const prod = state.products.find(function(p) { return p.id === item.id; });
     if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
@@ -200,24 +210,22 @@ async function completeSale() {
     items: JSON.parse(JSON.stringify(state.cart)),
     subtotal: subtotal, discount: discountAmount, pointsDiscount: pointsDiscount, pointsUsed: pointsUsed,
     total: total, paid: paid, remaining: Math.max(0, total - paid),
-    customerId: customerId, payMethod: payMethod, notes: notes,
+    customerId: (customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer')) ? null : customerId, 
+    payMethod: payMethod, notes: notes,
     cashier: state.currentUser.email, shiftId: state.currentShift.id
   };
 
-  // 2. الحفظ في السيرفر فوراً
+  // 2. الحفظ في السيرفر
   if (navigator.onLine && supabaseClient) {
     try {
-      // حفظ الفاتورة
       const { error: saleErr } = await supabaseClient.from('sales').insert({
         id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
         discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid, remaining: saleObj.remaining,
-   customer_id: (saleObj.customerId && saleObj.customerId.startsWith('CUST-') && state.customers.find(c => c.id === saleObj.customerId)?.name === 'عميل نقدي عام') ? null : saleObj.customerId,
-     pay_method: saleObj.payMethod, notes: saleObj.notes,
+        customer_id: saleObj.customerId, pay_method: saleObj.payMethod, notes: saleObj.notes,
         cashier: saleObj.cashier, shift_id: saleObj.shiftId
       });
       if (saleErr) throw saleErr;
 
-      // حفظ تفاصيل الفاتورة (المنتجات)
       if (saleObj.items.length > 0) {
         const itemsData = saleObj.items.map(i => ({
           sale_id: saleObj.id, user_id: ownerId, product_id: i.id, product_name: i.name,
@@ -235,14 +243,20 @@ async function completeSale() {
   // 3. تحديث الحالة المحلية
   state.sales.unshift(saleObj);
 
-  if (saleObj.remaining > 0 && customerId) {
-    const cust = state.customers.find(function(c) { return c.id === customerId; });
-    if (cust) cust.openingDebt = (Number(cust.openingDebt) || 0) + saleObj.remaining;
+  // [إصلاح] تعديل ديون العميل في السيرفر لو مش نقدي
+  if (saleObj.remaining > 0 && saleObj.customerId) {
+    const cust = state.customers.find(function(c) { return c.id === saleObj.customerId; });
+    if (cust) {
+      cust.openingDebt = (Number(cust.openingDebt) || 0) + saleObj.remaining;
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', cust.id);
+      }
+    }
   }
 
-  if (customerId) {
-    const cust = state.customers.find(c => c.id === customerId);
-    if (cust && cust.name !== 'عميل نقدي عام') {
+  if (saleObj.customerId) {
+    const cust = state.customers.find(c => c.id === saleObj.customerId);
+    if (cust) {
       if (!cust.points) cust.points = 0;
       cust.points = Math.max(0, cust.points - pointsUsed);
       const pointsRate = state.storeSettings.pointsRate || 0;
@@ -264,7 +278,6 @@ async function completeSale() {
   playBeep(true);
   showNotification('تم حفظ الفاتورة بنجاح ✅');
 
-  // 4. الطباعة
   try {
     if (state.storeSettings.printType === 'a4') {
       printInvoice(saleObj);
@@ -354,7 +367,7 @@ function safeDeleteRecord(type, id) {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
     if (!perms.canDelete) {
-      return showNotification('هذه العملية للمدير فقط (الموظف غير مسموح له بالحذف)', 'warning');
+      return showNotification('هذه العملية للمدير فقط', 'warning');
     }
   }
   
@@ -386,7 +399,6 @@ async function executeDeleteRecord(type, id) {
     // 3. الحذف من السيرفر
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('sales').delete().eq('id', id);
-      // sale_items هتتمسح أوتوماتيك بسبب ON DELETE CASCADE
     }
 
     state.sales.splice(idx, 1);
@@ -406,6 +418,44 @@ async function executeDeleteRecord(type, id) {
     if (exp && typeof addAuditLog === 'function') {
       addAuditLog('delete_expense', { expenseId: exp.id, amount: exp.amount }, exp.id);
     }
+
+  } else if (type === 'purchase') {
+    // [إصلاح] حذف المشتريات
+    const idx = state.purchases.findIndex(function(p) { return p.id === id; });
+    if (idx !== -1) {
+      const p = state.purchases[idx];
+      
+      // إرجاع المخزون للسيرفر والـ state
+      const prod = state.products.find(function(pr) { return pr.id === p.productId; });
+      if (prod) {
+        prod.stock = Math.max(0, Number(prod.stock) - p.qty);
+        if (navigator.onLine && supabaseClient) {
+           await supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id);
+        }
+      }
+
+      // تعديل مديونية المورد
+      if (p.remaining > 0) {
+        const sup = state.suppliers.find(s => s.id === p.supplierId);
+        if (sup) {
+          sup.openingDebt = Math.max(0, Number(sup.openingDebt) - Number(p.remaining));
+          if (navigator.onLine && supabaseClient) {
+             await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', sup.id);
+          }
+        }
+      }
+
+      // الحذف من السيرفر
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('purchases').delete().eq('id', id);
+      }
+
+      state.purchases.splice(idx, 1);
+
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('delete_purchase', { purchaseId: p.id }, p.id);
+      }
+    }
   }
 
   saveData();
@@ -420,7 +470,6 @@ function clearTableLog(logType) {
   }
   if (!confirm(tr('msg_clear_log'))) return;
 
-  // للحذف الجماعي، بنمسح من الـ state بس (ممكن نطورها بعدين تمسح من السيرفر دفعة واحدة)
   let clearedCount = 0;
   if (logType === 'sales') { clearedCount = state.sales.length; state.sales = []; }
   else if (logType === 'expenses') { clearedCount = state.expenses.length; state.expenses = []; }
