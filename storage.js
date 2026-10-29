@@ -41,7 +41,7 @@ async function syncDown(ownerId) {
         }
       } else {
      const orderColumn = (t.name === 'returns' || t.name === 'shifts' || t.name === 'purchases') ? 'date' : 'created_at';
-const { data, error } = await query.order(orderColumn, { ascending: false });
+const { data, error } = await query; // شلنا الترتيب عشان نتجنب مشاكل الأعمدة
         if (error) throw error;
         
         if (data) {
