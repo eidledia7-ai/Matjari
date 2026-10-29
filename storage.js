@@ -40,7 +40,8 @@ async function syncDown(ownerId) {
           };
         }
       } else {
-        const { data, error } = await query.order('created_at', { ascending: false });
+     const orderColumn = (t.name === 'returns' || t.name === 'shifts' || t.name === 'purchases') ? 'date' : 'created_at';
+const { data, error } = await query.order(orderColumn, { ascending: false });
         if (error) throw error;
         
         if (data) {
