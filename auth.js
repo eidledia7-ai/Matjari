@@ -265,12 +265,14 @@ async function openUserSession(user) {
     showPage(pageToShow);
     
   } catch (e) {
-    console.error(e);
-    setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
-    showLoggedOutUI();
-  } finally {
-    hideLoading();
-  }
+  console.error(e);
+  document.getElementById('skeletonLoader').style.display = 'none';
+  if (main) main.style.display = 'block';
+  setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
+  showLoggedOutUI();
+} finally {
+  hideLoading();
+}
   
   // حفظ الجلسة للأوفلاين
   try {
