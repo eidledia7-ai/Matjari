@@ -11,16 +11,8 @@ async function saveExpense() {
   if (!name || isNaN(amount) || amount <= 0) return showNotification('أدخل البند والمبلغ بشكل صحيح', 'error');
 
   const ownerId = state.currentUser.id;
-  const newExpense = { 
-    id: uid('EXP'), 
-    user_id: ownerId, 
-    name: name, 
-    amount: amount, 
-    date: date, 
-    notes: notes 
-  };
+  const newExpense = { id: uid('EXP'), user_id: ownerId, name: name, amount: amount, date: date, notes: notes };
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('expenses').insert(newExpense);
     if (error) console.warn('Expense upload failed:', error);
@@ -62,7 +54,6 @@ function renderExpenses() {
   container.innerHTML = html;
 }
 
-/* ============ التقارير ============ */
 function filterByPeriod(items, dateField, from, to) {
   return items.filter(function(item) {
     const d = (item[dateField] || '').split('T')[0];
@@ -172,8 +163,7 @@ function renderReports() {
     activityContainer.innerHTML = detailsHtml;
   }
 
-  // [إصلاح] الأكثر مبيعاً
-const topContainer = document.getElementById('topProductsReportFinance');
+  const topContainer = document.getElementById('topProductsReportFinance');
   if (topContainer) {
     const salesByProduct = {};
     
@@ -229,7 +219,6 @@ function clearReportPeriod() {
   renderReports();
 }
 
-/* ============ الورديات ============ */
 function calcExpectedShiftCash() {
   const shift = state.currentShift;
   if (!shift) {
@@ -333,7 +322,6 @@ async function closeShift() {
 
   const ownerId = state.currentUser.id;
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('shifts').insert({
       id: closedShift.id, user_id: ownerId, cashier_name: cashierName, start_time: closedShift.startTime,
@@ -386,10 +374,9 @@ function renderShifts() {
 }
 
 function printShiftReport() {
-  // ... نفس كود الطباعة القديم
+  // ... (نفس كود الطباعة)
 }
 
-/* ============ خيارات التصدير والطباعة ============ */
 function openExportModal(tableType) {
   activeExportContext.type = tableType;
   const modal = document.getElementById('exportModal');
@@ -407,30 +394,30 @@ function toggleExportDateRange(show) {
 }
 
 function executeExportAction(action) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
 function getFilteredDataForExport(tableType, from, to) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
 function printTableReportFiltered(tableType, from, to) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
 function exportTableCSVFiltered(tableType, from, to) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
 function sendTableWhatsAppFiltered(tableType, from, to) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
 function openPrintWindow(title, headers, rows, settings) {
-  // ... نفس كود التصدير القديم
+  // ... (نفس الكود)
 }
 
-/* ============ [إضافة] تقرير المصروفات التفصيلي ============ */
+/* ============ تقرير المصروفات التفصيلي ============ */
 function openExpensesDetailReport() {
   const modal = document.getElementById('expensesReportModal');
   if (modal) {
@@ -503,19 +490,20 @@ function printReportSummary() {
 
   const w = window.open('', '_blank');
   
-  // بنجهز ستايل مخصص للطباعة يخفي الأزرار
   const printStyles = `
     <style>
       body { font-family: Tahoma, Arial, sans-serif; padding: 20px; direction: rtl; }
       h2 { text-align: center; margin-bottom: 30px; }
       .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-      .stat-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; text-align: center; background: #fff; }
+      .stat-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; text-align: center; background: #fff; page-break-inside: avoid; }
       .stat-card h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; border: none; padding: 0;}
       .stat-card p { margin: 0; font-size: 20px; font-weight: bold; color: #000; }
-      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
       th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
       th { background: #f5f5f5; }
       .card h3 { font-size: 16px; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 20px;}
+      .no-print, button, input, select { display: none !important; }
     </style>
   `;
 
