@@ -1,13 +1,14 @@
 /* ============ إدارة الموظفين (Edge Function) ============ */
-// ملاحظة: كلمة المرور '123456' مؤقتة للموظف عند الدعوة، ويجب عليه تغييرها فور أول دخول.
 async function inviteStaff() {
+  // [إصلاح] حماية supabaseClient
+  if (!supabaseClient) return showNotification('لا يوجد اتصال بالسيرفر', 'error');
+
   const btn = document.querySelector('button[onclick="inviteStaff()"]');
-  if (btn && btn.disabled) return; // منع الدوس مرتين
+  if (btn && btn.disabled) return;
   
   const email = document.getElementById('staffEmail').value.trim();
   if (!email) return showNotification('أدخل إيميل الموظف', 'error');
 
-  // التحقق من الحدود
   const { count } = await supabaseClient
     .from('shop_user_roles')
     .select('*', { count: 'exact', head: true })
@@ -28,9 +29,10 @@ async function inviteStaff() {
     return showNotification('يجب إدخال كلمة مرور من 6 أحرف على الأقل', 'error');
   }
 
-  if (btn) btn.disabled = true; // قفل الزرار
+  if (btn) btn.disabled = true;
   showLoading('جارٍ إنشاء الحساب...');
   
+  let accountCreated = false;
   try {
     const session = await supabaseClient.auth.getSession();
     const token = session.data.session?.access_token || SUPABASE_KEY; 
@@ -50,11 +52,19 @@ async function inviteStaff() {
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
 
-    // استخدام الإشعار بدل الـ alert
+    accountCreated = true;
+
+    // [إصلاح البند 5] سجل إضافة موظف
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('invite_staff', {
+        email: email,
+        ownerId: state.currentUser.id
+      }, email);
+    }
+
     showNotification(`تم إنشاء الحساب! الإيميل: ${email} | الباسورد: ${defaultPassword}`, 'success');
     
     document.getElementById('staffEmail').value = '';
-    await loadStaffList();
     
   } catch (e) {
     let errorMsg = e.message || 'خطأ غير معروف';
@@ -67,15 +77,22 @@ async function inviteStaff() {
     showNotification('تعذر إنشاء الحساب: ' + errorMsg, 'error');
     console.error("REAL ERROR:", e);
   } finally {
-    if (btn) btn.disabled = false; // إرجاع الزرار شغال
+    if (btn) btn.disabled = false;
     hideLoading();
   }
+
+  // [إصلاح] loadStaffList خارج الـ try/catch عشان فشلها ميفسرش كفشل إنشاء الحساب
+  if (accountCreated) {
+    try { await loadStaffList(); } catch (e) { console.warn('loadStaffList failed:', e); }
+  }
 }
+
 async function loadStaffList() {
   const container = document.getElementById('staffList');
   if (!container) return;
 
   try {
+    if (!supabaseClient) throw new Error('No supabase client');
     const { data, error } = await supabaseClient
       .from('shop_user_roles')
       .select('user_id, role, owner_id, email') 
@@ -108,11 +125,23 @@ async function loadStaffList() {
   }
 }
 
-// [دالة جديدة] إلغاء تنشيط موظف: حذف سطره من shop_user_roles بشرط أن يكون تابعاً للمدير الحالي
 async function deactivateStaff(userId) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   if (!userId) return;
+  if (!supabaseClient) return showNotification('لا يوجد اتصال بالسيرفر', 'error');
   if (!confirm('هل أنت متأكد من إلغاء تنشيط هذا الموظف؟')) return;
+
+  // [إصلاح البند 5] نجيب إيميل الموظف قبل الحذف للسجل
+  let staffEmail = userId;
+  try {
+    const { data } = await supabaseClient
+      .from('shop_user_roles')
+      .select('email')
+      .eq('user_id', userId)
+      .eq('owner_id', state.currentUser.id)
+      .maybeSingle();
+    if (data && data.email) staffEmail = data.email;
+  } catch (e) { /* ignore */ }
 
   showLoading('جارٍ إلغاء التنشيط...');
   try {
@@ -123,6 +152,15 @@ async function deactivateStaff(userId) {
       .eq('owner_id', state.currentUser.id);
 
     if (error) throw error;
+
+    // [إصلاح البند 5] سجل إلغاء تنشيط
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('deactivate_staff', {
+        userId: userId,
+        email: staffEmail,
+        ownerId: state.currentUser.id
+      }, userId);
+    }
 
     showNotification('تم إلغاء تنشيط الموظف ✅', 'success');
     await loadStaffList();

@@ -54,7 +54,8 @@ function renderCart() {
   let pointValue = state.storeSettings.pointValue || 0;
 
   if (pointsGroup) {
-    if (availablePoints > 0 && pointValue > 0 && cust.name !== 'عميل نقدي عام') {
+    // [إصلاح] حماية cust null
+    if (availablePoints > 0 && pointValue > 0 && cust && cust.name !== 'عميل نقدي عام') {
       pointsGroup.style.display = 'flex';
       if (pointsLabel) pointsLabel.innerText = availablePoints;
       if (pointsInput) pointsInput.setAttribute('max', availablePoints);
@@ -90,14 +91,18 @@ function renderCart() {
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
   let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+  // [إصلاح] clamp الخصم عشان ميتجاوزش subtotal
+  discountAmount = Math.min(Math.max(0, discountAmount), subtotal);
 if (state.role === 'employee') {
   const perms = state.storeSettings.permissions || {};
   if (!perms.canDiscount) discountAmount = 0;
 }
   
   let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
+  // [إصلاح] حماية pointsUsed من NaN والسالب
+  if (!Number.isFinite(pointsUsed) || pointsUsed < 0) pointsUsed = 0;
   if (pointsUsed > availablePoints) { pointsUsed = availablePoints; pointsInput.value = pointsUsed; }
-  const pointsDiscount = pointsUsed * pointValue;
+  const pointsDiscount = Math.max(0, Math.min(pointsUsed * pointValue, subtotal - discountAmount));
 
   const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount);
 
@@ -110,8 +115,11 @@ if (state.role === 'employee') {
 }
 
 function updateCartQty(idx, val) {
-  const q = parseInt(val) || 1;
+  const raw = parseInt(val);
+  // [إصلاح] رفض القيم السالبة والصفر و NaN
+  const q = (!Number.isFinite(raw) || raw < 1) ? 1 : raw;
   const item = state.cart[idx];
+  if (!item) return;
   const prod = state.products.find(function(p) { return p.id === item.id; });
   if (prod && q > prod.stock) {
     showNotification('الكمية تتجاوز المخزون!', 'error');
@@ -149,21 +157,31 @@ async function completeSale() {
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
- let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+  let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
+  // [إصلاح] clamp الخصم
+  discountAmount = Math.min(Math.max(0, discountAmount), subtotal);
 if (state.role === 'employee') {
   const perms = state.storeSettings.permissions || {};
   if (!perms.canDiscount) discountAmount = 0;
 }
   const pointsInput = document.getElementById('salePointsUsed');
-const pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
+let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
+// [إصلاح] حماية NaN والسالب
+if (!Number.isFinite(pointsUsed) || pointsUsed < 0) pointsUsed = 0;
 const pointValue = state.storeSettings.pointValue || 0;
-const pointsDiscount = pointsUsed * pointValue;
+const pointsDiscount = Math.max(0, Math.min(pointsUsed * pointValue, subtotal - discountAmount));
 
 const total = Math.max(0, subtotal - discountAmount - pointsDiscount);
-if (discountAmount > 0) {
-  addAuditLog('خصم على فاتورة', 'خصم بقيمة ' + discountAmount + ' ' + state.storeSettings.currency);
-}
-  const paid = parseFloat(document.getElementById('salePaid').value) || total;
+  const paidInput = document.getElementById('salePaid');
+  const rawPaid = paidInput ? paidInput.value.trim() : '';
+  // [إصلاح] نفرق بين "فاضي" (يعني دفع كامل) و "0" (يعني آجل بالكامل)
+  let paid;
+  if (rawPaid === '' || rawPaid === null) {
+    paid = total;
+  } else {
+    const parsed = parseFloat(rawPaid);
+    paid = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, total)) : total;
+  }
   const customerId = document.getElementById('saleCustomer').value;
   const payMethod = document.getElementById('salePayMethod').value;
   const notes = document.getElementById('saleNotes').value.trim();
@@ -202,6 +220,8 @@ if (discountAmount > 0) {
     items: JSON.parse(JSON.stringify(state.cart)),
     subtotal: subtotal,
     discount: discountAmount,
+    pointsDiscount: pointsDiscount,
+    pointsUsed: pointsUsed,
     total: total,
     paid: paid,
     remaining: Math.max(0, total - paid),
@@ -213,6 +233,7 @@ if (discountAmount > 0) {
   };
 
   state.sales.unshift(saleObj);
+
 // حفظ الفاتورة في جدول المبيعات المنفصل
 if (navigator.onLine && supabaseClient) {
   const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
@@ -233,9 +254,10 @@ if (navigator.onLine && supabaseClient) {
     shift_id: saleObj.shiftId
   }).then(({error}) => { if(error) console.error('Sales Sync Error:', error); });
 }
+
   if (saleObj.remaining > 0 && customerId) {
     const cust = state.customers.find(function(c) { return c.id === customerId; });
-    if (cust) cust.openingDebt = (cust.openingDebt || 0) + saleObj.remaining;
+    if (cust) cust.openingDebt = (Number(cust.openingDebt) || 0) + saleObj.remaining;
   }
   // 💎 برنامج الولاء
 if (customerId) {
@@ -254,6 +276,18 @@ if (customerId) {
     }
   }
 }
+
+  // [إصلاح البند 5] سجل النشاط للخصم — بعد ما الفاتورة اتسجلت فعلاً
+  if (discountAmount > 0 && typeof addAuditLog === 'function') {
+    addAuditLog('apply_discount', {
+      saleId: saleObj.id,
+      discount: discountAmount,
+      subtotal: subtotal,
+      total: total,
+      customerId: customerId
+    }, saleObj.id);
+  }
+
 await uploadToCloud();
   saveData();
   playBeep(true);
@@ -309,7 +343,6 @@ function renderSales() {
     return;
   }
 
-  // ترجمة طريقة الدفع
   const en = currentLang === 'en';
   const payLabels = {
     cash: en ? 'Cash' : 'نقدي',
@@ -322,13 +355,17 @@ function renderSales() {
   filtered.forEach(function(s) {
     const cust = state.customers.find(function(c) { return c.id === s.customerId; });
     const payText = payLabels[s.payMethod] || s.payMethod || '-';
+    // [إصلاح] Number() بدل .toFixed مباشرة
+    const totalNum = Number(s.total) || 0;
+    const paidNum = Number(s.paid) || 0;
+    const remainingNum = Number(s.remaining) || 0;
     html += '<tr>' +
   '<td>' + escapeHTML(s.id) + '</td>' +
   '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
   '<td>' + (cust ? escapeHTML(cust.name) : 'نقدي') + '</td>' +
-  '<td>' + s.total.toFixed(2) + '</td>' +
-  '<td>' + s.paid.toFixed(2) + '</td>' +
-  '<td class="' + (s.remaining > 0 ? 'red-text' : '') + '">' + s.remaining.toFixed(2) + '</td>' +
+  '<td>' + totalNum.toFixed(2) + '</td>' +
+  '<td>' + paidNum.toFixed(2) + '</td>' +
+  '<td class="' + (remainingNum > 0 ? 'red-text' : '') + '">' + remainingNum.toFixed(2) + '</td>' +
   '<td>' + escapeHTML(payText) + '</td>' +
   '<td style="white-space: nowrap;">' +
     '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة">🧾</button>' +
@@ -391,16 +428,40 @@ function executeDeleteRecord(type, id) {
       closedShift.totalSales = Math.max(0, (Number(closedShift.totalSales) || 0) - (Number(s.total) || 0));
       closedShift.saleCount = Math.max(0, (Number(closedShift.saleCount) || 0) - 1);
       if (s.payMethod === 'cash') closedShift.cashSales = Math.max(0, (Number(closedShift.cashSales) || 0) - (Number(s.paid) || 0));
-      closedShift.difference = (Number(closedShift.actualCash) || 0) - (Number(closedShift.cashSales) || 0);
+      // [إصلاح] نفس منطق closeShift: نخصم drawerExpenses قبل حساب difference
+      const drawerExp = Number(closedShift.drawerExpenses) || 0;
+      const expectedCash = Math.max(0, (Number(closedShift.cashSales) || 0) - drawerExp);
+      closedShift.difference = (Number(closedShift.actualCash) || 0) - expectedCash;
     }
     state.sales.splice(idx, 1);
     
     if (navigator.onLine && supabaseClient) {
       supabaseClient.from('sales').delete().eq('id', id).then();
     }
+
+    // [إصلاح البند 5] سجل حذف فاتورة
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('delete_sale', {
+        saleId: s.id,
+        total: s.total,
+        paid: s.paid,
+        customerId: s.customerId,
+        itemsCount: s.items ? s.items.length : 0
+      }, s.id);
+    }
     
   } else if (type === 'expense') {
+    const exp = state.expenses.find(function(e) { return e.id === id; });
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
+
+    // [إصلاح البند 5] سجل حذف مصروف
+    if (exp && typeof addAuditLog === 'function') {
+      addAuditLog('delete_expense', {
+        expenseId: exp.id,
+        name: exp.name,
+        amount: exp.amount
+      }, exp.id);
+    }
   } else if (type === 'purchase') {
     const idx = state.purchases.findIndex(function(p) { return p.id === id; });
     if (idx !== -1) {
@@ -410,6 +471,16 @@ function executeDeleteRecord(type, id) {
         prod.stock = Math.max(0, prod.stock - p.qty);
       }
       state.purchases.splice(idx, 1);
+
+      // [إصلاح البند 5] سجل حذف مشتريات
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('delete_purchase', {
+          purchaseId: p.id,
+          productId: p.productId,
+          qty: p.qty,
+          total: p.total
+        }, p.id);
+      }
     }
   }
 
@@ -425,13 +496,20 @@ function clearTableLog(logType) {
 }
   if (!confirm(tr('msg_clear_log'))) return;
 
-  if (logType === 'sales') state.sales = [];
-  else if (logType === 'expenses') state.expenses = [];
-  else if (logType === 'purchases') state.purchases = [];
+  let clearedCount = 0;
+  if (logType === 'sales') { clearedCount = state.sales.length; state.sales = []; }
+  else if (logType === 'expenses') { clearedCount = state.expenses.length; state.expenses = []; }
+  else if (logType === 'purchases') { clearedCount = state.purchases.length; state.purchases = []; }
+
+  // [إصلاح البند 5] سجل تصفير جماعي
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('clear_table_log', {
+      logType: logType,
+      clearedCount: clearedCount
+    }, logType);
+  }
 
   saveData();
   renderAll();
   showNotification('تم تصفير السجل بنجاح ✅');
 }
-
-// ▲▲▲ نهاية الجزء 1/3 — انسخ الجزء 2/3 بعد ده مباشرة ▲▲▲

@@ -3,6 +3,10 @@ function setupBarcodeListener() {
   const barcodeInput = document.getElementById('saleBarcode');
   if (!barcodeInput) return;
 
+  // [إصلاح] منع تكرار الـ listeners (لو setupBarcodeListener اتنادت أكتر من مرة)
+  if (barcodeInput.__barcodeListenerAttached) return;
+  barcodeInput.__barcodeListenerAttached = true;
+
   barcodeInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -29,9 +33,14 @@ function setupBarcodeListener() {
 function processBarcodeNow(code) {
   const cleanCode = normalizeBarcode(code);
   if (!cleanCode) return;
-  if (cleanCode === lastProcessedBarcode) return;
+
+  // [إصلاح] debounce بـ timestamp بدل "flag + reset"
+  const now = Date.now();
+  if (lastProcessedBarcode === cleanCode && (now - (window.__lastBarcodeTime || 0)) < 500) {
+    return;
+  }
   lastProcessedBarcode = cleanCode;
-  setTimeout(function() { lastProcessedBarcode = ''; }, 800);
+  window.__lastBarcodeTime = now;
 
   const product = state.products.find(function(p) {
     return normalizeBarcode(p.barcode) === cleanCode;
@@ -43,7 +52,8 @@ function processBarcodeNow(code) {
     return;
   }
 
-  if (Number(product.stock) <= 0) {
+  const stockNum = Number(product.stock) || 0;
+  if (stockNum <= 0) {
     playBeep(false);
     showNotification(tr('notify_product_out'), 'error');
     return;
@@ -51,12 +61,13 @@ function processBarcodeNow(code) {
 
   const existing = state.cart.find(function(item) { return item.id === product.id; });
   if (existing) {
-    if (existing.qty + 1 > product.stock) {
+    // [إصلاح] Number() متسق
+    if ((Number(existing.qty) || 0) + 1 > stockNum) {
       playBeep(false);
       showNotification('الكمية تتجاوز المخزون!', 'error');
       return;
     }
-    existing.qty += 1;
+    existing.qty = (Number(existing.qty) || 0) + 1;
   } else {
     state.cart.push({
       id: product.id,
@@ -102,6 +113,7 @@ async function openBarcodeScanner() {
     });
 
     const video = document.getElementById('barcodeVideo');
+    if (!video) throw new Error('عنصر الفيديو غير موجود');
     video.srcObject = barcodeStream;
     await video.play();
 
@@ -137,4 +149,3 @@ function closeBarcodeScanner() {
   const modal = document.getElementById('barcodeModal');
   if (modal) modal.style.display = 'none';
 }
-

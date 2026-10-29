@@ -1,19 +1,26 @@
 /* ============ لوحة التحكم والهدف والتنبيهات ============ */
 function renderDashboard() {
-  const totalSales = state.sales.reduce(function(sum, s) { return sum + s.total; }, 0);
-  const totalExpenses = state.expenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
+  // [إصلاح] Number() على كل القيم عشان نتحمل strings من السيرفر + حماية items null
+  const totalSales = state.sales.reduce(function(sum, s) { return sum + (Number(s.total) || 0); }, 0);
+  const totalExpenses = state.expenses.reduce(function(sum, e) { return sum + (Number(e.amount) || 0); }, 0);
   const totalProducts = state.products.length;
-  const lowStockCount = state.products.filter(function(p) { return Number(p.stock) <= Number(p.minStock || 5); }).length;
+  const lowStockCount = state.products.filter(function(p) {
+    const min = Number.isFinite(Number(p.minStock)) ? Number(p.minStock) : 5;
+    return (Number(p.stock) || 0) <= min;
+  }).length;
 
   let totalCost = 0;
   state.sales.forEach(function(s) {
-    s.items.forEach(function(i) { totalCost += (i.cost || 0) * i.qty; });
+    if (!s || !Array.isArray(s.items)) return;
+    s.items.forEach(function(i) {
+      totalCost += (Number(i.cost) || 0) * (Number(i.qty) || 0);
+    });
   });
   const netProfit = totalSales - totalCost - totalExpenses;
 
-  const customerDebt = state.customers.reduce(function(sum, c) { return sum + (c.openingDebt || 0); }, 0);
-  const supplierDue = state.suppliers.reduce(function(sum, s) { return sum + (s.openingDebt || 0); }, 0);
-  const stockValue = state.products.reduce(function(sum, p) { return sum + (p.stock * p.cost); }, 0);
+  const customerDebt = state.customers.reduce(function(sum, c) { return sum + (Number(c.openingDebt) || 0); }, 0);
+  const supplierDue = state.suppliers.reduce(function(sum, s) { return sum + (Number(s.openingDebt) || 0); }, 0);
+  const stockValue = state.products.reduce(function(sum, p) { return sum + ((Number(p.stock) || 0) * (Number(p.cost) || 0)); }, 0);
 
   const cardsEl = document.getElementById('dashboardCards');
   if (cardsEl) {
@@ -44,7 +51,10 @@ function renderSmartAlerts() {
   if (!container) return;
   
   let alerts = [];
-  const lowStock = state.products.filter(function(p) { return Number(p.stock) <= Number(p.minStock || 5); });
+  const lowStock = state.products.filter(function(p) {
+    const min = Number.isFinite(Number(p.minStock)) ? Number(p.minStock) : 5;
+    return (Number(p.stock) || 0) <= min;
+  });
   
   if (lowStock.length > 0) {
     alerts.push({
@@ -87,7 +97,8 @@ function renderMonthlyGoal() {
     return d >= monthStart && d <= monthEnd;
   });
 
-  const actualSales = monthSales.reduce((sum, s) => sum + s.total, 0);
+  // [إصلاح] Number() بدل الجمع المباشر
+  const actualSales = monthSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
   const percent = Math.min(100, (actualSales / goal * 100));
   const remaining = Math.max(0, goal - actualSales);
   const cur = state.storeSettings.currency;
@@ -115,10 +126,11 @@ function renderSalesChart() {
     days.push(d.toISOString().slice(0, 10));
   }
 
+  // [إصلاح] Number() بدل الجمع المباشر
   const data = days.map(function(day) {
     return state.sales
       .filter(function(s) { return (s.date || '').split('T')[0] === day; })
-      .reduce(function(sum, s) { return sum + s.total; }, 0);
+      .reduce(function(sum, s) { return sum + (Number(s.total) || 0); }, 0);
   });
 
   const labels = days.map(function(day) {
@@ -126,7 +138,11 @@ function renderSalesChart() {
     return d.toLocaleDateString(currentLang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short' });
   });
 
-  if (salesChartInstance) salesChartInstance.destroy();
+  // [إصلاح] حماية destroy
+  if (salesChartInstance) {
+    try { salesChartInstance.destroy(); } catch (e) { console.warn('Chart destroy failed', e); }
+    salesChartInstance = null;
+  }
 
   const canvas = document.createElement('canvas');
   container.innerHTML = '';
@@ -159,4 +175,3 @@ function renderSalesChart() {
     }
   });
 }
-

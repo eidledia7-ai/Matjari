@@ -1,3 +1,4 @@
+/* ============ صفحة الهبوط للزوار ============ */
 function renderLandingView() {
   const container = document.getElementById('landingView');
   if (!container) return;
@@ -46,7 +47,7 @@ function renderLandingView() {
       <div class="floating-icon icon-3">💬</div>
     </div>
 
-    <!-- قسم مشاكل التاجر (جديد) -->
+    <!-- قسم مشاكل التاجر -->
     <div style="background: #fff; padding: 40px 20px; text-align: center; border-bottom: 1px solid #e2e8f0;">
       <h2 style="font-size: 28px; font-weight: 900; color: #0f172a; margin-bottom: 24px;">هل تعاني من هذه المشاكل في محلك؟</h2>
       <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; max-width: 900px; margin: 0 auto;">
@@ -56,7 +57,7 @@ function renderLandingView() {
       </div>
     </div>
 
-    <!-- قسم المميزات (محدث) -->
+    <!-- قسم المميزات -->
     <div class="landing-features">
       <div class="landing-feature-card">
         <div class="feat-icon" style="background:#eff6ff; color:#2563eb;">⚡</div>
@@ -127,4 +128,3 @@ function showAuthView(mode) {
     if (email) email.focus();
   }, 100);
 }
-

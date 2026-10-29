@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title data-i18n="app_title">متجري - نظام المبيعات والمخازن المتكامل</title>
-   <link rel="icon" href="icon-192.png">
+  <link rel="icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#176b70">
@@ -12,34 +14,35 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
- <script src="config.js" defer></script>
-<script src="translations.js" defer></script>
-<script src="core.js" defer></script>
-<script src="auth.js" defer></script>
-<script src="products.js" defer></script>
-<script src="settings.js" defer></script>
-<script src="storage.js" defer></script>
-<script src="main.js" defer></script>
-<script src="sales.js" defer></script>
-<script src="inventory.js" defer></script>
-<script src="partners.js" defer></script>
-<script src="finance.js" defer></script>
-<script src="dashboard.js" defer></script>
-<script src="printing.js" defer></script>
-<script src="backup.js" defer></script>
-<script src="updates.js" defer></script>
-<script src="barcode.js" defer></script>
-<script src="reports.js" defer></script>
-<script src="compare.js" defer></script>
-<script src="staff.js" defer></script>
-<script src="subscription.js" defer></script>
-<script src="landing.js" defer></script>
-<script src="helpers.js" defer></script>
+
+  <!-- [ترتيب جديد] ملفات التطبيق -->
+  <script src="config.js" defer></script>
+  <script src="translations.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="audit.js" defer></script>
+  <script src="helpers.js" defer></script>
+  <script src="products.js" defer></script>
+  <script src="settings.js" defer></script>
+  <script src="sales.js" defer></script>
+  <script src="inventory.js" defer></script>
+  <script src="partners.js" defer></script>
+  <script src="finance.js" defer></script>
+  <script src="dashboard.js" defer></script>
+  <script src="printing.js" defer></script>
+  <script src="barcode.js" defer></script>
+  <script src="backup.js" defer></script>
+  <script src="updates.js" defer></script>
+  <script src="compare.js" defer></script>
+  <script src="staff.js" defer></script>
+  <script src="subscription.js" defer></script>
+  <script src="landing.js" defer></script>
+  <script src="storage.js" defer></script>
+  <script src="auth.js" defer></script>
+  <script src="main.js" defer></script>
 </head>
 <body class="auth-locked">
 
   <!-- شاشة تسجيل الدخول -->
- <!-- شاشة تسجيل الدخول -->
 <div id="loginScreen" class="login-screen active">
   <!-- صفحة الهبوط للزوار -->
   <div id="landingView" class="landing-view"></div>
@@ -100,13 +103,10 @@
     </div>
     <nav id="mainNavigation" class="sidebar-nav">
       
-      <!-- 1. الرئيسية -->
       <button data-page="home" onclick="showPage('home')" data-i18n="menu_home">🏠 الرئيسية</button>
       
-      <!-- 2. نقطة البيع -->
       <button data-page="sales" onclick="showPage('sales')" data-i18n="menu_sales">🛒 نقطة البيع</button>
       
-      <!-- 3. المخزون -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('invSubMenu')">
           <span>📦 <span data-i18n="menu_inventory">المخزون</span> <span id="stockAlertBadge"></span></span>
@@ -119,7 +119,6 @@
         </div>
       </div>
 
-      <!-- 4. الشركاء -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('partSubMenu')">
           <span>🤝 <span data-i18n="menu_partners">الشركاء</span></span>
@@ -131,7 +130,6 @@
         </div>
       </div>
 
-      <!-- 5. المالية -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('finSubMenu')">
           <span>💰 <span data-i18n="menu_finance">المالية</span></span>
@@ -145,7 +143,6 @@
         </div>
       </div>
 
-      <!-- 6. الإعدادات -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('settSubMenu')">
           <span>⚙️ <span data-i18n="menu_settings">الإعدادات</span></span>
@@ -154,17 +151,14 @@
         <div id="settSubMenu" class="sub-menu">
           <button data-page="settStore" onclick="showPage('settStore')" data-i18n="store_data_page">🏪 بيانات المحل</button>
           <button data-page="settLang" onclick="showPage('settLang')" data-i18n="lang_page">🌐 لغة التطبيق</button>
-   
-             <button data-page="settSubscription" onclick="showPage('settSubscription')" data-i18n="subscription_page">💳 اشتراكي</button>
+          <button data-page="settSubscription" onclick="showPage('settSubscription')" data-i18n="subscription_page">💳 اشتراكي</button>
           <button data-page="settStaff" onclick="showPage('settStaff')" data-i18n="staff_page">👥 إدارة الموظفين</button>
-          
-              <button data-page="settBackup" onclick="showPage('settBackup')" data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</button>
+          <button data-page="settBackup" onclick="showPage('settBackup')" data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</button>
           <button data-page="settUpdates" onclick="showPage('settUpdates')" data-i18n="app_updates">🔄 التحديثات والكاش</button>
           <button type="button" onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
         </div>
       </div>
 
-      <!-- 7. الدعم -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('helpSubMenu')"><span>🆘 <span data-i18n="menu_support">الدعم والمساعدة</span></span><span class="arrow">▼</span></button>
         <div id="helpSubMenu" class="sub-menu">
@@ -178,7 +172,7 @@
    
       <button onclick="changePasswordPrompt()" data-i18n="change_pass_btn" style="background:#1769aa; margin-top: 10px;">🔑 تغيير كلمة المرور</button>
             
-            <button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
+      <button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
     </nav>
   </aside>
 
@@ -379,7 +373,6 @@
      <div class="btn-group">
   <button class="btn orange small-btn" onclick="openBarcodePrintModal()" data-i18n="print_barcode">🏷️ طباعة باركود</button>
   <button class="btn secondary small-btn" onclick="openExportModal('products')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
-  <!-- زرار الاستيراد الجديد -->
   <label class="btn green small-btn" style="cursor:pointer; margin:0;">
     📥 استيراد Excel
     <input type="file" accept=".csv" onchange="importProductsCSV(event)" style="display:none;">
@@ -717,7 +710,6 @@
       </div>
     </div>
 
- 
  <!-- 5. المالية - التقارير -->
 <div id="finReports" class="page">
   <h2 data-i18n="tab_reports">📈 التقارير المالية</h2>
@@ -750,10 +742,8 @@
     </div>
   </div>
 
-  <!-- هنا هتظهر الكروت الأساسية (المبيعات، التكلفة، الربح...) -->
   <div id="reportCards" class="grid-cards mt-20"></div>
   
-  <!-- هنا هتظهر كروت تفاصيل الدفع وأفضل العملاء -->
   <div id="activityDetailsReport"></div>
 
   <div class="card mt-20">
@@ -973,18 +963,18 @@
       <div class="btn-group mt-15">
       <button class="btn primary" onclick="inviteStaff()">إرسال الدعوة 📧</button>
     </div>
-  </div> <!-- قفل كارت الإضافة -->
+  </div>
 
   <div class="card mt-20">
     <h3>قائمة الموظفين الحاليين</h3>
     <div id="staffList" class="mt-15"></div>
-      </div> <!-- قفل كارت القائمة -->
+      </div>
 <div class="card mt-20">
   <h3>📜 سجل النشاط (Audit Log)</h3>
   <p class="muted" style="font-size: 13px; margin-bottom: 15px;">هنا يتم تسجيل العمليات الحساسة التي تمت على النظام.</p>
   <div id="auditLogTable"></div>
 </div>
-</div> <!-- قفل الصفحة كلها -->
+</div>
 
     <!-- 6. الإعدادات - النسخ الاحتياطي -->
     <div id="settBackup" class="page">
@@ -1198,7 +1188,6 @@
       <button onclick="closeHeldCartsModal()" style="background:transparent; color:var(--text-muted); border:none; font-size:20px; cursor:pointer;">✕</button>
     </div>
     <div id="heldCartsList" style="max-height:400px; overflow-y:auto;">
-      <!-- سيتم عرض الفواتير هنا -->
     </div>
   </div>
 </div>
@@ -1233,7 +1222,6 @@
     </div>
     
     <div id="statementContent" style="max-height: 60vh; overflow-y: auto;">
-      <!-- الجدول هيظهر هنا -->
     </div>
     
     <div class="btn-group mt-20" style="justify-content: flex-end;">
@@ -1241,12 +1229,14 @@
       <button class="btn green" onclick="sendCustomerStatementWhatsApp()" style="background:#25D366;">💬 إرسال واتساب</button>
       <button class="btn grey" onclick="document.getElementById('customerStatementModal').style.display='none'">إغلاق</button>
     </div>
-    <div id="skeletonLoader" style="display:none; padding:20px;">
-  <div class="skeleton" style="height:40px; margin-bottom:10px; border-radius:8px;"></div>
-  <div class="skeleton" style="height:100px; margin-bottom:10px; border-radius:8px;"></div>
-  <div class="skeleton" style="height:200px; border-radius:8px;"></div>
-</div>
   </div>
+</div>
+
+<!-- [إصلاح] skeletonLoader مستقل عن أي modal -->
+<div id="skeletonLoader" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.4); padding:20px; overflow:auto;">
+  <div class="skeleton" style="height:40px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
+  <div class="skeleton" style="height:100px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
+  <div class="skeleton" style="height:200px; border-radius:8px; background:#fff;"></div>
 </div>
 </body>
 </html>

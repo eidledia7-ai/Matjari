@@ -7,15 +7,47 @@ function saveCustomer() {
   const id = document.getElementById('customerId').value;
   const name = document.getElementById('customerName').value.trim();
   const phone = document.getElementById('customerPhone').value.trim();
-  const openingDebt = parseFloat(document.getElementById('customerOpeningDebt').value) || 0;
+  const rawDebt = parseFloat(document.getElementById('customerOpeningDebt').value);
+  // [إصلاح] تحقق من السالب و NaN
+  const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
   if (!name) return showNotification('اسم العميل مطلوب', 'error');
 
   if (id) {
+    // [إصلاح حرج] تعديل عميل موجود: منلمسش الديون إلا لو المستخدم عدلها صراحة
     const c = state.customers.find(function(item) { return item.id === id; });
-    if (c) { c.name = name; c.phone = phone; c.openingDebt = openingDebt; }
+    if (c) {
+      const oldDebt = Number(c.openingDebt) || 0;
+      c.name = name;
+      c.phone = phone;
+      // نحدّث الدين فقط لو الحقل اتغير عن القيمة القديمة
+      // (الحقل بيبدأ بقيمة الدين الحالية في الـ UI، فلو المستخدم ملمسوش، القيمة هتكون نفسها)
+      if (openingDebt !== oldDebt && openingDebt >= 0) {
+        c.openingDebt = openingDebt;
+        if (typeof addAuditLog === 'function') {
+          addAuditLog('edit_customer_debt', {
+            customerId: c.id,
+            customerName: name,
+            oldDebt: oldDebt,
+            newDebt: openingDebt
+          }, c.id);
+        }
+      }
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('edit_customer', { customerId: c.id, customerName: name }, c.id);
+      }
+    }
   } else {
-    state.customers.push({ id: uid('CUST'), name: name, phone: phone, openingDebt: openingDebt });
+    const newCust = { id: uid('CUST'), name: name, phone: phone, openingDebt: openingDebt };
+    state.customers.push(newCust);
+    // [إصلاح البند 5] سجل إضافة عميل
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('add_customer', {
+        customerId: newCust.id,
+        customerName: newCust.name,
+        openingDebt: newCust.openingDebt
+      }, newCust.id);
+    }
   }
 
   saveData();
@@ -49,7 +81,8 @@ function renderCustomers() {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
       const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
       const debtLabel = currentLang === 'en' ? ' (Debt: ' : ' (دين: ';
-      paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + (c.openingDebt || 0).toFixed(2) + ')</option>';
+      // [إصلاح] Number() بدل .toFixed المباشر
+      paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + (Number(c.openingDebt) || 0).toFixed(2) + ')</option>';
     });
     if (currentVal) paySel.value = currentVal;
   }
@@ -61,11 +94,12 @@ function renderCustomers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_debts">الديون</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(c) {
-    const debtClass = (c.openingDebt || 0) > 0 ? 'red-text' : '';
+    const debtVal = Number(c.openingDebt) || 0;
+    const debtClass = debtVal > 0 ? 'red-text' : '';
     html += '<tr>' +
   '<td>' + escapeHTML(c.name) + '</td>' +
   '<td>' + escapeHTML(c.phone || '-') + '</td>' +
-  '<td class="' + debtClass + '"><b>' + (c.openingDebt || 0).toFixed(2) + '</b></td>' +
+  '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
   '<td style="white-space:nowrap;">' +
     '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
     '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
@@ -79,7 +113,29 @@ function renderCustomers() {
 function deleteCustomer(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
-  if (!confirm(tr('msg_delete_customer'))) return;
+
+  const cust = state.customers.find(function(c) { return c.id === id; });
+  // [إصلاح حرج] منع حذف عميل عليه ديون — تحذير صريح
+  if (cust && (Number(cust.openingDebt) || 0) > 0) {
+    const debt = Number(cust.openingDebt) || 0;
+    const confirmMsg = currentLang === 'en'
+      ? 'This customer has an outstanding debt of ' + debt.toFixed(2) + '. Are you sure you want to delete? The debt will be lost.'
+      : 'هذا العميل عليه ديون ' + debt.toFixed(2) + ' جنيه. هل أنت متأكد من الحذف؟ ستفقد قيمة الدين نهائياً.';
+    if (!confirm(confirmMsg)) return;
+  } else {
+    if (!confirm(tr('msg_delete_customer'))) return;
+  }
+
+  // [إصلاح البند 5] سجل حذف عميل
+  if (cust && typeof addAuditLog === 'function') {
+    addAuditLog('delete_customer', {
+      customerId: cust.id,
+      customerName: cust.name,
+      phone: cust.phone,
+      outstandingDebt: Number(cust.openingDebt) || 0
+    }, cust.id);
+  }
+
   state.customers = state.customers.filter(function(c) { return c.id !== id; });
   saveData();
   renderCustomers();
@@ -95,24 +151,40 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
   const date = document.getElementById('customerPaymentDate').value || today();
   const notes = document.getElementById('customerPaymentNotes').value.trim();
 
-  if (!customerId || isNaN(amount) || amount <= 0) return showNotification('أدخل مبلغاً صحيحاً', 'error');
+  // [إصلاح] حماية من Infinity و NaN
+  if (!customerId || !Number.isFinite(amount) || amount <= 0) return showNotification('أدخل مبلغاً صحيحاً', 'error');
 
   const cust = state.customers.find(function(c) { return c.id === customerId; });
   if (!cust) return showNotification('العميل غير موجود', 'error');
 
-  if (amount > (cust.openingDebt || 0)) {
+  const currentDebt = Number(cust.openingDebt) || 0;
+
+  if (amount > currentDebt) {
     if (!confirm('المبلغ أكبر من الدين. تسجيل الفرق كرصيد دائن؟')) return;
-    const diff = amount - (cust.openingDebt || 0);
-    cust.openingDebt = (cust.openingDebt || 0) - amount;
+    const diff = amount - currentDebt;
+    cust.openingDebt = currentDebt - amount;
     showNotification('تم الخصم. الفرق رصيد دائن: ' + diff.toFixed(2), 'info');
   } else {
-    cust.openingDebt = Math.max(0, (cust.openingDebt || 0) - amount);
+    cust.openingDebt = Math.max(0, currentDebt - amount);
   }
 
-  state.customerPayments.unshift({
+  const newPayment = {
     id: uid('CP'), customerId: customerId, customerName: cust.name,
     amount: amount, date: date, notes: notes
-  });
+  };
+  state.customerPayments.unshift(newPayment);
+
+  // [إصلاح البند 5] سجل تحصيل دفعة
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('record_customer_payment', {
+      paymentId: newPayment.id,
+      customerId: customerId,
+      customerName: cust.name,
+      amount: amount,
+      debtBefore: currentDebt,
+      debtAfter: Number(cust.openingDebt) || 0
+    }, newPayment.id);
+  }
 
   saveData();
   document.getElementById('customerPaymentAmount').value = '';
@@ -131,10 +203,11 @@ function renderCustomerPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.customerPayments.forEach(function(p) {
+    // [إصلاح] Number() بدل .toFixed المباشر
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
       '<td>' + escapeHTML(p.customerName) + '</td>' +
-      '<td><b>' + p.amount.toFixed(2) + '</b></td>' +
+      '<td><b>' + (Number(p.amount) || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(p.notes || '-') + '</td>' +
       '</tr>';
   });
@@ -149,15 +222,44 @@ function saveSupplier() {
   const id = document.getElementById('supplierId').value;
   const name = document.getElementById('supplierName').value.trim();
   const phone = document.getElementById('supplierPhone').value.trim();
-  const openingDebt = parseFloat(document.getElementById('supplierOpeningDebt').value) || 0;
+  const rawDebt = parseFloat(document.getElementById('supplierOpeningDebt').value);
+  // [إصلاح] تحقق من السالب و NaN
+  const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
   if (!name) return showNotification('اسم المورد مطلوب', 'error');
 
   if (id) {
     const s = state.suppliers.find(function(item) { return item.id === id; });
-    if (s) { s.name = name; s.phone = phone; s.openingDebt = openingDebt; }
+    if (s) {
+      const oldDebt = Number(s.openingDebt) || 0;
+      s.name = name;
+      s.phone = phone;
+      if (openingDebt !== oldDebt && openingDebt >= 0) {
+        s.openingDebt = openingDebt;
+        if (typeof addAuditLog === 'function') {
+          addAuditLog('edit_supplier_debt', {
+            supplierId: s.id,
+            supplierName: name,
+            oldDebt: oldDebt,
+            newDebt: openingDebt
+          }, s.id);
+        }
+      }
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('edit_supplier', { supplierId: s.id, supplierName: name }, s.id);
+      }
+    }
   } else {
-    state.suppliers.push({ id: uid('SUP'), name: name, phone: phone, openingDebt: openingDebt });
+    const newSup = { id: uid('SUP'), name: name, phone: phone, openingDebt: openingDebt };
+    state.suppliers.push(newSup);
+    // [إصلاح البند 5] سجل إضافة مورد
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('add_supplier', {
+        supplierId: newSup.id,
+        supplierName: newSup.name,
+        openingDebt: newSup.openingDebt
+      }, newSup.id);
+    }
   }
 
   saveData();
@@ -173,7 +275,7 @@ function editSupplier(id) {
   document.getElementById('supplierId').value = s.id;
   document.getElementById('supplierName').value = s.name || '';
   document.getElementById('supplierPhone').value = s.phone || '';
-  document.getElementById('supplierOpeningDebt').value = s.openingDebt || 0;
+  document.getElementById('supplierOpeningDebt').value = Number(s.openingDebt) || 0;
   const title = document.getElementById('supplierFormTitle');
   if (title) title.innerText = 'تعديل مورد: ' + s.name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -207,7 +309,7 @@ function renderSuppliers() {
     const curVal = suppPaySel.value;
     suppPaySel.innerHTML = '<option value="">' + tr('opt_select_supplier') + '</option>';
     state.suppliers.forEach(function(s) {
-      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + (currentLang === 'en' ? ' (Payables: ' : ' (له مستحقات: ') + (s.openingDebt || 0).toFixed(2) + ')</option>';
+      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + (currentLang === 'en' ? ' (Payables: ' : ' (له مستحقات: ') + (Number(s.openingDebt) || 0).toFixed(2) + ')</option>';
     });
     if (curVal) suppPaySel.value = curVal;
   }
@@ -229,11 +331,12 @@ function renderSuppliers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_payables">المستحقات (له فلوس)</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.suppliers.forEach(function(s) {
-    const debtClass = (s.openingDebt || 0) > 0 ? 'green-text' : '';
+    const debtVal = Number(s.openingDebt) || 0;
+    const debtClass = debtVal > 0 ? 'green-text' : '';
     html += '<tr>' +
       '<td>' + escapeHTML(s.name) + '</td>' +
       '<td>' + escapeHTML(s.phone || '-') + '</td>' +
-      '<td class="' + debtClass + '"><b>' + (s.openingDebt || 0).toFixed(2) + '</b></td>' +
+      '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
       '<td>' +
         '<button class="small-btn primary" onclick="editSupplier(\'' + s.id + '\')">تعديل</button>' +
         '<button class="small-btn red" onclick="deleteSupplier(\'' + s.id + '\')">حذف</button>' +
@@ -246,7 +349,29 @@ function renderSuppliers() {
 
 function deleteSupplier(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-  if (!confirm(tr('msg_delete_supplier'))) return;
+
+  const sup = state.suppliers.find(function(s) { return s.id === id; });
+  // [إصلاح حرج] منع حذف مورد عليه مستحقات
+  if (sup && (Number(sup.openingDebt) || 0) > 0) {
+    const debt = Number(sup.openingDebt) || 0;
+    const confirmMsg = currentLang === 'en'
+      ? 'You owe this supplier ' + debt.toFixed(2) + '. Delete anyway? The payable will be lost.'
+      : 'عليك مستحقات لهذا المورد ' + debt.toFixed(2) + ' جنيه. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
+    if (!confirm(confirmMsg)) return;
+  } else {
+    if (!confirm(tr('msg_delete_supplier'))) return;
+  }
+
+  // [إصلاح البند 5] سجل حذف مورد
+  if (sup && typeof addAuditLog === 'function') {
+    addAuditLog('delete_supplier', {
+      supplierId: sup.id,
+      supplierName: sup.name,
+      phone: sup.phone,
+      outstandingDebt: Number(sup.openingDebt) || 0
+    }, sup.id);
+  }
+
   state.suppliers = state.suppliers.filter(function(s) { return s.id !== id; });
   saveData();
   renderSuppliers();
@@ -315,14 +440,30 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
 
   if (remaining > 0) {
     const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-    if (sup) sup.openingDebt = (sup.openingDebt || 0) + remaining;
+    if (sup) sup.openingDebt = (Number(sup.openingDebt) || 0) + remaining;
   }
 
-  state.purchases.unshift({
+  const newPurchase = {
     id: uid('PUR'), date: new Date().toISOString(),
     supplierId: supplierId, productId: targetProdId, productName: targetProdName,
     qty: qty, cost: cost, total: total, paid: paid, remaining: remaining
-  });
+  };
+  state.purchases.unshift(newPurchase);
+
+  // [إصلاح البند 5] سجل تسجيل مشتريات
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('add_purchase', {
+      purchaseId: newPurchase.id,
+      supplierId: supplierId,
+      productId: targetProdId,
+      productName: targetProdName,
+      qty: qty,
+      cost: cost,
+      total: total,
+      paid: paid,
+      remaining: remaining
+    }, newPurchase.id);
+  }
 
   saveData();
   document.getElementById('purchaseNewName').value = '';
@@ -349,14 +490,17 @@ function renderPurchases() {
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.purchases.forEach(function(p) {
     const sup = state.suppliers.find(function(s) { return s.id === p.supplierId; });
+    // [إصلاح] Number() بدل .toFixed المباشر
+    const totalNum = Number(p.total) || 0;
+    const remainingNum = Number(p.remaining) || 0;
     html += '<tr>' +
       '<td>' + new Date(p.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
       '<td>' + escapeHTML(sup ? sup.name : '-') + '</td>' +
       '<td>' + escapeHTML(p.productName) + '</td>' +
       '<td>' + p.qty + '</td>' +
       '<td>' + p.cost + '</td>' +
-      '<td>' + p.total.toFixed(2) + '</td>' +
-      '<td class="' + (p.remaining > 0 ? 'red-text' : '') + '">' + p.remaining.toFixed(2) + '</td>' +
+      '<td>' + totalNum.toFixed(2) + '</td>' +
+      '<td class="' + (remainingNum > 0 ? 'red-text' : '') + '">' + remainingNum.toFixed(2) + '</td>' +
       '<td><button class="small-btn red" onclick="safeDeleteRecord(\'purchase\', \'' + p.id + '\')">حذف خطأ</button></td>' +
       '</tr>';
   });
@@ -372,17 +516,32 @@ function recordSupplierPayment() {
   const date = document.getElementById('supplierPaymentDate').value || today();
   const notes = document.getElementById('supplierPaymentNotes').value.trim();
 
-  if (!supplierId || isNaN(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
+  // [إصلاح] حماية من Infinity و NaN
+  if (!supplierId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
 
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
   if (!sup) return showNotification('المورد غير موجود', 'error');
 
-  sup.openingDebt = Math.max(0, (sup.openingDebt || 0) - amount);
+  const debtBefore = Number(sup.openingDebt) || 0;
+  sup.openingDebt = Math.max(0, debtBefore - amount);
 
-  state.supplierPayments.unshift({
+  const newPayment = {
     id: uid('SUPP'), supplierId: supplierId, supplierName: sup.name,
     amount: amount, date: date, notes: notes
-  });
+  };
+  state.supplierPayments.unshift(newPayment);
+
+  // [إصلاح البند 5] سجل سداد مورد
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('record_supplier_payment', {
+      paymentId: newPayment.id,
+      supplierId: supplierId,
+      supplierName: sup.name,
+      amount: amount,
+      debtBefore: debtBefore,
+      debtAfter: Number(sup.openingDebt) || 0
+    }, newPayment.id);
+  }
 
   saveData();
   document.getElementById('supplierPaymentAmount').value = '';
@@ -401,14 +560,14 @@ function renderSupplierPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_amount_paid">المبلغ المدفوع</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.supplierPayments.forEach(function(p) {
+    // [إصلاح] Number() بدل .toFixed المباشر
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
       '<td>' + escapeHTML(p.supplierName) + '</td>' +
-      '<td><b>' + p.amount.toFixed(2) + '</b></td>' +
+      '<td><b>' + (Number(p.amount) || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(p.notes || '-') + '</td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-

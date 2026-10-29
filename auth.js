@@ -168,13 +168,14 @@ async function handleLogout() {
     showNotification('تعذر الخروج', 'error');
   }
 }
+
 /* ============ تغيير كلمة المرور ============ */
 async function changePasswordPrompt() {
   if (!supabaseClient) {
     return showNotification(currentLang === 'en' ? 'No connection to server.' : 'لا يوجد اتصال بالسيرفر.', 'error');
   }
   const newPass = prompt(currentLang === 'en' ? 'Enter new password (at least 6 characters):' : 'أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
-  if (newPass === null) return; // لو المستخدم داس إلغاء
+  if (newPass === null) return;
   
   if (newPass.length < 6) {
     return showNotification(currentLang === 'en' ? 'Password must be at least 6 characters.' : 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.', 'error');
@@ -211,7 +212,6 @@ async function openUserSession(user) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // نبدأ بالافتراضي الأأمن (موظف)
     state.role = 'employee';
     state.ownerId = null;
 
@@ -225,7 +225,6 @@ async function openUserSession(user) {
         throw new Error('بيانات دور المستخدم غير متسقة. تواصل مع الدعم.');
       }
     } else {
-      // لا يوجد سطر: نتحقق هل لديه بيانات shop_data
       let hasShopData = false;
       try {
         const dataCheck = await supabaseClient
@@ -236,7 +235,6 @@ async function openUserSession(user) {
         if (dataCheck.data) hasShopData = true;
       } catch (e) { }
 
-      // أول مستخدم (أو صاحب بيانات) → manager، وننشئ السطر
       state.role = 'manager';
       state.ownerId = null;
       try {
@@ -270,14 +268,13 @@ async function openUserSession(user) {
         payment_method: subRes.data.payment_method
       };
     } else {
-      // لو مفيش اشتراك، نفترض trial 14 يوم
       state.subscription = {
         plan: 'trial',
         status: 'active',
         trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       };
     }
-    // [إصلاح البند 1] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
+    // [البند 1] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
     state.ownerPlan = state.subscription.plan;
 
     // 3. تحديد مين صاحب البيانات (المدير) عشان نقرا كاشه ونحفظ فيه
@@ -298,7 +295,6 @@ async function openUserSession(user) {
     }
 
     let d = null;
-    // بنجيب البيانات من السيرفر لو موجودة، أو من الكاش
     if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
       d = dataRes.data.shop_data;
       try { localStorage.setItem('matjari_cache_' + cacheOwnerId, JSON.stringify(d)); } catch (e) {}
@@ -308,7 +304,7 @@ async function openUserSession(user) {
 
     if (d) {
       state.products = d.products || [];
-      // [إصلاح البند 4] الموظف ميشوفش فواتير الكاش المحلي القديمة
+      // [البند 4] الموظف ميشوفش فواتير الكاش المحلي القديمة
       state.sales = (state.role === 'employee') ? [] : (d.sales || []);
       state.customers = d.customers || [];
       state.suppliers = d.suppliers || [];
@@ -348,7 +344,7 @@ async function openUserSession(user) {
           .order('date', { ascending: false });
           
         if (state.role === 'employee') {
-          // [إصلاح البند 4] الموظف: نستبدل دايماً ببيانات السيرفر، ولو فشل نمسح
+          // [البند 4] الموظف: نستبدل دايماً ببيانات السيرفر، ولو فشل نمسح
           if (salesRes.data && Array.isArray(salesRes.data)) {
             state.sales = salesRes.data.map(s => ({
               id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
@@ -370,17 +366,16 @@ async function openUserSession(user) {
         }
       } catch (e) {
         console.warn('Fetch sales failed', e);
-        // [إصلاح البند 4] لو فشل جلب فواتير الموظف: امسح كاشه فوراً
         if (state.role === 'employee') state.sales = [];
       }
     }
+
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';
     showLoggedInUI();
     applyRolePermissions();
     renderAll();
 
-    // فحص الاشتراك قبل عرض الصفحة
     checkSubscriptionStatus();
     enforceSubscriptionBlock();
     const lastPage = getLastPage();
@@ -394,7 +389,15 @@ async function openUserSession(user) {
   } finally {
     hideLoading();
   }
-  try { localStorage.setItem('matjari_last_user', JSON.stringify({ id: user.id, email: user.email, role: state.role })); } catch(e) {}
+  // [إصلاح] حفظ ownerId عشان loadOfflineSession يشتغل للموظف
+  try {
+    localStorage.setItem('matjari_last_user', JSON.stringify({
+      id: user.id,
+      email: user.email,
+      role: state.role,
+      ownerId: state.ownerId || null
+    }));
+  } catch (e) {}
 }
 
 /* ============ فحص حالة الاشتراك ============ */
@@ -402,7 +405,6 @@ function checkSubscriptionStatus() {
   const sub = state.subscription || {};
   const en = currentLang === 'en';
 
-  // حالة غير نشطة
   if (sub.status !== 'active') {
     showNotification(
       en ? 'Your subscription is inactive. Please renew.' : 'اشتراكك غير نشط. جدد الآن.',
@@ -418,7 +420,6 @@ function checkSubscriptionStatus() {
     if (sub.trial_ends_at) {
       endDate = new Date(sub.trial_ends_at).getTime();
     } else {
-      // [إصلاح] trial بدون تاريخ = بيانات تالفة، نعتبره منتهي
       showNotification(
         en ? 'Trial data corrupted. Please subscribe.' : 'بيانات التجربة تالفة. يرجى الاشتراك.',
         'error'
@@ -429,7 +430,7 @@ function checkSubscriptionStatus() {
     endDate = new Date(sub.expires_at).getTime();
   }
 
-  if (!endDate) return; // اشتراك دائم بدون تاريخ انتهاء
+  if (!endDate) return;
 
   const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
 
@@ -466,7 +467,6 @@ function applyRolePermissions() {
   const syncBtn = document.querySelector('.sidebar-nav button[data-action="sync"]');
   if (syncBtn) syncBtn.style.display = employee ? 'none' : '';
 
-  // [إضافة] إخفاء .nav-group إذا كل أزراره مخفية، وإظهاره إذا فيه أي زر ظاهر
   document.querySelectorAll('.nav-group').forEach(function(group) {
     const buttons = group.querySelectorAll('button');
     let anyVisible = false;
@@ -478,7 +478,6 @@ function applyRolePermissions() {
 }
 
 async function startAuth() {
-  // التعديل الجديد: لو مفيش نت، افتح التطبيق من الذاكرة على طول
   if (!navigator.onLine) {
     loadOfflineSession();
     return;
@@ -500,7 +499,6 @@ async function startAuth() {
       document.getElementById('recoveryPanel').style.display = 'block';
       document.getElementById('loginButtons').style.display = 'none';
       document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
-      // نمسح الهاش من الرابط عشان لو عمل Refresh ميفضلش يطلب باسورد
       history.replaceState(null, null, ' ');
       return;
     }
@@ -513,7 +511,6 @@ async function startAuth() {
       showLoggedOutUI();
     }
   } catch (e) {
-    // [إصلاح] نفتح offline فقط لو المشكلة شبكة، مش مشكلة بيانات/دور
     const isNetworkErr = !navigator.onLine || /network|fetch|timeout/i.test((e && e.message) || '');
     if (isNetworkErr) {
       loadOfflineSession();

@@ -47,7 +47,7 @@ async function printBarcodeLabels() {
   let labelsHtml = '';
 
   for (const prod of selectedProducts) {
-    const rawBarcode = prod.barcode ? prod.barcode.trim() : prod.id;
+    const rawBarcode = prod.barcode ? String(prod.barcode).trim() : prod.id;
     let code128Svg = '';
     let qrDataUrl = '';
 
@@ -56,16 +56,25 @@ async function printBarcodeLabels() {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       container.appendChild(svg);
       try {
-        JsBarcode(svg, rawBarcode, { format: 'CODE128', width: 2, height: 40, displayValue: true, fontSize: 12 });
-        code128Svg = svg.outerHTML;
+        if (typeof JsBarcode !== 'undefined') {
+          JsBarcode(svg, rawBarcode, { format: 'CODE128', width: 2, height: 40, displayValue: true, fontSize: 12 });
+          code128Svg = svg.outerHTML;
+        } else {
+          code128Svg = '<span>' + escapeHTML(rawBarcode) + '</span>';
+        }
       } catch (e) {
         code128Svg = '<span>' + escapeHTML(rawBarcode) + '</span>';
       }
     }
 
     if (type === 'qr' || type === 'both') {
+      // [إصلاح] حماية QRCode قبل الاستخدام
       try {
-        qrDataUrl = await QRCode.toDataURL(rawBarcode, { width: 100, margin: 1 });
+        if (typeof QRCode !== 'undefined' && QRCode.toDataURL) {
+          qrDataUrl = await QRCode.toDataURL(rawBarcode, { width: 100, margin: 1 });
+        } else {
+          qrDataUrl = '';
+        }
       } catch (e) {
         qrDataUrl = '';
       }
@@ -74,7 +83,8 @@ async function printBarcodeLabels() {
     for (let i = 0; i < copies; i++) {
       labelsHtml += '<div class="barcode-label">';
       labelsHtml += '<div class="label-name">' + escapeHTML(prod.name) + '</div>';
-      labelsHtml += '<div class="label-price">' + prod.price + ' ' + escapeHTML(state.storeSettings.currency || 'ج.م') + '</div>';
+      // [إصلاح] Number() على السعر
+      labelsHtml += '<div class="label-price">' + (Number(prod.price) || 0) + ' ' + escapeHTML(state.storeSettings.currency || 'ج.م') + '</div>';
 
       if (type === 'code128') {
         labelsHtml += '<div class="barcode-render">' + code128Svg + '</div>';
@@ -103,4 +113,3 @@ async function printBarcodeLabels() {
   );
   printWindow.document.close();
 }
-

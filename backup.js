@@ -11,13 +11,14 @@ async function encryptData(text, password) {
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
-  return btoa(String.fromCharCode(...combined));
+  // [إصلاح] تقسيم لـ chunks عشان نتجنب RangeError مع الملفات الكبيرة
+  return uint8ArrayToBase64(combined);
 }
 
 async function decryptData(encryptedBase64, password) {
   try {
     const enc = new TextEncoder();
-    const combined = new Uint8Array(atob(encryptedBase64).split('').map(c => c.charCodeAt(0)));
+    const combined = base64ToUint8Array(encryptedBase64);
     const iv = combined.slice(0, 12);
     const data = combined.slice(12);
     const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
@@ -28,6 +29,23 @@ async function decryptData(encryptedBase64, password) {
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
     return new TextDecoder().decode(decrypted);
   } catch (e) { throw new Error('كلمة المرور غير صحيحة أو الملف تالف'); }
+}
+
+// [إصلاح] بديل آمن لـ String.fromCharCode(...combined)
+function uint8ArrayToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 /* ============ النسخ الاحتياطي ============ */
@@ -54,7 +72,12 @@ async function exportBackup() {
   const pass = prompt(tr('dlg_backup_export_password'));
   if (pass === null) return;
   if (!(await verifyCurrentUserPassword(pass))) return showNotification(currentLang === 'en' ? 'Password verification failed.' : 'فشل التحقق من كلمة المرور.', 'error');
-  downloadEncryptedBackup(pass, false);
+  await downloadEncryptedBackup(pass, false);
+
+  // [إصلاح البند 5] سجل تصدير نسخة احتياطية
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('export_backup', { timestamp: new Date().toISOString() });
+  }
 }
 
 async function importBackup(event) {
@@ -76,6 +99,19 @@ async function importBackup(event) {
         backup = parsed;
       }
 
+      if (!backup || typeof backup !== 'object') throw new Error('صيغة الملف غير صحيحة');
+
+      // [إصلاح] منع الاستيراد من نسخة مستقبلية
+      if (backup.version && Number(backup.version) > 5) {
+        event.target.value = '';
+        return showNotification(
+          currentLang === 'en'
+            ? 'This backup was created by a newer version. Please update the app first.'
+            : 'هذه النسخة الاحتياطية من إصدار أحدث. حدّث التطبيق أولاً.',
+          'error'
+        );
+      }
+
       if (backup.version && backup.version !== 5) {
         if (!confirm('نسخة قديمة (' + backup.version + '). المتابعة قد تفقد بيانات. متابعة؟')) {
           event.target.value = '';
@@ -83,7 +119,10 @@ async function importBackup(event) {
         }
       }
 
-      if (backup.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, backup.storeSettings);
+      // [إصلاح] تحقق من كل مصفوفة قبل استبدالها
+      if (backup.storeSettings && typeof backup.storeSettings === 'object' && !Array.isArray(backup.storeSettings)) {
+        state.storeSettings = Object.assign({}, state.storeSettings, backup.storeSettings);
+      }
       if (Array.isArray(backup.products)) state.products = backup.products;
       if (Array.isArray(backup.sales)) state.sales = backup.sales;
       if (Array.isArray(backup.customers)) state.customers = backup.customers;
@@ -98,6 +137,16 @@ async function importBackup(event) {
 
       saveData();
       renderAll();
+
+      // [إصلاح البند 5] سجل استيراد نسخة احتياطية
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('import_backup', {
+          version: backup.version || 'unknown',
+          productsCount: Array.isArray(backup.products) ? backup.products.length : 0,
+          salesCount: Array.isArray(backup.sales) ? backup.sales.length : 0
+        });
+      }
+
       showNotification('تمت الاستعادة بنجاح 🎉');
     } catch (err) {
       showNotification('فشل الاستعادة: ' + err.message, 'error');

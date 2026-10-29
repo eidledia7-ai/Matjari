@@ -32,23 +32,24 @@ function saveProduct() {
   if (id) {
     const prod = state.products.find(function(p) { return p.id === id; });
     if (prod) {
-      const oldStock = prod.stock;
+      // [إصلاح حرج] تعديل المنتج مش بيلمس المخزون — المخزون بيتعدل من saveStockAdjustment/quickAddStock بس
       prod.name = name;
       prod.barcode = barcode;
       prod.category = category;
       prod.price = price;
       prod.cost = cost;
-      prod.stock = stock;
       prod.minStock = minStock;
-      if (oldStock !== stock) {
-        state.stockMoves.unshift({
-          id: uid('SM'), date: new Date().toISOString(),
-          productId: prod.id, productName: prod.name,
-          type: stock > oldStock ? 'in' : 'out',
-          qty: Math.abs(stock - oldStock),
-          oldStock: oldStock, newStock: stock,
-          reason: 'تعديل بيانات المنتج'
-        });
+      // ملاحظة: prod.stock مش بيتم لمسه هنا
+
+      // [إصلاح البند 5] سجل تعديل منتج
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('edit_product', {
+          productId: prod.id,
+          name: name,
+          price: price,
+          cost: cost,
+          minStock: minStock
+        }, prod.id);
       }
     }
   } else {
@@ -61,6 +62,17 @@ function saveProduct() {
         type: 'in', qty: stock, oldStock: 0, newStock: stock,
         reason: 'رصيد افتتاحي'
       });
+    }
+    // [إصلاح البند 5] سجل إضافة منتج
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('add_product', {
+        productId: newProd.id,
+        name: newProd.name,
+        barcode: newProd.barcode,
+        price: newProd.price,
+        cost: newProd.cost,
+        stock: newProd.stock
+      }, newProd.id);
     }
   }
 
@@ -108,9 +120,9 @@ function renderProducts() {
       '<td>' + escapeHTML(p.name) + (isLow ? ' ⚠️' : '') + '</td>' +
       '<td>' + escapeHTML(p.barcode || '-') + '</td>' +
       '<td>' + escapeHTML(p.category || '-') + '</td>' +
-      '<td>' + p.price + '</td>' +
-      '<td>' + p.cost + '</td>' +
-      '<td><b>' + p.stock + '</b></td>' +
+      '<td>' + (Number(p.price) || 0) + '</td>' +
+      '<td>' + (Number(p.cost) || 0) + '</td>' +
+      '<td><b>' + (Number(p.stock) || 0) + '</b></td>' +
       '<td>' +
        '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="إضافة كمية سريعة">+</button>' +
 '<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">تعديل</button>' +
@@ -141,7 +153,36 @@ function editProduct(id) {
 
 function deleteProduct(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-  if (!confirm(tr('msg_delete_product'))) return;
+
+  const prod = state.products.find(function(p) { return p.id === id; });
+  if (!prod) return;
+
+  // [إصلاح حرج] تحقق إن المنتج مش في فواتير
+  const salesCount = state.sales.reduce(function (count, s) {
+    if (!s.items) return count;
+    return count + (s.items.some(function (i) { return i.id === id; }) ? 1 : 0);
+  }, 0);
+
+  if (salesCount > 0) {
+    const msg = currentLang === 'en'
+      ? 'This product appears in ' + salesCount + ' invoice(s). Deleting it will NOT affect past sales, but the product will no longer be available for new sales. Continue?'
+      : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. حذفه لن يؤثر على الفواتير القديمة، لكنه لن يظهر في المبيعات الجديدة. هل تريد المتابعة؟';
+    if (!confirm(msg)) return;
+  } else {
+    if (!confirm(tr('msg_delete_product'))) return;
+  }
+
+  // [إصلاح البند 5] سجل حذف منتج
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('delete_product', {
+      productId: prod.id,
+      name: prod.name,
+      barcode: prod.barcode,
+      stock: prod.stock,
+      salesCount: salesCount
+    }, prod.id);
+  }
+
   state.products = state.products.filter(function(p) { return p.id !== id; });
   saveData();
   renderProducts();
@@ -155,7 +196,7 @@ function populateAdjustDropdown() {
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ') + p.stock + ')</option>';
+    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ') + (Number(p.stock) || 0) + ')</option>';
   });
 }
 
@@ -191,6 +232,19 @@ function saveStockAdjustment() {
     type: type, qty: Math.abs(newStock - oldStock),
     oldStock: oldStock, newStock: newStock, reason: reason
   });
+
+  // [إصلاح البند 5] سجل تعديل مخزون
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('stock_adjustment', {
+      productId: prod.id,
+      productName: prod.name,
+      type: type,
+      qty: Math.abs(newStock - oldStock),
+      oldStock: oldStock,
+      newStock: newStock,
+      reason: reason
+    }, prod.id);
+  }
 
   saveData();
   document.getElementById('adjustQty').value = '';
@@ -241,7 +295,8 @@ function populateReturnDropdowns() {
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
   state.sales.forEach(function(s) {
-    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + s.total.toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
+    // [إصلاح] Number() بدل .toFixed المباشر
+    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
   });
 }
 
@@ -259,7 +314,7 @@ function updateReturnProducts() {
       .reduce(function(sum, r) { return sum + r.qty; }, 0);
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
-      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + (currentLang === 'en' ? ' (Remaining: ' : ' (متبقي: ') + remaining + ')</option>';
+      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + (currentLang === 'en' ? ' (Remaining: ' : ' (متبقي: ') + remaining + '</option>';
     }
   });
 }
@@ -297,12 +352,25 @@ function saveReturn() {
     });
   }
 
-  state.returns.unshift({
+  const newReturn = {
     id: uid('RET'), date: new Date().toISOString(),
     saleId: saleId, productId: prodId,
     productName: item.name, qty: qty,
     reason: reason || 'غير محدد'
-  });
+  };
+  state.returns.unshift(newReturn);
+
+  // [إصلاح البند 5] سجل مرتجع
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('add_return', {
+      returnId: newReturn.id,
+      saleId: saleId,
+      productId: prodId,
+      productName: item.name,
+      qty: qty,
+      reason: newReturn.reason
+    }, newReturn.id);
+  }
 
   saveData();
   document.getElementById('returnQty').value = 1;
@@ -335,4 +403,3 @@ function renderReturns() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-

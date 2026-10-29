@@ -37,14 +37,28 @@ function saveStoreSettings() {
   state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
 state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
 state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
+
+// [إصلاح] حماية من null للـ checkboxes
+const permDiscountEl = document.getElementById('perm_canDiscount');
+const permDeleteEl = document.getElementById('perm_canDelete');
+const permEditEl = document.getElementById('perm_canEditPrice');
 state.storeSettings.permissions = {
-  canDiscount: document.getElementById('perm_canDiscount').checked,
-  canDelete: document.getElementById('perm_canDelete').checked,
-  canEditPrice: document.getElementById('perm_canEditPrice').checked
+  canDiscount: permDiscountEl ? permDiscountEl.checked : false,
+  canDelete: permDeleteEl ? permDeleteEl.checked : false,
+  canEditPrice: permEditEl ? permEditEl.checked : false
 };
-state.storeSettings.printType = document.getElementById('storePrintType').value;
+const printTypeEl = document.getElementById('storePrintType');
+state.storeSettings.printType = printTypeEl ? printTypeEl.value : 'thermal';
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
+
+  // [إصلاح البند 5] سجل تعديل الإعدادات
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('save_store_settings', {
+      storeName: state.storeSettings.name,
+      currency: state.storeSettings.currency
+    });
+  }
 
   saveData();
   showNotification('تم حفظ بيانات المحل');
@@ -84,11 +98,21 @@ async function verifyCurrentUserPassword(password) {
   } catch (e) { return false; }
 }
 
+// [إصلاح] استخدام النسخة الموحّدة من backup.js لو موجودة
 function buildBackupData() {
-  return { version: 5, storeSettings: state.storeSettings, products: state.products, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses,sales: state.sales,  stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
+  // لو النسخة في backup.js محمّلة، استخدمها
+  if (typeof window.__buildBackupDataImpl === 'function') return window.__buildBackupDataImpl();
+  return { version: 5, storeSettings: state.storeSettings, products: state.products, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses, sales: state.sales, stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
 }
 
 async function downloadEncryptedBackup(pass, silent) {
+  // [إصلاح] لو النسخة في backup.js محمّلة، استخدمها
+  if (typeof window.__downloadEncryptedBackupImpl === 'function') {
+    return window.__downloadEncryptedBackupImpl(pass, silent);
+  }
+  if (typeof encryptData !== 'function') {
+    throw new Error('Encryption not available');
+  }
   const encrypted = await encryptData(JSON.stringify(buildBackupData()), pass);
   const blob = new Blob([JSON.stringify({ encrypted: true, data: encrypted })], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -111,8 +135,10 @@ async function safeClearAllDataPrompt() {
 
   if (!confirm(tr('msg_wipe_all'))) return;
 
+  // [إصلاح] حماية من undefined
   try {
-    downloadEncryptedBackup(pass, true);
+    if (typeof downloadEncryptedBackup !== 'function') throw new Error('Backup function not available');
+    await downloadEncryptedBackup(pass, true);
   } catch (backupError) {
     showNotification(currentLang === 'en' ? 'Automatic backup failed. Data was not cleared.' : 'فشل إنشاء النسخة الاحتياطية التلقائية. لم يتم مسح البيانات.', 'error');
     return;
@@ -132,17 +158,24 @@ async function safeClearAllDataPrompt() {
   state.currentShift = null;
   state.cart = [];
 
+  // [إصلاح] استخدام ownerId للموظف في مسح الكاش
   if (state.currentUser) {
-    localStorage.removeItem('matjari_cache_' + state.currentUser.id);
+    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+    localStorage.removeItem('matjari_cache_' + cacheOwnerId);
   }
 // مسح الفواتير من الجدول المنفصل
 if (navigator.onLine && supabaseClient && state.currentUser) {
   const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   await supabaseClient.from('sales').delete().eq('user_id', cacheOwnerId);
 }
+
+  // [إصلاح البند 5] سجل مسح البيانات
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });
+  }
+
   await uploadToCloud();
   renderAll();
   updateStockBadge();
   showNotification('تم مسح كافة بيانات التطبيق بنجاح ✅');
 }
-

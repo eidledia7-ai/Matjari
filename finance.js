@@ -10,7 +10,14 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
 
   if (!name || isNaN(amount) || amount <= 0) return showNotification('أدخل البند والمبلغ بشكل صحيح', 'error');
 
-  state.expenses.unshift({ id: uid('EXP'), name: name, amount: amount, date: date, notes: notes });
+  const newExpense = { id: uid('EXP'), name: name, amount: amount, date: date, notes: notes };
+  state.expenses.unshift(newExpense);
+
+  // [إصلاح البند 5] سجل النشاط
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('add_expense', { id: newExpense.id, name: newExpense.name, amount: newExpense.amount }, newExpense.id);
+  }
+
   saveData();
   document.getElementById('expenseName').value = '';
   document.getElementById('expenseAmount').value = '';
@@ -29,10 +36,11 @@ function renderExpenses() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_item_name">البند</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.expenses.forEach(function(e) {
+    // [إصلاح] amount ممكن يكون string من السيرفر
     html += '<tr>' +
       '<td>' + escapeHTML(e.date) + '</td>' +
       '<td>' + escapeHTML(e.name) + '</td>' +
-      '<td><b>' + e.amount.toFixed(2) + '</b></td>' +
+      '<td><b>' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(e.notes || '-') + '</td>' +
       '<td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">حذف خطأ</button></td>' +
       '</tr>';
@@ -221,10 +229,12 @@ function calcExpectedShiftCash() {
     }
   });
 
-  // حساب مصروفات الدرج
+  // [إصلاح] drawerExpenses في الوردية الحالية مصفوفة، لكن احتياطاً لو رقم
   let drawerExpensesTotal = 0;
-  if (shift.drawerExpenses) {
-    drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  if (Array.isArray(shift.drawerExpenses)) {
+    drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  } else if (typeof shift.drawerExpenses === 'number') {
+    drawerExpensesTotal = shift.drawerExpenses;
   }
   
   // الكاش المتوقع = المبيعات - مصروفات الدرج
@@ -287,14 +297,19 @@ function closeShift() {
 
 const totalSales = shiftSales.reduce(function(sum, s) { return sum + s.total; }, 0);
 
-// حساب مصروفات الدرج عشان نخصمها
+// [إصلاح] نفس منطق calcExpectedShiftCash (مصفوفة أو رقم)
 let drawerExpensesTotal = 0;
-if (state.currentShift.drawerExpenses) {
-  drawerExpensesTotal = state.currentShift.drawerExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+if (Array.isArray(state.currentShift.drawerExpenses)) {
+  drawerExpensesTotal = state.currentShift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+} else if (typeof state.currentShift.drawerExpenses === 'number') {
+  drawerExpensesTotal = state.currentShift.drawerExpenses;
 }
 
 // الكاش المتوقع الحقيقي = مبيعات الكاش - مصروفات الدرج
 const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+
+// [إصلاح] ناخد نسخة من القائمة قبل ما نصفر currentShift
+const drawerListSnapshot = Array.isArray(state.currentShift.drawerExpenses) ? state.currentShift.drawerExpenses.slice() : [];
 
 const closedShift = {
   id: state.currentShift.id,
@@ -304,17 +319,28 @@ const closedShift = {
   endTime: new Date().toISOString(),
   saleCount: shiftSales.length,
   totalSales: totalSales,
-  cashSales: cashSales, 
- 
-  drawerExpenses: drawerExpensesTotal, 
-drawerExpensesList: state.currentShift.drawerExpenses,
+  cashSales: cashSales,
+  drawerExpenses: drawerExpensesTotal,
+  drawerExpensesList: drawerListSnapshot,
   actualCash: actualCash,
-  difference: actualCash - expectedCash, // <--- الفرق بقى بيتحسب صح
+  difference: actualCash - expectedCash,
   notes: notes
 };
 
   state.shifts.unshift(closedShift);
   state.currentShift = null;
+
+  // [إصلاح البند 5] سجل النشاط لإغلاق الوردية
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('close_shift', {
+      shiftId: closedShift.id,
+      cashierName: closedShift.cashierName,
+      cashSales: cashSales,
+      drawerExpenses: drawerExpensesTotal,
+      actualCash: actualCash,
+      difference: closedShift.difference
+    }, closedShift.id);
+  }
 
   saveData();
   document.getElementById('shiftCashierName').value = '';
@@ -341,9 +367,9 @@ function renderShifts() {
       '<td>' + new Date(s.endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
       '<td>' + escapeHTML(s.cashierName) + '</td>' +
       '<td>' + s.saleCount + '</td>' +
-      '<td>' + s.cashSales.toFixed(2) + '</td>' +
-      '<td>' + s.actualCash.toFixed(2) + '</td>' +
-      '<td class="' + diffClass + '"><b>' + s.difference.toFixed(2) + '</b></td>' +
+      '<td>' + Number(s.cashSales || 0).toFixed(2) + '</td>' +
+      '<td>' + Number(s.actualCash || 0).toFixed(2) + '</td>' +
+      '<td class="' + diffClass + '"><b>' + Number(s.difference || 0).toFixed(2) + '</b></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -361,9 +387,23 @@ function printShiftReport() {
   const visaSales = sales.filter(function(sale) { return (sale.payMethod || sale.paymentMethod) === 'visa'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
   const transferSales = sales.filter(function(sale) { return (sale.payMethod || sale.paymentMethod) === 'transfer'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
   const actualCash = current ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift && shift.actualCash) || 0);
-  const difference = actualCash - cashSales;
+
+  // [إصلاح] نفس منطق closeShift: نخصم مصروفات الدرج
+  let drawerExpensesTotal = 0;
+  if (current) {
+    if (Array.isArray(current.drawerExpenses)) {
+      drawerExpensesTotal = current.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    } else if (typeof current.drawerExpenses === 'number') {
+      drawerExpensesTotal = current.drawerExpenses;
+    }
+  } else if (shift) {
+    drawerExpensesTotal = Number(shift.drawerExpenses) || 0;
+  }
+  const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+  const difference = actualCash - expectedCash;
+
   const en = currentLang === 'en';
-  const labels = en ? {title:'Shift Report',shift:'Shift',cashier:'Cashier',start:'Start',end:'End',invoice:'Invoice',date:'Date',customer:'Customer',payment:'Payment',total:'Total',paid:'Paid',summary:'Summary',count:'Invoice Count',sales:'Total Sales',cash:'Cash Sales',visa:'Visa Sales',transfer:'Transfer Sales',actual:'Actual Cash',difference:'Difference',thanks:'Generated by Matjari'} : {title:'تقرير الوردية',shift:'الوردية',cashier:'الكاشير',start:'بداية الوردية',end:'نهاية الوردية',invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',payment:'طريقة الدفع',total:'الإجمالي',paid:'المدفوع',summary:'الملخص',count:'عدد الفواتير',sales:'مجموع المبيعات',cash:'مبيعات كاش',visa:'مبيعات فيزا',transfer:'مبيعات تحويل',actual:'النقدية الفعلية',difference:'الفرق',thanks:'صادر من متجري'};
+  const labels = en ? {title:'Shift Report',shift:'Shift',cashier:'Cashier',start:'Start',end:'End',invoice:'Invoice',date:'Date',customer:'Customer',payment:'Payment',total:'Total',paid:'Paid',summary:'Summary',count:'Invoice Count',sales:'Total Sales',cash:'Cash Sales',visa:'Visa Sales',transfer:'Transfer Sales',drawerExpenses:'Drawer Expenses',expected:'Expected Cash',actual:'Actual Cash',difference:'Difference',thanks:'Generated by Matjari'} : {title:'تقرير الوردية',shift:'الوردية',cashier:'الكاشير',start:'بداية الوردية',end:'نهاية الوردية',invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',payment:'طريقة الدفع',total:'الإجمالي',paid:'المدفوع',summary:'الملخص',count:'عدد الفواتير',sales:'مجموع المبيعات',cash:'مبيعات كاش',visa:'مبيعات فيزا',transfer:'مبيعات تحويل',drawerExpenses:'مصروفات الدرج',expected:'الكاش المتوقع',actual:'النقدية الفعلية',difference:'الفرق',thanks:'صادر من متجري'};
   const currency = escapeHTML(state.storeSettings.currency || 'ج.م');
   const shop = escapeHTML(state.storeSettings.name || (en ? 'My Store' : 'متجري'));
   const rows = sales.map(function(sale) {
@@ -372,7 +412,7 @@ function printShiftReport() {
   }).join('');
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) return showNotification(en ? 'Allow pop-ups to print the report.' : 'اسمح بالنوافذ المنبثقة لطباعة التقرير.', 'warning');
-  win.document.write('<!doctype html><html lang="' + (en?'en':'ar') + '" dir="' + (en?'ltr':'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title><style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70}table{width:100%;border-collapse:collapse;margin:18px 0}th{background:#17364c;color:white}th,td{padding:9px;border:1px solid #ccd7df;text-align:' + (en?'left':'right') + '} .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary div{padding:12px;background:#f0f6f7;border-radius:8px} @media print{button{display:none}}</style></head><body><h1>' + shop + ' — ' + labels.title + '</h1><p>' + labels.shift + ': ' + escapeHTML(shift ? shift.name || shift.cashierName || shift.id : (en?'Current shift':'الوردية الحالية')) + '</p><p>' + labels.cashier + ': ' + escapeHTML(shift ? shift.cashierName || shift.name || '-' : '-') + '</p><p>' + labels.start + ': ' + (shift ? escapeHTML(new Date(shift.startTime).toLocaleString(en?'en-US':'ar-EG')) : '-') + ' &nbsp; ' + labels.end + ': ' + escapeHTML(new Date(endTime).toLocaleString(en?'en-US':'ar-EG')) + '</p><h2>' + labels.summary + '</h2><section class="summary"><div>' + labels.count + ': <b>' + sales.length + '</b></div><div>' + labels.sales + ': <b>' + totalSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.cash + ': <b>' + cashSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.visa + ': <b>' + visaSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.transfer + ': <b>' + transferSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.actual + ': <b>' + actualCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.difference + ': <b>' + difference.toFixed(2) + ' ' + currency + '</b></div></section><table><thead><tr><th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + labels.thanks + '</p><button onclick="window.print()">' + (en?'Print':'طباعة') + '</button><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');
+  win.document.write('<!doctype html><html lang="' + (en?'en':'ar') + '" dir="' + (en?'ltr':'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title><style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70}table{width:100%;border-collapse:collapse;margin:18px 0}th{background:#17364c;color:white}th,td{padding:9px;border:1px solid #ccd7df;text-align:' + (en?'left':'right') + '} .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary div{padding:12px;background:#f0f6f7;border-radius:8px} @media print{button{display:none}}</style></head><body><h1>' + shop + ' — ' + labels.title + '</h1><p>' + labels.shift + ': ' + escapeHTML(shift ? shift.name || shift.cashierName || shift.id : (en?'Current shift':'الوردية الحالية')) + '</p><p>' + labels.cashier + ': ' + escapeHTML(shift ? shift.cashierName || shift.name || '-' : '-') + '</p><p>' + labels.start + ': ' + (shift ? escapeHTML(new Date(shift.startTime).toLocaleString(en?'en-US':'ar-EG')) : '-') + ' &nbsp; ' + labels.end + ': ' + escapeHTML(new Date(endTime).toLocaleString(en?'en-US':'ar-EG')) + '</p><h2>' + labels.summary + '</h2><section class="summary"><div>' + labels.count + ': <b>' + sales.length + '</b></div><div>' + labels.sales + ': <b>' + totalSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.cash + ': <b>' + cashSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.visa + ': <b>' + visaSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.transfer + ': <b>' + transferSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.drawerExpenses + ': <b>' + drawerExpensesTotal.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.expected + ': <b>' + expectedCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.actual + ': <b>' + actualCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.difference + ': <b>' + difference.toFixed(2) + ' ' + currency + '</b></div></section><table><thead><tr><th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + labels.thanks + '</p><button onclick="window.print()">' + (en?'Print':'طباعة') + '</button><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');
   win.document.close();
 }
 
@@ -395,7 +435,10 @@ function toggleExportDateRange(show) {
 
 function executeExportAction(action) {
   const type = activeExportContext.type;
-  const scope = document.querySelector('input[name="exportScope"]:checked').value;
+  const scopeEl = document.querySelector('input[name="exportScope"]:checked');
+  // [إصلاح] حماية من عدم اختيار scope
+  if (!scopeEl) return showNotification('اختر نطاق التصدير أولاً', 'warning');
+  const scope = scopeEl.value;
   let from = '';
   let to = '';
 
@@ -575,5 +618,3 @@ function openPrintWindow(title, headers, rows, settings) {
   );
   w.document.close();
 }
-
-// ▲▲▲ نهاية الجزء 2/3 — انسخ الجزء 3/3 بعد ده مباشرة ▲▲▲

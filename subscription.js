@@ -7,7 +7,6 @@ function renderSubscriptionPage() {
   const en = currentLang === 'en';
   const cur = state.storeSettings.currency || 'ج.م';
 
-  // حساب الأيام المتبقية
   let endDate = null;
   if (sub.plan === 'trial' && sub.trial_ends_at) endDate = new Date(sub.trial_ends_at).getTime();
   else if (sub.expires_at) endDate = new Date(sub.expires_at).getTime();
@@ -24,47 +23,25 @@ function renderSubscriptionPage() {
   };
   const planName = planNames[sub.plan] || sub.plan || 'Trial';
 
-  // شريط تقدم (14 يوم trial)
   let progressPercent = 0;
   if (sub.plan === 'trial' && endDate) {
     const startTime = endDate - (14 * 24 * 60 * 60 * 1000);
     progressPercent = Math.min(100, Math.max(0, ((now - startTime) / (endDate - startTime)) * 100));
   }
 
-  const plans = [
-    {
-      id: 'starter',
-      name: tr('plan_starter'),
-      price: 299,
-      yearly: 2990,
-      features: en
-        ? ['1 user', '1 branch', 'Up to 500 products', 'Basic reports', 'WhatsApp support']
-        : ['مستخدم واحد', 'فرع واحد', 'حتى 500 منتج', 'تقارير أساسية', 'دعم واتساب']
-    },
-    {
-      id: 'growth',
-      name: tr('plan_growth'),
-      price: 699,
-      yearly: 6990,
-      popular: true,
-      features: en
-        ? ['3 users', '3 branches', 'Up to 3,000 products', 'Advanced reports', 'Priority WhatsApp', 'WhatsApp invoices ✅']
-        : ['3 مستخدمين', '3 فروع', 'حتى 3,000 منتج', 'تقارير متقدمة', 'واتساب أولوية', 'فاتورة واتساب ✅']
-    },
-    {
-      id: 'pro',
-      name: tr('plan_pro'),
-      price: 1499,
-      yearly: 14990,
-      features: en
-        ? ['Unlimited users', 'Unlimited branches', 'Unlimited products', 'All reports + export', 'Account manager', 'API access']
-        : ['مستخدمين غير محدود', 'فروع غير محدودة', 'منتجات غير محدودة', 'كل التقارير + تصدير', 'مدير حساب مخصص', 'API']
-    }
-  ];
+  const plans = PLANS.map(function(p) {
+    return {
+      id: p.id,
+      name: en ? p.name_en : p.name_ar,
+      price: p.price,
+      yearly: p.yearly,
+      popular: !!p.popular,
+      features: buildPlanFeaturesList(p.id, en)
+    };
+  });
 
   let html = '';
 
-  // === كارت الحالة ===
   html += '<div class="card">';
   html += '<h3>' + tr('current_status_title') + '</h3>';
   html += '<div class="sub-status-grid">';
@@ -94,7 +71,6 @@ function renderSubscriptionPage() {
 
   html += '</div>';
 
-  // === الخطط المتاحة ===
   html += '<div class="card mt-20">';
   html += '<h3>' + tr('available_plans') + '</h3>';
   html += '<div class="plans-grid">';
@@ -113,7 +89,7 @@ function renderSubscriptionPage() {
     if (isCurrent) {
       html += '<button class="btn grey w-100" disabled>' + tr('your_current_plan') + '</button>';
     } else {
-      html += '<button class="btn green w-100" onclick="showNotification(\'' + tr('payment_coming_soon') + '\', \'info\')">' + tr('upgrade_now') + '</button>';
+      html += '<button class="btn green w-100" onclick="event.stopPropagation(); startSubscription(\'' + plan.id + '\')">' + tr('upgrade_now') + '</button>';
     }
     html += '</div>';
   });
@@ -124,4 +100,150 @@ function renderSubscriptionPage() {
 
   container.innerHTML = html;
 }
-/* ============ صفحة الهبوط للزوار ============ */
+
+function buildPlanFeaturesList(planId, en) {
+  const features = [];
+  PLAN_FEATURES.forEach(f => {
+    const val = f.values[planId];
+    const label = en ? f.label_en : f.label_ar;
+    if (val === true) features.push(label);
+    else if (val === false) return;
+    else features.push(label + ': ' + val);
+  });
+  return features;
+}
+
+/* ============ بدء الاشتراك (Paymob) ============ */
+async function startSubscription(planId) {
+  const plan = PLANS.find(p => p.id === planId);
+  if (!plan) return;
+
+  if (!supabaseClient) {
+    return showNotification(currentLang === 'en' ? 'No connection to server.' : 'لا يوجد اتصال بالسيرفر.', 'error');
+  }
+  
+  showLoading(currentLang === 'en' ? 'Connecting to payment...' : 'جارٍ الاتصال ببوابة الدفع...');
+
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('create-payment', {
+      body: {
+        amount: plan.price,
+        planId: planId,
+        userEmail: state.currentUser ? state.currentUser.email : '',
+        userName: 'Customer',
+        userId: state.currentUser ? state.currentUser.id : ''
+      }
+    });
+
+    if (error) throw error;
+    if (!data || !data.token) throw new Error('لم يتم استلام توكن الدفع');
+
+    hideLoading();
+
+    const iframeId = '1090930'; 
+    const iframeUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${data.token}`;
+
+    const oldModal = document.getElementById('paymobIframeModal');
+    if (oldModal) oldModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'paymobIframeModal';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '9999999'; 
+    modal.innerHTML = `
+      <div class="modal-card" style="max-width: 600px; width: 100%; padding: 0; overflow: hidden; height: 85vh;">
+        <div style="padding: 15px; background: #17364c; color: white; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; color: white;">💳 ${currentLang === 'en' ? 'Secure Payment' : 'الدفع الآمن'}</h3>
+          <button onclick="document.getElementById('paymobIframeModal').remove()" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
+        </div>
+        <iframe src="${iframeUrl}" width="100%" height="100%" style="border: none;"></iframe>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+  } catch (err) {
+    hideLoading();
+    showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + err.message, 'error');
+  }
+}
+
+/* ============ عرض تفاصيل باقة ============ */
+function showPlanDetail(planId, context) {
+  const plan = PLANS.find(p => p.id === planId);
+  if (!plan) return;
+
+  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+  const dict = translations[currentLang] || translations.ar;
+
+  const old = document.getElementById('planDetailModal');
+  if (old) old.remove();
+
+  const names = { starter: en ? 'Starter' : 'البداية', growth: en ? 'Growth' : 'النمو', pro: en ? 'Pro' : 'الاحترافي' };
+  const icons = { starter: '🚀', growth: '⭐', pro: '👑' };
+  const subtitles = {
+    starter: en ? 'Perfect to get started' : 'مناسبة للبداية والاحتياج الأساسي',
+    growth:  en ? 'Best for growing shops' : 'الأفضل للمحلات النامية',
+    pro:     en ? 'For large stores & chains' : 'للمحلات الكبيرة والسلاسل'
+  };
+
+  const includesText = planId === 'growth'
+    ? (en ? '✅ Everything in Starter +' : '✅ كل مميزات البداية +')
+    : planId === 'pro'
+    ? (en ? '✅ Everything in Growth +' : '✅ كل مميزات النمو +')
+    : (en ? 'This plan includes:' : 'هذه الباقة تشمل:');
+
+  let featuresHtml = '';
+  PLAN_FEATURES.forEach(f => {
+    const val = f.values[planId];
+    let icon, text, cls;
+    if (val === true)  { icon = '✅'; text = en ? f.label_en : f.label_ar; cls = 'pd-on'; }
+    else if (val === false) { icon = '❌'; text = en ? f.label_en : f.label_ar; cls = 'pd-off'; }
+    else { icon = '✓'; text = (en ? f.label_en : f.label_ar) + ': <b>' + val + '</b>'; cls = 'pd-on'; }
+    featuresHtml += '<li class="' + cls + '"><span class="pd-fi">' + icon + '</span><span>' + text + '</span></li>';
+  });
+
+  const ctaHtml = context === 'landing'
+    ? '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); showAuthView(\'signup\')">' + dict.start_free_trial + '</button>'
+    : '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); startSubscription(\'' + planId + '\')">' + dict.subscribe_now + ' — ' + plan.price + ' ' + cur + '/' + dict.per_month + '</button>';
+
+  const modal = document.createElement('div');
+  modal.id = 'planDetailModal';
+  modal.className = 'plan-detail-overlay';
+  modal.setAttribute('onclick', 'if(event.target===this)hidePlanDetail()');
+  modal.innerHTML =
+    '<div class="plan-detail-card pd-theme-' + planId + '">' +
+      '<button class="pd-close" onclick="hidePlanDetail()">✕</button>' +
+      (plan.popular ? '<div class="pd-popular-badge">⭐ ' + dict.most_popular + '</div>' : '') +
+      '<div class="pd-hero">' +
+        '<div class="pd-icon">' + icons[planId] + '</div>' +
+        '<h2 class="pd-name">' + names[planId] + '</h2>' +
+        '<p class="pd-subtitle">' + subtitles[planId] + '</p>' +
+      '</div>' +
+      '<div class="pd-price-block">' +
+        '<div class="pd-price"><span class="pd-amount">' + plan.price + '</span><span class="pd-cur">' + cur + '</span><span class="pd-period">/' + dict.per_month + '</span></div>' +
+        '<div class="pd-yearly">' + (en ? 'or ' : 'أو ') + '<b>' + plan.yearly + ' ' + cur + '</b>/' + dict.per_year +
+          '<span class="pd-save-badge">' + (en ? 'Save 2 months' : 'وفّر شهرين') + '</span></div>' +
+      '</div>' +
+      '<div class="pd-divider"></div>' +
+      '<div class="pd-includes">' + includesText + '</div>' +
+      '<ul class="pd-features">' + featuresHtml + '</ul>' +
+      ctaHtml +
+      '<div class="pd-trust">' +
+        '<span>🔒 ' + (en ? 'Secure' : 'دفع آمن') + '</span>' +
+        '<span>↩️ ' + (en ? '7-day guarantee' : 'ضمان 7 أيام') + '</span>' +
+        '<span>📞 ' + (en ? '24/7 support' : 'دعم 24/7') + '</span>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+}
+
+function hidePlanDetail() {
+  const m = document.getElementById('planDetailModal');
+  if (m) m.remove();
+  if (!document.getElementById('subscriptionBlock')) {
+    document.body.style.overflow = '';
+  }
+}

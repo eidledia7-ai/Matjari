@@ -38,10 +38,14 @@ function getCompareRanges() {
 function calcPeriodStats(from, to) {
   const sales = filterByPeriod(state.sales, 'date', from, to);
   const expenses = filterByPeriod(state.expenses, 'date', from, to);
-  const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
+  // [إصلاح] Number() + حماية items null
+  const totalSales = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
   let totalCost = 0;
-  sales.forEach(s => s.items.forEach(i => totalCost += (i.cost || 0) * i.qty));
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  sales.forEach(s => {
+    if (!s || !Array.isArray(s.items)) return;
+    s.items.forEach(i => { totalCost += (Number(i.cost) || 0) * (Number(i.qty) || 0); });
+  });
+  const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   return { totalSales, netProfit: totalSales - totalCost - totalExpenses, count: sales.length };
 }
 
@@ -49,7 +53,8 @@ function renderComparison() {
   const ranges = getCompareRanges();
   const statsA = calcPeriodStats(ranges.fromA, ranges.toA);
   const statsB = calcPeriodStats(ranges.fromB, ranges.toB);
-  const cur = state.storeSettings.currency;
+  // [إصلاح] default currency
+  const cur = state.storeSettings.currency || 'ج.م';
 
   const container = document.getElementById('compareResult');
   if (!container) return;
@@ -136,4 +141,3 @@ if (isNewSales) {
 
 function printComparisonReport() { window.print(); }
 function printReportSummary() { window.print(); }
-
