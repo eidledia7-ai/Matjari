@@ -449,7 +449,11 @@ async function executeDeleteRecord(type, id) {
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('purchases').delete().eq('id', id);
       }
-
+if (navigator.onLine && supabaseClient) {
+  // مسح حركة المخزون المرتبطة
+  await supabaseClient.from('stock_moves').delete().eq('product_id', p.productId).eq('type', 'in').like('reason', '%مشتريات%');
+}
+state.stockMoves = state.stockMoves.filter(m => !(m.productId === p.productId && m.reason.includes('مشتريات')));
       state.purchases.splice(idx, 1);
 
       if (typeof addAuditLog === 'function') {
