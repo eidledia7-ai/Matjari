@@ -192,11 +192,8 @@ async function openUserSession(user) {
   
   try {
     // 1. تحديد الدور ورقم المدير
-    const roleRes = await supabaseClient
-      .from('shop_user_roles')
-      .select('role, owner_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    await new Promise(r => setTimeout(r, 1000)); // ننتظر ثانية عشان الـ Trigger يخلص
+const roleRes = await supabaseClient.from('shop_user_roles').select('role, owner_id').eq('user_id', user.id).maybeSingle();
 
     if (roleRes.data) {
       state.role = roleRes.data.role;
