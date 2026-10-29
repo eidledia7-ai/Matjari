@@ -103,7 +103,11 @@ function renderCustomers() {
 
 async function deleteCustomer(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-  if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
+  const cust = state.customers.find(c => c.id === id);
+if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
+  return showNotification('لا يمكن حذف العميل النقدي العام', 'warning');
+}
+if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
 
   const cust = state.customers.find(function(c) { return c.id === id; });
   if (cust && (Number(cust.openingDebt) || 0) > 0) {

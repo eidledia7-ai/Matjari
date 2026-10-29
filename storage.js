@@ -76,6 +76,14 @@ const { data, error } = await query; // شلنا الترتيب عشان نتج�
         s.items = items.filter(i => i.sale_id === s.id).map(i => ({ id: i.product_id, name: i.product_name, qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost) }));
       });
     }
+      if (!state.customers || state.customers.length === 0) {
+    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+  } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
+    state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
+  }
+
+  } catch (err) { console.warn('Failed to load sale items', err); }
+}
   } catch (err) { console.warn('Failed to load sale items', err); }
 }
 /**

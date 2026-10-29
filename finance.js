@@ -173,7 +173,7 @@ function renderReports() {
   }
 
   // [إصلاح] الأكثر مبيعاً
-  const topContainer = document.getElementById('topProductsReport');
+const topContainer = document.getElementById('topProductsReportFinance');
   if (topContainer) {
     const salesByProduct = {};
     
@@ -494,24 +494,42 @@ function printExpensesDetail() {
 function printReportSummary() {
   const container = document.getElementById('reportCards');
   if (!container) return;
+  
+  // بنجيب الأكثر مبيعاً
+  const topContainer = document.getElementById('topProductsReport');
+  const topHtml = topContainer ? topContainer.innerHTML : '';
+
+  // بنجيب كروت طرق الدفع
+  const detailsContainer = document.getElementById('activityDetailsReport');
+  const detailsHtml = detailsContainer ? detailsContainer.innerHTML : '';
 
   const w = window.open('', '_blank');
   const cssUrl = new URL('style.css', location.href).href;
 
-  // بنجيب محتوى الأكثر مبيعاً كمان
-  const topProductsHtml = document.getElementById('topProductsReport') ? document.getElementById('topProductsReport').innerHTML : '';
-
   w.document.write(`
-    <html dir="rtl"><head><title>تقرير مالي</title>
+    <html dir="rtl"><head><title>تقرير مالي - ${state.storeSettings.name}</title>
     <link rel="stylesheet" href="${cssUrl}">
-    <style>@media print { .no-print, button, input { display: none !important; } } body { padding: 20px; background: white; }</style>
+    <style>
+      @media print { 
+        .no-print, button, input, select { display: none !important; } 
+        body { padding: 0; margin: 0; } 
+      }
+      body { padding: 20px; background: #fff; }
+      .stat-card { border: 1px solid #ccc !important; box-shadow: none !important; page-break-inside: avoid; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }
+    </style>
     </head><body>
-    <h2>التقرير المالي - ${escapeHTML(state.storeSettings.name)}</h2>
-    <br>
-    ${container.outerHTML}
-    <br>
-    <h3>الأكثر مبيعاً</h3>
-    ${topProductsHtml}
+    <h2 style="text-align:center;">التقرير المالي - ${escapeHTML(state.storeSettings.name)}</h2>
+    
+    <div style="margin-bottom: 20px;">
+      ${container.innerHTML}
+    </div>
+    
+    ${detailsHtml ? `<div style="margin-bottom: 20px;">${detailsHtml}</div>` : ''}
+    
+    ${topHtml ? `<h3 style="margin-top:20px;">الأكثر مبيعاً</h3><div>${topHtml}</div>` : ''}
+    
     <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
     </body></html>
   `);
