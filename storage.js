@@ -1,9 +1,5 @@
 /* ============ محرك المزامنة (Sync Engine) - للجداول الجديدة ============ */
 
-/**
- * تحميل كل البيانات من السيرفر (Jadwal) إلى الـ State
- * @param {string} ownerId - صاحب المحل (المدير)
- */
 async function syncDown(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
 
@@ -15,12 +11,12 @@ async function syncDown(ownerId) {
     { name: 'expenses', key: 'expenses' },
     { name: 'shifts', key: 'shifts' },
     { name: 'audit_logs', key: 'auditLogs' },
-    { name: 'suppliers', key: 'suppliers' },             // [جديد]
-    { name: 'purchases', key: 'purchases' },             // [جديد]
-    { name: 'customer_payments', key: 'customerPayments' }, // [جديد]
-    { name: 'supplier_payments', key: 'supplierPayments' }, // [جديد]
-    { name: 'stock_moves', key: 'stockMoves' },          // [جديد]
-    { name: 'held_carts', key: 'heldCarts' },            // [جديد]
+    { name: 'suppliers', key: 'suppliers' },
+    { name: 'purchases', key: 'purchases' },
+    { name: 'customer_payments', key: 'customerPayments' },
+    { name: 'supplier_payments', key: 'supplierPayments' },
+    { name: 'stock_moves', key: 'stockMoves' },
+    { name: 'held_carts', key: 'heldCarts' },
     { name: 'store_settings', key: 'storeSettings', single: true }
   ];
 
@@ -40,8 +36,16 @@ async function syncDown(ownerId) {
           };
         }
       } else {
-     const orderColumn = (t.name === 'returns' || t.name === 'shifts' || t.name === 'purchases') ? 'date' : 'created_at';
-const { data, error } = await query; // شلنا الترتيب عشان نتجنب مشاكل الأعمدة
+        // [إصلاح] الترتيب بيتم حسب العمود الصح
+        const orderColumn = (t.name === 'returns' || t.name === 'shifts') ? 'date' : 'created_at';
+        let finalQuery = query;
+        if (t.name !== 'returns' && t.name !== 'shifts') {
+            finalQuery = query.order('created_at', { ascending: false });
+        } else {
+            finalQuery = query.order('date', { ascending: false });
+        }
+
+        const { data, error } = await finalQuery;
         if (error) throw error;
         
         if (data) {
@@ -68,6 +72,13 @@ const { data, error } = await query; // شلنا الترتيب عشان نتج�
     }
   }
   
+  // التأكد من وجود العميل النقدي العام
+  if (!state.customers || state.customers.length === 0) {
+    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+  } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
+    state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
+  }
+
   // جلب تفاصيل الفواتير
   try {
     const { data: items } = await supabaseClient.from('sale_items').select('*').eq('user_id', ownerId);
@@ -76,23 +87,11 @@ const { data, error } = await query; // شلنا الترتيب عشان نتج�
         s.items = items.filter(i => i.sale_id === s.id).map(i => ({ id: i.product_id, name: i.product_name, qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost) }));
       });
     }
-      if (!state.customers || state.customers.length === 0) {
-    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
-  } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
-    state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
-  }
+  } catch (err) { console.warn('Failed to load sale items', err); }
+}
 
-  } catch (err) { console.warn('Failed to load sale items', err); }
-}
-  } catch (err) { console.warn('Failed to load sale items', err); }
-}
-/**
- * رفع التعديلات (للمدير) للسيرفر
- */
 async function syncUp(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
-  
-  // إعدادات المحل
   try {
     await supabaseClient.from('store_settings').upsert({
       user_id: ownerId,
@@ -110,43 +109,30 @@ async function syncUp(ownerId) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
   } catch (e) { console.warn('Settings sync failed', e); }
-
-  // هنا تقدر تضيف رفع المنتجات والعملاء لو المدير عدلهم
 }
 
-/**
- * حفظ محلي (للكاش)
- */
 function saveData() {
   const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
   if (!cacheOwnerId) return;
   const key = 'matjari_cache_' + cacheOwnerId;
   try {
     const cache = {
-      products: state.products,
-      customers: state.customers,
-      sales: state.sales,
-      returns: state.returns,
-      expenses: state.expenses,
-      shifts: state.shifts,
-      auditLogs: state.auditLogs,
-      storeSettings: state.storeSettings,
-      subscription: state.subscription
+      products: state.products, customers: state.customers, sales: state.sales, returns: state.returns,
+      expenses: state.expenses, shifts: state.shifts, auditLogs: state.auditLogs, storeSettings: state.storeSettings,
+      subscription: state.subscription, suppliers: state.suppliers, purchases: state.purchases,
+      customerPayments: state.customerPayments, supplierPayments: state.supplierPayments,
+      stockMoves: state.stockMoves, heldCarts: state.heldCarts
     };
     localStorage.setItem(key, JSON.stringify(cache));
   } catch (e) {}
 }
 
-/**
- * مزامنة الموظف: رفع الفواتير، المرتجعات، المصروفات، وسجل النشاط
- */
 async function syncEmployeeChanges() {
   if (!state.currentUser || state.role !== 'employee' || !state.ownerId) return;
   if (!navigator.onLine || !supabaseClient) return;
 
   const ownerId = state.ownerId;
 
-  // 1. رفع الفواتير (Sales & Sale Items)
   for (const sale of state.sales) {
     try {
       await supabaseClient.from('sales').upsert({
@@ -166,7 +152,6 @@ async function syncEmployeeChanges() {
     } catch (e) { console.warn('Sale upload failed', e); }
   }
 
-  // 2. رفع المرتجعات
   for (const ret of state.returns) {
     try {
       await supabaseClient.from('returns').upsert({
@@ -176,7 +161,6 @@ async function syncEmployeeChanges() {
     } catch (e) { console.warn('Return upload failed', e); }
   }
 
-  // 3. رفع المصروفات
   for (const exp of state.expenses) {
     try {
       await supabaseClient.from('expenses').upsert({
@@ -185,7 +169,6 @@ async function syncEmployeeChanges() {
     } catch (e) { console.warn('Expense upload failed', e); }
   }
 
-  // 4. رفع سجل النشاط
   for (const log of state.auditLogs) {
     try {
       await supabaseClient.from('audit_logs').upsert({
@@ -196,9 +179,6 @@ async function syncEmployeeChanges() {
   }
 }
 
-/**
- * المزامنة اليدوية (موجّهة حسب الدور)
- */
 async function syncNow() {
   if (!state.currentUser) return showNotification('سجّل الدخول أولاً', 'warning');
   if (!supabaseClient) return showNotification('لا يوجد اتصال بالسيرفر', 'error');
