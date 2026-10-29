@@ -211,7 +211,8 @@ async function completeSale() {
       const { error: saleErr } = await supabaseClient.from('sales').insert({
         id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
         discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid, remaining: saleObj.remaining,
-        customer_id: saleObj.customerId, pay_method: saleObj.payMethod, notes: saleObj.notes,
+   customer_id: (saleObj.customerId && saleObj.customerId.startsWith('CUST-') && state.customers.find(c => c.id === saleObj.customerId)?.name === 'عميل نقدي عام') ? null : saleObj.customerId,
+     pay_method: saleObj.payMethod, notes: saleObj.notes,
         cashier: saleObj.cashier, shift_id: saleObj.shiftId
       });
       if (saleErr) throw saleErr;
