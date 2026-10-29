@@ -32,7 +32,6 @@ async function saveCustomer() {
     state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, points: 0 });
   }
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('customers').upsert(newCustomer, { onConflict: 'id' });
     if (error) console.warn('Customer upload failed:', error);
@@ -103,13 +102,14 @@ function renderCustomers() {
 
 async function deleteCustomer(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  
   const cust = state.customers.find(c => c.id === id);
-if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
-  return showNotification('لا يمكن حذف العميل النقدي العام', 'warning');
-}
-if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
+  if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
+    return showNotification('لا يمكن حذف العميل النقدي العام', 'warning');
+  }
+  
+  if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
 
-  const cust = state.customers.find(function(c) { return c.id === id; });
   if (cust && (Number(cust.openingDebt) || 0) > 0) {
     const debt = Number(cust.openingDebt) || 0;
     const confirmMsg = currentLang === 'en'
@@ -164,7 +164,6 @@ async function recordCustomerPayment() {
   };
   state.customerPayments.unshift({ id: newPayment.id, customerId, customerName: cust.name, amount, date, notes });
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('customer_payments').insert(newPayment);
     await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', customerId);
@@ -228,7 +227,6 @@ async function saveSupplier() {
     state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt });
   }
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('suppliers').upsert(newSupplier, { onConflict: 'id' });
     if (error) console.warn('Supplier upload failed:', error);
@@ -381,7 +379,6 @@ async function savePurchase() {
   let targetProdName = '';
   let newProductData = null;
 
-  // 1. تجهيز المنتج (موجود أو جديد)
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
     if (p) {
@@ -391,13 +388,13 @@ async function savePurchase() {
       
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('products').update({ stock: p.stock, cost: cost }).eq('id', p.id);
+        await supabaseClient.from('stock_moves').insert({
+          id: uid('SM'), user_id: ownerId, product_id: p.id, product_name: p.name,
+          type: 'in', qty: qty, old_stock: p.stock - qty, new_stock: p.stock,
+          reason: 'مشتريات', date: new Date().toISOString()
+        });
+        state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: p.id, productName: p.name, type: 'in', qty: qty, oldStock: p.stock - qty, newStock: p.stock, reason: 'مشتريات' });
       }
-      await supabaseClient.from('stock_moves').insert({
-  id: uid('SM'), user_id: ownerId, product_id: p.id, product_name: p.name,
-  type: 'in', qty: qty, old_stock: p.stock - qty, new_stock: p.stock,
-  reason: 'مشتريات', date: new Date().toISOString()
-});
-state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: p.id, productName: p.name, type: 'in', qty: qty, oldStock: p.stock - qty, newStock: p.stock, reason: 'مشتريات' });
     }
   } else if (newName) {
     targetProdId = uid('PRD');
@@ -406,18 +403,15 @@ state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), produc
     state.products.push({ id: targetProdId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 });
     targetProdName = newName;
 
-    // [إصلاح] رفع المنتج الجديد للسيرفر فوراً عشان يظهر في صفحة المنتجات
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('products').insert(newProductData);
+      await supabaseClient.from('stock_moves').insert({
+        id: uid('SM'), user_id: ownerId, product_id: targetProdId, product_name: targetProdName,
+        type: 'in', qty: qty, old_stock: 0, new_stock: qty,
+        reason: 'منتج جديد - مشتريات', date: new Date().toISOString()
+      });
+      state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: targetProdId, productName: targetProdName, type: 'in', qty: qty, oldStock: 0, newStock: qty, reason: 'منتج جديد - مشتريات' });
     }
-    if (navigator.onLine && supabaseClient) {
-  await supabaseClient.from('stock_moves').insert({
-    id: uid('SM'), user_id: ownerId, product_id: targetProdId, product_name: targetProdName,
-    type: 'in', qty: qty, old_stock: 0, new_stock: qty,
-    reason: 'منتج جديد - مشتريات', date: new Date().toISOString()
-  });
-  state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: targetProdId, productName: targetProdName, type: 'in', qty: qty, oldStock: 0, newStock: qty, reason: 'منتج جديد - مشتريات' });
-}
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
   }
@@ -425,7 +419,6 @@ state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), produc
   const total = qty * cost;
   const remaining = Math.max(0, total - paid);
 
-  // 2. تحديث مديونية المورد
   if (remaining > 0) {
     const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
     if (sup) {
@@ -436,7 +429,6 @@ state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), produc
     }
   }
 
-  // 3. تسجيل الفاتورة
   const newPurchase = {
     id: uid('PUR'), user_id: ownerId, supplier_id: supplierId, product_id: targetProdId, product_name: targetProdName,
     qty: qty, cost: cost, total: total, paid: paid, remaining: remaining, date: new Date().toISOString()
