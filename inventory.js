@@ -7,10 +7,7 @@ async function saveProduct() {
   if (!id) {
     const lim = checkLimit('products', state.products.length);
     if (!lim.allowed) {
-      return showNotification(
-        currentLang === 'en' ? 'Product limit reached.' : 'وصلت لحد المنتجات. رقّي باقتك.',
-        'warning'
-      );
+      return showNotification(currentLang === 'en' ? 'Product limit reached.' : 'وصلت لحد المنتجات. رقّي باقتك.', 'warning');
     }
   }
   
@@ -29,34 +26,20 @@ async function saveProduct() {
 
   const ownerId = state.currentUser.id;
   const productData = {
-    id: id || uid('PRD'),
-    user_id: ownerId,
-    name: name,
-    barcode: barcode,
-    category: category,
-    price: price,
-    cost: cost,
-    stock: stock,
-    min_stock: minStock
+    id: id || uid('PRD'), user_id: ownerId, name, barcode, category, price, cost, stock, min_stock: minStock
   };
 
   if (id) {
     const prod = state.products.find(function(p) { return p.id === id; });
     if (prod) {
-      prod.name = name;
-      prod.barcode = barcode;
-      prod.category = category;
-      prod.price = price;
-      prod.cost = cost;
-      prod.minStock = minStock;
-      // ملاحظة: المخزون مش بيتم تعديله هنا، بيتعدل من حركة المخزون أو البيع
+      prod.name = name; prod.barcode = barcode; prod.category = category;
+      prod.price = price; prod.cost = cost; prod.minStock = minStock;
       productData.stock = prod.stock; 
     }
   } else {
     state.products.push({ id: productData.id, name, barcode, category, price, cost, stock, minStock });
   }
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
     if (error) console.warn('Product upload failed:', error);
@@ -152,9 +135,7 @@ async function deleteProduct(id) {
   }, 0);
 
   if (salesCount > 0) {
-    const msg = currentLang === 'en'
-      ? 'Product in ' + salesCount + ' invoices. Continue?'
-      : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. هل تريد المتابعة؟';
+    const msg = currentLang === 'en' ? 'Product in ' + salesCount + ' invoices. Continue?' : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. هل تريد المتابعة؟';
     if (!confirm(msg)) return;
   } else {
     if (!confirm(tr('msg_delete_product'))) return;
@@ -198,9 +179,7 @@ async function saveStockAdjustment() {
   const prod = state.products.find(function(p) { return p.id === prodId; });
   if (!prod) return;
 
-  if (type === 'out' && qty > prod.stock) {
-    return showNotification('الكمية أكبر من المخزون المتاح (' + prod.stock + ')', 'error');
-  }
+  if (type === 'out' && qty > prod.stock) return showNotification('الكمية أكبر من المخزون المتاح (' + prod.stock + ')', 'error');
 
   const oldStock = prod.stock;
   let newStock = oldStock;
@@ -216,9 +195,13 @@ async function saveStockAdjustment() {
     type: type, qty: Math.abs(newStock - oldStock), oldStock: oldStock, newStock: newStock, reason: reason
   });
 
-  // تحديث المنتج في السيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('products').update({ stock: newStock }).eq('id', prodId);
+    await supabaseClient.from('stock_moves').insert({
+      id: uid('SM'), user_id: state.currentUser.id, product_id: prod.id, product_name: prod.name,
+      type: type, qty: Math.abs(newStock - oldStock), old_stock: oldStock, new_stock: newStock,
+      reason: reason, date: new Date().toISOString()
+    });
   }
 
   if (typeof addAuditLog === 'function') {
@@ -243,8 +226,7 @@ function renderStockMoves() {
   const search = (searchEl ? searchEl.value : '').toLowerCase();
 
   const filtered = state.stockMoves.filter(function(m) {
-    return (m.productName || '').toLowerCase().indexOf(search) !== -1 ||
-      (m.reason || '').toLowerCase().indexOf(search) !== -1;
+    return (m.productName || '').toLowerCase().indexOf(search) !== -1 || (m.reason || '').toLowerCase().indexOf(search) !== -1;
   });
 
   if (filtered.length === 0) {
@@ -273,10 +255,8 @@ function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
-  
-  // للموظف: يعرض الفواتير اللي هو عملها (أو كل فواتير المدير)
   state.sales.forEach(function(s) {
-    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ')</option>';
+    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
   });
 }
 
@@ -302,9 +282,7 @@ function updateReturnProducts() {
 async function saveReturn() {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
-    if (!perms.canReturn) {
-      return showNotification('هذه العملية للمدير فقط (الموظف غير مسموح له بتسجيل مرتجع)', 'warning');
-    }
+    if (!perms.canReturn) return showNotification('هذه العملية للمدير فقط', 'warning');
   }
 
   const saleId = document.getElementById('returnSale').value;
@@ -326,39 +304,91 @@ async function saveReturn() {
   if (qty > item.qty - alreadyReturned) return showNotification('الكمية أكبر من المتبقي', 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-  const returnObj = {
-    id: uid('RET'), date: new Date().toISOString(),
-    saleId: saleId, productId: prodId, productName: item.name, qty: qty, reason: reason || 'غير محدد'
-  };
+  
+  // 1. حساب قيمة المرتجع
+  const returnValue = Number(item.price) * qty;
 
-  // 1. الحفظ في السيرفر
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('returns').insert({
-      id: returnObj.id, user_id: ownerId, sale_id: returnObj.saleId,
-      product_id: returnObj.productId, product_name: returnObj.productName,
-      qty: returnObj.qty, reason: returnObj.reason, date: returnObj.date
-    });
-    if (error) console.warn('Return upload failed:', error);
+  // 2. تحديث الفاتورة الأصلية والعميل
+  if (sale) {
+      sale.subtotal = Math.max(0, Number(sale.subtotal) - returnValue);
+      sale.total = Math.max(0, Number(sale.total) - returnValue);
+      
+      if (sale.customerId) {
+          const cust = state.customers.find(c => c.id === sale.customerId);
+          if (cust && sale.remaining > 0) {
+              const debtReduction = Math.min(Number(sale.remaining), returnValue);
+              cust.openingDebt = Math.max(0, Number(cust.openingDebt) - debtReduction);
+              sale.remaining = Math.max(0, Number(sale.remaining) - returnValue);
+          }
+      }
+      
+      // تحديث الفاتورة في السيرفر
+      if (navigator.onLine && supabaseClient) {
+          await supabaseClient.from('sales').update({
+              subtotal: sale.subtotal, total: sale.total, remaining: sale.remaining
+          }).eq('id', sale.id);
+          
+          if (sale.customerId) {
+              const cust = state.customers.find(c => c.id === sale.customerId);
+              if (cust) await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', cust.id);
+          }
+      }
   }
 
-  // 2. التحديث المحلي
-  state.returns.unshift(returnObj);
+  // 3. زيادة المخزون
   const prod = state.products.find(function(p) { return p.id === prodId; });
-  if (prod) prod.stock += qty; // التريجر في السيرفر بيعمل ده أوتوماتيك، هنا بنعمله في الواجهة
+  if (prod) {
+    const before = prod.stock;
+    prod.stock += qty;
+    state.stockMoves.unshift({
+      id: uid('SM'), date: new Date().toISOString(), productId: prod.id, productName: prod.name,
+      type: 'in', qty: qty, oldStock: before, newStock: prod.stock, reason: 'مرتجع فاتورة ' + saleId
+    });
+
+    // رفع حركة المخزون للسيرفر
+    if (navigator.onLine && supabaseClient) {
+      await supabaseClient.from('stock_moves').insert({
+        id: uid('SM'), user_id: ownerId, product_id: prod.id, product_name: prod.name,
+        type: 'in', qty: qty, old_stock: before, new_stock: prod.stock,
+        reason: 'مرتجع فاتورة ' + saleId, date: new Date().toISOString()
+      });
+      await supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id);
+    }
+  }
+
+  // 4. تسجيل المرتجع
+  const newReturn = {
+    id: uid('RET'), date: new Date().toISOString(), saleId: saleId, productId: prodId,
+    productName: item.name, qty: qty, reason: reason || 'غير محدد'
+  };
+  state.returns.unshift(newReturn);
+
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('returns').insert({
+      id: newReturn.id, user_id: ownerId, sale_id: newReturn.saleId, product_id: newReturn.productId,
+      product_name: newReturn.productName, qty: newReturn.qty, reason: newReturn.reason, date: newReturn.date
+    });
+  }
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_return', { returnId: returnObj.id, saleId, qty }, returnObj.id);
+    addAuditLog('add_return', { returnId: newReturn.id, saleId, qty }, newReturn.id);
   }
 
   saveData();
   document.getElementById('returnQty').value = 1;
   document.getElementById('returnReason').value = '';
+  
+  // تحديث كل الشاشات عشان الفلوس تسمع
   renderReturns();
   renderProducts();
   renderStockMoves();
   renderDashboard();
+  renderSales(); 
+  renderReports(); 
+  renderCustomers();
   updateStockBadge();
-  showNotification('تم تسجيل المرتجع ✅');
+  
+  showNotification('تم تسجيل المرتجع وتحديث الفاتورة ✅');
 }
 
 function renderReturns() {

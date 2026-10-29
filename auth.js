@@ -67,7 +67,6 @@ async function signUp() {
     const result = await supabaseClient.auth.signUp({ email: email, password: password });
     if (result.error) throw result.error;
 
-    // ملاحظة: الـ Trigger في السيرفر هيعمل صلاحيات المدير والاشتراك أوتوماتيك
     if (result.data.session && result.data.user) {
       await openUserSession(result.data.user);
     } else {
@@ -192,8 +191,11 @@ async function openUserSession(user) {
   
   try {
     // 1. تحديد الدور ورقم المدير
-    await new Promise(r => setTimeout(r, 1000)); // ننتظر ثانية عشان الـ Trigger يخلص
-const roleRes = await supabaseClient.from('shop_user_roles').select('role, owner_id').eq('user_id', user.id).maybeSingle();
+    const roleRes = await supabaseClient
+      .from('shop_user_roles')
+      .select('role, owner_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
     if (roleRes.data) {
       state.role = roleRes.data.role;
@@ -241,10 +243,12 @@ const roleRes = await supabaseClient.from('shop_user_roles').select('role, owner
       await syncDown(ownerId);
     }
 
-    // لو مفيش منتجات خالص، نضيف عميل افتراضي
+    // التأكد من وجود العميل النقدي العام
     if (!state.customers || state.customers.length === 0) {
-  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-}
+      state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+    } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
+      state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
+    }
 
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';
@@ -262,14 +266,14 @@ const roleRes = await supabaseClient.from('shop_user_roles').select('role, owner
     showPage(pageToShow);
     
   } catch (e) {
-  console.error(e);
-  document.getElementById('skeletonLoader').style.display = 'none';
-  if (main) main.style.display = 'block';
-  setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
-  showLoggedOutUI();
-} finally {
-  hideLoading();
-}
+    console.error(e);
+    document.getElementById('skeletonLoader').style.display = 'none';
+    if (main) main.style.display = 'block';
+    setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
+    showLoggedOutUI();
+  } finally {
+    hideLoading();
+  }
   
   // حفظ الجلسة للأوفلاين
   try {
@@ -318,12 +322,15 @@ function applyRolePermissions() {
   const employee = state.role === 'employee';
   document.querySelectorAll('.sidebar-nav button, .nav-group').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    if (employee && page && page !== 'sales' && page !== 'home' && page !== 'invReturns') {
+    
+    // [التعديل] الموظف ميشوفش غير نقطة البيع والمرتجعات
+    if (employee && page && page !== 'sales' && page !== 'invReturns') {
       btn.style.display = 'none';
     } else {
       btn.style.display = '';
     }
   });
+  
   const syncBtn = document.querySelector('.sidebar-nav button[data-action="sync"]');
   if (syncBtn) syncBtn.style.display = employee ? 'none' : '';
 

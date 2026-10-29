@@ -11,7 +11,7 @@ function populateSalesDropdowns() {
 
   custSelect.innerHTML = '';
   if (!state.customers || !state.customers.length) {
-    state.customers = [{ id: uid('CUST'), name: (translations[currentLang] || translations.ar).cash_customer, phone: '-', openingDebt: 0 }];
+    state.customers = [{ id: 'CASH-CUSTOMER', name: (translations[currentLang] || translations.ar).cash_customer, phone: '-', openingDebt: 0 }];
   }
   state.customers.forEach(function(c) {
     const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
@@ -19,6 +19,9 @@ function populateSalesDropdowns() {
     const pointsLabel = (c.points && c.points > 0) ? ' (💎 ' + c.points + ' نقطة)' : '';
     custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + pointsLabel + '</option>';
   });
+
+  // استدعاء دالة العرض عشان تظبط المدفوع لو أول عميل نقدي
+  renderCart();
 }
 
 function addToCartManual() {
@@ -111,6 +114,12 @@ function renderCart() {
     if (pointsDiscount > 0) totalText += ' (خصم نقاط: -' + pointsDiscount.toFixed(2) + ')';
     t.innerText = totalText;
   }
+
+  // ملء المدفوع تلقائياً للعميل النقدي
+  const paidInput = document.getElementById('salePaid');
+  if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer') && paidInput) {
+      paidInput.value = finalTotal.toFixed(2);
+  }
 }
 
 function updateCartQty(idx, val) {
@@ -182,7 +191,6 @@ async function completeSale() {
   const customerId = document.getElementById('saleCustomer').value;
   const customer = state.customers.find(c => c.id === customerId);
   
-  // [إصلاح هام] منع العميل النقدي من أخذ ديون
   if (customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer') && paid < total) {
     hideLoading();
     return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
@@ -192,13 +200,17 @@ async function completeSale() {
   const notes = document.getElementById('saleNotes').value.trim();
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // [إصلاح] الوردية التلقائية
   if (!state.currentShift) {
     state.currentShift = { id: uid('SHIFT'), name: 'وردية تلقائية', cashierName: state.currentUser.email, startTime: new Date().toISOString() };
-    // ممكن نرفعها للسيرفر هنا لو حبينا
+    
+    // رفع الوردية للسيرفر أول ما تفتح تلقائي
+    if (navigator.onLine && supabaseClient) {
+      supabaseClient.from('shifts').insert({
+        id: state.currentShift.id, user_id: ownerId, cashier_name: state.currentShift.cashierName, start_time: state.currentShift.startTime
+      }).then(({error}) => { if(error) console.log('Shift auto-open error:', error); });
+    }
   }
 
-  // 1. خصم المخزون من الـ state
   state.cart.forEach(function(item) {
     const prod = state.products.find(function(p) { return p.id === item.id; });
     if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
@@ -215,7 +227,6 @@ async function completeSale() {
     cashier: state.currentUser.email, shiftId: state.currentShift.id
   };
 
-  // 2. الحفظ في السيرفر
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: saleErr } = await supabaseClient.from('sales').insert({
@@ -240,10 +251,8 @@ async function completeSale() {
     }
   }
 
-  // 3. تحديث الحالة المحلية
   state.sales.unshift(saleObj);
 
-  // [إصلاح] تعديل ديون العميل في السيرفر لو مش نقدي
   if (saleObj.remaining > 0 && saleObj.customerId) {
     const cust = state.customers.find(function(c) { return c.id === saleObj.customerId; });
     if (cust) {
@@ -362,13 +371,10 @@ function renderSales() {
   container.innerHTML = html;
 }
 
-/* ============ إدارة الحذف الآمن ============ */
 function safeDeleteRecord(type, id) {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
-    if (!perms.canDelete) {
-      return showNotification('هذه العملية للمدير فقط', 'warning');
-    }
+    if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
   }
   
   showCustomConfirm('تأكيد الحذف', tr('msg_delete_mistake'), () => {
@@ -384,19 +390,26 @@ async function executeDeleteRecord(type, id) {
     if (idx === -1) return;
     const s = state.sales[idx];
     
-    // 1. إرجاع المخزون في الـ State
     s.items.forEach(function(item) {
       const prod = state.products.find(function(p) { return p.id === item.id; });
-      if (prod) prod.stock += item.qty;
+      if (prod) {
+        prod.stock += item.qty;
+        if (navigator.onLine && supabaseClient) {
+          supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id).then();
+        }
+      }
     });
 
-    // 2. تعديل ديون العميل
     if (s.customerId) {
       const cust = state.customers.find(function(c) { return c.id === s.customerId; });
-      if (cust) cust.openingDebt = Math.max(0, (Number(cust.openingDebt) || 0) - (Number(s.remaining) || 0));
+      if (cust) {
+        cust.openingDebt = Math.max(0, (Number(cust.openingDebt) || 0) - (Number(s.remaining) || 0));
+        if (navigator.onLine && supabaseClient) {
+          supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', cust.id).then();
+        }
+      }
     }
 
-    // 3. الحذف من السيرفر
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('sales').delete().eq('id', id);
     }
@@ -420,12 +433,10 @@ async function executeDeleteRecord(type, id) {
     }
 
   } else if (type === 'purchase') {
-    // [إصلاح] حذف المشتريات
     const idx = state.purchases.findIndex(function(p) { return p.id === id; });
     if (idx !== -1) {
       const p = state.purchases[idx];
       
-      // إرجاع المخزون للسيرفر والـ state
       const prod = state.products.find(function(pr) { return pr.id === p.productId; });
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock) - p.qty);
@@ -434,7 +445,6 @@ async function executeDeleteRecord(type, id) {
         }
       }
 
-      // تعديل مديونية المورد
       if (p.remaining > 0) {
         const sup = state.suppliers.find(s => s.id === p.supplierId);
         if (sup) {
@@ -445,15 +455,12 @@ async function executeDeleteRecord(type, id) {
         }
       }
 
-      // الحذف من السيرفر
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('purchases').delete().eq('id', id);
+        await supabaseClient.from('stock_moves').delete().eq('product_id', p.productId).eq('type', 'in').like('reason', '%مشتريات%');
       }
-if (navigator.onLine && supabaseClient) {
-  // مسح حركة المخزون المرتبطة
-  await supabaseClient.from('stock_moves').delete().eq('product_id', p.productId).eq('type', 'in').like('reason', '%مشتريات%');
-}
-state.stockMoves = state.stockMoves.filter(m => !(m.productId === p.productId && m.reason.includes('مشتريات')));
+      state.stockMoves = state.stockMoves.filter(m => !(m.productId === p.productId && m.reason.includes('مشتريات')));
+
       state.purchases.splice(idx, 1);
 
       if (typeof addAuditLog === 'function') {

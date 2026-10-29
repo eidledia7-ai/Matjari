@@ -15,7 +15,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
-  <!-- [ترتيب جديد] ملفات التطبيق -->
   <script src="config.js" defer></script>
   <script src="translations.js" defer></script>
   <script src="core.js" defer></script>
@@ -44,10 +43,8 @@
 
   <!-- شاشة تسجيل الدخول -->
 <div id="loginScreen" class="login-screen active">
-  <!-- صفحة الهبوط للزوار -->
   <div id="landingView" class="landing-view"></div>
 
-  <!-- نموذج الدخول / التسجيل -->
   <div id="authView" class="login-card" style="display:none">
     <button type="button" class="small-btn gray" onclick="showLandingView()" style="margin-bottom:15px;" data-i18n="back_btn">← رجوع</button>
     <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
@@ -103,10 +100,16 @@
     </div>
     <nav id="mainNavigation" class="sidebar-nav">
       
+      <!-- 1. الرئيسية (بتختفي عن الموظف) -->
       <button data-page="home" onclick="showPage('home')" data-i18n="menu_home">🏠 الرئيسية</button>
       
+      <!-- 2. نقطة البيع (بتظهر للكل) -->
       <button data-page="sales" onclick="showPage('sales')" data-i18n="menu_sales">🛒 نقطة البيع</button>
       
+      <!-- 3. المرتجعات (زرار رئيسي دلوقتي، بيظهر للموظف والمدير) -->
+      <button data-page="invReturns" onclick="showPage('invReturns')" data-i18n="tab_returns">🔄 المرتجعات</button>
+
+      <!-- 4. المخزون (بتختفي عن الموظف) -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('invSubMenu')">
           <span>📦 <span data-i18n="menu_inventory">المخزون</span> <span id="stockAlertBadge"></span></span>
@@ -115,10 +118,10 @@
         <div id="invSubMenu" class="sub-menu">
           <button data-page="invProducts" onclick="showPage('invProducts')" data-i18n="tab_products">📦 المنتجات</button>
           <button data-page="invMoves" onclick="showPage('invMoves')" data-i18n="tab_moves">📊 حركة المخزون</button>
-          <button data-page="invReturns" onclick="showPage('invReturns')" data-i18n="tab_returns">🔄 المرتجعات</button>
         </div>
       </div>
 
+      <!-- 5. الشركاء (بتختفي عن الموظف) -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('partSubMenu')">
           <span>🤝 <span data-i18n="menu_partners">الشركاء</span></span>
@@ -130,6 +133,7 @@
         </div>
       </div>
 
+      <!-- 6. المالية (بتختفي عن الموظف) -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('finSubMenu')">
           <span>💰 <span data-i18n="menu_finance">المالية</span></span>
@@ -143,6 +147,7 @@
         </div>
       </div>
 
+      <!-- 7. الإعدادات (بتختفي عن الموظف) -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('settSubMenu')">
           <span>⚙️ <span data-i18n="menu_settings">الإعدادات</span></span>
@@ -155,10 +160,10 @@
           <button data-page="settStaff" onclick="showPage('settStaff')" data-i18n="staff_page">👥 إدارة الموظفين</button>
           <button data-page="settBackup" onclick="showPage('settBackup')" data-i18n="backup_encryption">🔒 النسخ الاحتياطي والأمان</button>
           <button data-page="settUpdates" onclick="showPage('settUpdates')" data-i18n="app_updates">🔄 التحديثات والكاش</button>
-          <button type="button" onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
         </div>
       </div>
 
+      <!-- 8. الدعم (بتختفي عن الموظف) -->
       <div class="nav-group">
         <button type="button" class="nav-toggle" onclick="toggleSubMenu('helpSubMenu')"><span>🆘 <span data-i18n="menu_support">الدعم والمساعدة</span></span><span class="arrow">▼</span></button>
         <div id="helpSubMenu" class="sub-menu">
@@ -168,10 +173,10 @@
         </div>
       </div>
 
+      <!-- أزرار أساسية تظهر للكل (خارج الـ nav-group) -->
       <button data-action="sync" onclick="syncNow()" style="margin-top: 15px;" data-i18n="sync_now">🔄 مزامنة الآن</button>
-   
+      <button onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
       <button onclick="changePasswordPrompt()" data-i18n="change_pass_btn" style="background:#1769aa; margin-top: 10px;">🔑 تغيير كلمة المرور</button>
-            
       <button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
     </nav>
   </aside>
@@ -750,7 +755,7 @@
     <h3 data-i18n="performance_summary">📊 ملخص الأداء</h3>
     <div id="dailyReport"></div>
   </div>
-    <div class="card mt-20">
+  <div class="card mt-20">
   <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3>
   <div id="topProductsReportFinance"></div>
 </div>
@@ -924,14 +929,14 @@
     <input type="checkbox" id="perm_canDelete" style="width:20px; height:20px;">
     <span>السماح للموظف بمسح الفواتير والعمليات</span>
   </label>
- <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;">
-  <input type="checkbox" id="perm_canEditPrice" style="width:20px; height:20px;">
-  <span>السماح للموظف بتعديل سعر المنتج في الكاشير</span>
-</label>
-<label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-  <input type="checkbox" id="perm_canReturn" style="width:20px; height:20px;">
-  <span>السماح للموظف بتسجيل المرتجعات</span>
-</label>
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;">
+    <input type="checkbox" id="perm_canEditPrice" style="width:20px; height:20px;">
+    <span>السماح للموظف بتعديل سعر المنتج في الكاشير</span>
+  </label>
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+    <input type="checkbox" id="perm_canReturn" style="width:20px; height:20px;">
+    <span>السماح للموظف بتسجيل المرتجعات</span>
+  </label>
 </div>
         <div class="btn-group mt-15">
           <button class="btn primary" onclick="saveStoreSettings()" data-i18n="save_store_btn">حفظ بيانات المحل</button>
@@ -1236,7 +1241,7 @@
   </div>
 </div>
 
-<!-- [إصلاح] skeletonLoader مستقل عن أي modal -->
+<!-- skeletonLoader مستقل عن أي modal -->
 <div id="skeletonLoader" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.4); padding:20px; overflow:auto;">
   <div class="skeleton" style="height:40px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
   <div class="skeleton" style="height:100px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
