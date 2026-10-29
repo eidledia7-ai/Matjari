@@ -15,12 +15,12 @@ function loadStoreSettings() {
   const pDiscount = document.getElementById('perm_canDiscount');
   const pDelete = document.getElementById('perm_canDelete');
   const pEdit = document.getElementById('perm_canEditPrice');
-  const pReturn = document.getElementById('perm_canReturn'); // [إضافة] صلاحية المرتجعات
+  const pReturn = document.getElementById('perm_canReturn'); 
   
   if (pDiscount) pDiscount.checked = perms.canDiscount || false;
   if (pDelete) pDelete.checked = perms.canDelete || false;
   if (pEdit) pEdit.checked = perms.canEditPrice || false;
-  if (pReturn) pReturn.checked = perms.canReturn || false; // [إضافة]
+  if (pReturn) pReturn.checked = perms.canReturn || false; 
   
   const printTypeEl = document.getElementById('storePrintType');
   if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
@@ -33,46 +33,69 @@ function loadStoreSettings() {
   if (dz) dz.style.display = (state.role === 'manager') ? 'block' : 'none';
 }
 
-function saveStoreSettings() {
+async function saveStoreSettings() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   
-  state.storeSettings.name = (document.getElementById('storeName').value || '').trim() || 'متجري';
-  state.storeSettings.phone = (document.getElementById('storePhone').value || '').trim();
-  state.storeSettings.address = (document.getElementById('storeAddress').value || '').trim();
-  state.storeSettings.taxNumber = (document.getElementById('storeTaxNumber').value || '').trim();
-  state.storeSettings.currency = (document.getElementById('storeCurrency').value || 'ج.م').trim();
-  state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
-  state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
-  state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
-
   const permDiscountEl = document.getElementById('perm_canDiscount');
   const permDeleteEl = document.getElementById('perm_canDelete');
   const permEditEl = document.getElementById('perm_canEditPrice');
-  const permReturnEl = document.getElementById('perm_canReturn'); // [إضافة]
+  const permReturnEl = document.getElementById('perm_canReturn');
 
-  state.storeSettings.permissions = {
-    canDiscount: permDiscountEl ? permDiscountEl.checked : false,
-    canDelete: permDeleteEl ? permDeleteEl.checked : false,
-    canEditPrice: permEditEl ? permEditEl.checked : false,
-    canReturn: permReturnEl ? permReturnEl.checked : false // [إضافة]
+  const newSettings = {
+    name: (document.getElementById('storeName').value || '').trim() || 'متجري',
+    phone: (document.getElementById('storePhone').value || '').trim(),
+    address: (document.getElementById('storeAddress').value || '').trim(),
+    taxNumber: (document.getElementById('storeTaxNumber').value || '').trim(),
+    currency: (document.getElementById('storeCurrency').value || 'ج.م').trim(),
+    monthlyGoal: parseFloat(document.getElementById('storeMonthlyGoal').value) || 0,
+    pointsRate: parseFloat(document.getElementById('storePointsRate').value) || 0,
+    pointValue: parseFloat(document.getElementById('storePointValue').value) || 0,
+    printType: document.getElementById('storePrintType') ? document.getElementById('storePrintType').value : 'thermal',
+    permissions: {
+      canDiscount: permDiscountEl ? permDiscountEl.checked : false,
+      canDelete: permDeleteEl ? permDeleteEl.checked : false,
+      canEditPrice: permEditEl ? permEditEl.checked : false,
+      canReturn: permReturnEl ? permReturnEl.checked : false
+    }
   };
 
-  const printTypeEl = document.getElementById('storePrintType');
-  state.storeSettings.printType = printTypeEl ? printTypeEl.value : 'thermal';
-  
+  // تحديث الـ state
+  state.storeSettings = Object.assign({}, state.storeSettings, newSettings);
+
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
 
-  // سجل تعديل الإعدادات
+  // الحفظ في السيرفر (الجدول الجديد store_settings)
+  if (navigator.onLine && supabaseClient) {
+    const ownerId = state.currentUser.id;
+    const { error } = await supabaseClient.from('store_settings').upsert({
+      user_id: ownerId,
+      name: newSettings.name,
+      phone: newSettings.phone,
+      address: newSettings.address,
+      tax_number: newSettings.taxNumber,
+      currency: newSettings.currency,
+      logo: state.storeSettings.logo,
+      monthly_goal: newSettings.monthlyGoal,
+      points_rate: newSettings.pointsRate,
+      point_value: newSettings.pointValue,
+      print_type: newSettings.printType,
+      permissions: newSettings.permissions,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+    
+    if (error) {
+      console.warn('Settings upload failed:', error);
+      showNotification('تم الحفظ محلياً، وسيتم الرفع عند عودة الاتصال.', 'warning');
+    }
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('save_store_settings', {
-      storeName: state.storeSettings.name,
-      currency: state.storeSettings.currency
-    });
+    addAuditLog('save_store_settings', { storeName: state.storeSettings.name });
   }
 
   saveData();
-  showNotification('تم حفظ بيانات المحل');
+  showNotification('تم حفظ بيانات المحل ✅');
 }
 
 function handleLogoUpload(event) {
@@ -126,6 +149,26 @@ async function safeClearAllDataPrompt() {
     return;
   }
 
+  const ownerId = state.currentUser.id;
+
+  // مسح البيانات من السيرفر
+  if (navigator.onLine && supabaseClient) {
+    showLoading('جارٍ مسح البيانات...');
+    try {
+      await supabaseClient.from('sale_items').delete().eq('user_id', ownerId);
+      await supabaseClient.from('sales').delete().eq('user_id', ownerId);
+      await supabaseClient.from('returns').delete().eq('user_id', ownerId);
+      await supabaseClient.from('expenses').delete().eq('user_id', ownerId);
+      await supabaseClient.from('products').delete().eq('user_id', ownerId);
+      await supabaseClient.from('customers').delete().eq('user_id', ownerId);
+      await supabaseClient.from('shifts').delete().eq('user_id', ownerId);
+    } catch (err) {
+      console.warn('Failed to clear server data:', err);
+    }
+    hideLoading();
+  }
+
+  // مسح البيانات المحلية
   state.products = [];
   state.sales = [];
   state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
@@ -140,21 +183,13 @@ async function safeClearAllDataPrompt() {
   state.currentShift = null;
   state.cart = [];
 
-  if (state.currentUser) {
-    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-    localStorage.removeItem('matjari_cache_' + cacheOwnerId);
-  }
-
-  if (navigator.onLine && supabaseClient && state.currentUser) {
-    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-    await supabaseClient.from('sales').delete().eq('user_id', cacheOwnerId);
-  }
+  localStorage.removeItem('matjari_cache_' + ownerId);
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });
   }
 
-  await uploadToCloud();
+  saveData();
   renderAll();
   updateStockBadge();
   showNotification('تم مسح كافة بيانات التطبيق بنجاح ✅');

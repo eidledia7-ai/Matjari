@@ -1,7 +1,6 @@
 /* ============ المخزون والمنتجات ============ */
-function saveProduct() {
+async function saveProduct() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
- 
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('productId').value;
@@ -9,13 +8,12 @@ function saveProduct() {
     const lim = checkLimit('products', state.products.length);
     if (!lim.allowed) {
       return showNotification(
-        currentLang === 'en'
-          ? 'Product limit reached (' + lim.max + '). Upgrade your plan.'
-          : 'وصلت لحد المنتجات (' + lim.max + '). رقّي باقتك.',
+        currentLang === 'en' ? 'Product limit reached.' : 'وصلت لحد المنتجات. رقّي باقتك.',
         'warning'
       );
     }
   }
+  
   const name = document.getElementById('productName').value.trim();
   const barcode = document.getElementById('productBarcode').value.trim();
   const category = document.getElementById('productCategory').value.trim();
@@ -29,50 +27,43 @@ function saveProduct() {
   const dup = state.products.find(p => p.id !== id && barcode && normalizeBarcode(p.barcode) === normalizeBarcode(barcode));
   if (dup) return showNotification('الباركود مستخدم للمنتج: ' + dup.name, 'error');
 
+  const ownerId = state.currentUser.id;
+  const productData = {
+    id: id || uid('PRD'),
+    user_id: ownerId,
+    name: name,
+    barcode: barcode,
+    category: category,
+    price: price,
+    cost: cost,
+    stock: stock,
+    min_stock: minStock
+  };
+
   if (id) {
     const prod = state.products.find(function(p) { return p.id === id; });
     if (prod) {
-      // تعديل المنتج مش بيلمس المخزون — المخزون بيتعدل من saveStockAdjustment/quickAddStock بس
       prod.name = name;
       prod.barcode = barcode;
       prod.category = category;
       prod.price = price;
       prod.cost = cost;
       prod.minStock = minStock;
-      
-      // [إصلاح البند 5] سجل تعديل منتج
-      if (typeof addAuditLog === 'function') {
-        addAuditLog('edit_product', {
-          productId: prod.id,
-          name: name,
-          price: price,
-          cost: cost,
-          minStock: minStock
-        }, prod.id);
-      }
+      // ملاحظة: المخزون مش بيتم تعديله هنا، بيتعدل من حركة المخزون أو البيع
+      productData.stock = prod.stock; 
     }
   } else {
-    const newProd = { id: uid('PRD'), name: name, barcode: barcode, category: category, price: price, cost: cost, stock: stock, minStock: minStock };
-    state.products.push(newProd);
-    if (stock > 0) {
-      state.stockMoves.unshift({
-        id: uid('SM'), date: new Date().toISOString(),
-        productId: newProd.id, productName: newProd.name,
-        type: 'in', qty: stock, oldStock: 0, newStock: stock,
-        reason: 'رصيد افتتاحي'
-      });
-    }
-    // [إصلاح البند 5] سجل إضافة منتج
-    if (typeof addAuditLog === 'function') {
-      addAuditLog('add_product', {
-        productId: newProd.id,
-        name: newProd.name,
-        barcode: newProd.barcode,
-        price: newProd.price,
-        cost: newProd.cost,
-        stock: newProd.stock
-      }, newProd.id);
-    }
+    state.products.push({ id: productData.id, name, barcode, category, price, cost, stock, minStock });
+  }
+
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
+    if (error) console.warn('Product upload failed:', error);
+  }
+
+  if (typeof addAuditLog === 'function') {
+    addAuditLog(id ? 'edit_product' : 'add_product', { productId: productData.id, name }, productData.id);
   }
 
   saveData();
@@ -150,9 +141,8 @@ function editProduct(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function deleteProduct(id) {
+async function deleteProduct(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-
   const prod = state.products.find(function(p) { return p.id === id; });
   if (!prod) return;
 
@@ -163,21 +153,19 @@ function deleteProduct(id) {
 
   if (salesCount > 0) {
     const msg = currentLang === 'en'
-      ? 'This product appears in ' + salesCount + ' invoice(s). Deleting it will NOT affect past sales, but the product will no longer be available for new sales. Continue?'
-      : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. حذفه لن يؤثر على الفواتير القديمة، لكنه لن يظهر في المبيعات الجديدة. هل تريد المتابعة؟';
+      ? 'Product in ' + salesCount + ' invoices. Continue?'
+      : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. هل تريد المتابعة؟';
     if (!confirm(msg)) return;
   } else {
     if (!confirm(tr('msg_delete_product'))) return;
   }
 
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('products').delete().eq('id', id);
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('delete_product', {
-      productId: prod.id,
-      name: prod.name,
-      barcode: prod.barcode,
-      stock: prod.stock,
-      salesCount: salesCount
-    }, prod.id);
+    addAuditLog('delete_product', { productId: prod.id, name: prod.name }, prod.id);
   }
 
   state.products = state.products.filter(function(p) { return p.id !== id; });
@@ -193,11 +181,11 @@ function populateAdjustDropdown() {
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ') + (Number(p.stock) || 0) + '</option>';
+    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (المتوفر: ' + (Number(p.stock) || 0) + ')</option>';
   });
 }
 
-function saveStockAdjustment() {
+async function saveStockAdjustment() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const prodId = document.getElementById('adjustProduct').value;
@@ -224,22 +212,17 @@ function saveStockAdjustment() {
 
   prod.stock = newStock;
   state.stockMoves.unshift({
-    id: uid('SM'), date: new Date().toISOString(),
-    productId: prod.id, productName: prod.name,
-    type: type, qty: Math.abs(newStock - oldStock),
-    oldStock: oldStock, newStock: newStock, reason: reason
+    id: uid('SM'), date: new Date().toISOString(), productId: prod.id, productName: prod.name,
+    type: type, qty: Math.abs(newStock - oldStock), oldStock: oldStock, newStock: newStock, reason: reason
   });
 
+  // تحديث المنتج في السيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('products').update({ stock: newStock }).eq('id', prodId);
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('stock_adjustment', {
-      productId: prod.id,
-      productName: prod.name,
-      type: type,
-      qty: Math.abs(newStock - oldStock),
-      oldStock: oldStock,
-      newStock: newStock,
-      reason: reason
-    }, prod.id);
+    addAuditLog('stock_adjustment', { productId: prod.id, newStock: newStock, reason: reason }, prod.id);
   }
 
   saveData();
@@ -290,9 +273,10 @@ function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
+  
+  // للموظف: يعرض الفواتير اللي هو عملها (أو كل فواتير المدير)
   state.sales.forEach(function(s) {
-    // [إصلاح] Number() بدل .toFixed المباشر
-    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
+    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ')</option>';
   });
 }
 
@@ -302,7 +286,7 @@ function updateReturnProducts() {
   if (!prodSel) return;
   prodSel.innerHTML = '<option value="">' + tr('opt_select_item') + '</option>';
   const sale = state.sales.find(function(s) { return s.id === saleId; });
-  if (!sale) return;
+  if (!sale || !sale.items) return;
 
   sale.items.forEach(function(i) {
     const alreadyReturned = state.returns
@@ -310,13 +294,12 @@ function updateReturnProducts() {
       .reduce(function(sum, r) { return sum + r.qty; }, 0);
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
-      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + (currentLang === 'en' ? ' (Remaining: ' : ' (متبقي: ') + remaining + '</option>';
+      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + ' (متبقي: ' + remaining + ')</option>';
     }
   });
 }
 
-function saveReturn() {
-  // [إصلاح] قراءة الصلاحيات للموظف بدل الحماية الثابتة
+async function saveReturn() {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
     if (!perms.canReturn) {
@@ -342,35 +325,29 @@ function saveReturn() {
 
   if (qty > item.qty - alreadyReturned) return showNotification('الكمية أكبر من المتبقي', 'error');
 
-  const prod = state.products.find(function(p) { return p.id === prodId; });
-  if (prod) {
-    const before = prod.stock;
-    prod.stock += qty;
-    state.stockMoves.unshift({
-      id: uid('SM'), date: new Date().toISOString(),
-      productId: prod.id, productName: prod.name,
-      type: 'in', qty: qty, oldStock: before, newStock: prod.stock,
-      reason: 'مرتجع فاتورة ' + saleId
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const returnObj = {
+    id: uid('RET'), date: new Date().toISOString(),
+    saleId: saleId, productId: prodId, productName: item.name, qty: qty, reason: reason || 'غير محدد'
+  };
+
+  // 1. الحفظ في السيرفر
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('returns').insert({
+      id: returnObj.id, user_id: ownerId, sale_id: returnObj.saleId,
+      product_id: returnObj.productId, product_name: returnObj.productName,
+      qty: returnObj.qty, reason: returnObj.reason, date: returnObj.date
     });
+    if (error) console.warn('Return upload failed:', error);
   }
 
-  const newReturn = {
-    id: uid('RET'), date: new Date().toISOString(),
-    saleId: saleId, productId: prodId,
-    productName: item.name, qty: qty,
-    reason: reason || 'غير محدد'
-  };
-  state.returns.unshift(newReturn);
+  // 2. التحديث المحلي
+  state.returns.unshift(returnObj);
+  const prod = state.products.find(function(p) { return p.id === prodId; });
+  if (prod) prod.stock += qty; // التريجر في السيرفر بيعمل ده أوتوماتيك، هنا بنعمله في الواجهة
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_return', {
-      returnId: newReturn.id,
-      saleId: saleId,
-      productId: prodId,
-      productName: item.name,
-      qty: qty,
-      reason: newReturn.reason
-    }, newReturn.id);
+    addAuditLog('add_return', { returnId: returnObj.id, saleId, qty }, returnObj.id);
   }
 
   saveData();

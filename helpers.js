@@ -46,7 +46,7 @@ function updateHeldCartsCount() {
   if (badge) badge.innerText = state.heldCarts ? state.heldCarts.length : 0;
 }
 
-function holdCurrentSale() {
+async function holdCurrentSale() {
   if (state.cart.length === 0) {
     return showNotification('السلة فارغة، لا يوجد ما يتم تعليقه', 'warning');
   }
@@ -67,6 +67,16 @@ function holdCurrentSale() {
 
   if (!state.heldCarts) state.heldCarts = [];
   state.heldCarts.unshift(heldSale);
+
+  // الرفع للسيرفر
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('held_carts').insert({
+      id: heldSale.id, user_id: ownerId, cart_data: heldSale.cart, customer_id: heldSale.customerId,
+      customer_name: heldSale.customerName, discount: heldSale.discount, discount_type: heldSale.discountType,
+      notes: heldSale.notes, time: heldSale.time
+    });
+  }
 
   clearCart();
   updateHeldCartsCount();
@@ -137,6 +147,11 @@ function resumeHeldSale(id) {
 
   state.heldCarts.splice(index, 1);
   
+  // مسح من السيرفر بعد الاسترجاع
+  if (navigator.onLine && supabaseClient) {
+    supabaseClient.from('held_carts').delete().eq('id', id);
+  }
+  
   closeHeldCartsModal();
   renderCart();
   updateHeldCartsCount();
@@ -144,9 +159,15 @@ function resumeHeldSale(id) {
   showNotification('تم استرجاع الفاتورة بنجاح ✅', 'success');
 }
 
-function deleteHeldSale(id) {
+async function deleteHeldSale(id) {
   if (!confirm('هل أنت متأكد من حذف هذه الفاتورة المعلقة نهائياً؟')) return;
+  
   state.heldCarts = state.heldCarts.filter(s => s.id !== id);
+  
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('held_carts').delete().eq('id', id);
+  }
+  
   renderHeldCartsList();
   updateHeldCartsCount();
   saveData();
@@ -154,7 +175,7 @@ function deleteHeldSale(id) {
 }
 
 /* ============ إضافة كمية سريعة للمخزون ============ */
-function quickAddStock(id) {
+async function quickAddStock(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
   
@@ -173,21 +194,27 @@ function quickAddStock(id) {
   const oldStock = prod.stock;
   prod.stock += qty;
 
-  state.stockMoves.unshift({
-    id: uid('SM'), date: new Date().toISOString(),
-    productId: prod.id, productName: prod.name,
-    type: 'in', qty: qty, oldStock: oldStock, newStock: prod.stock,
-    reason: 'إضافة سريعة من قائمة المنتجات'
-  });
+  const ownerId = state.currentUser.id;
+
+  // تحديث المنتج في السيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id);
+  }
+
+  const moveObj = {
+    id: uid('SM'), user_id: ownerId, product_id: prod.id, product_name: prod.name,
+    type: 'in', qty: qty, old_stock: oldStock, new_stock: prod.stock,
+    reason: 'إضافة سريعة من قائمة المنتجات', date: new Date().toISOString()
+  };
+  state.stockMoves.unshift({ id: moveObj.id, date: moveObj.date, productId: prod.id, productName: prod.name, type: 'in', qty, oldStock, newStock: prod.stock, reason: moveObj.reason });
+
+  // رفع حركة المخزون للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('stock_moves').insert(moveObj);
+  }
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('quick_add_stock', {
-      productId: prod.id,
-      productName: prod.name,
-      qty: qty,
-      oldStock: oldStock,
-      newStock: prod.stock
-    }, prod.id);
+    addAuditLog('quick_add_stock', { productId: prod.id, qty: qty }, prod.id);
   }
 
   saveData();
@@ -209,12 +236,9 @@ function openDrawerExpenseModal() {
   document.getElementById('drawerExpenseModal').style.display = 'flex';
 }
 
-function saveDrawerExpense() {
+async function saveDrawerExpense() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً', 'error');
-
-  if (!state.currentUser) {
-    return showNotification('سجّل الدخول أولاً', 'error');
-  }
+  if (!state.currentUser) return showNotification('سجّل الدخول أولاً', 'error');
 
   const amount = parseFloat(document.getElementById('drawerExpenseAmount').value);
   const reason = document.getElementById('drawerExpenseReason').value.trim();
@@ -223,14 +247,22 @@ function saveDrawerExpense() {
     return showNotification('أدخل مبلغاً صحيحاً وسبباً للمصروف', 'error');
   }
 
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const newExpense = {
     id: uid('EXP'),
+    user_id: ownerId,
     name: 'مصروف وردية: ' + reason,
     amount: amount,
     date: today(),
     notes: 'تم سحبه من درج الكاشير أثناء الوردية'
   };
-  state.expenses.unshift(newExpense);
+
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('expenses').insert(newExpense);
+  }
+
+  state.expenses.unshift({ id: newExpense.id, name: newExpense.name, amount: newExpense.amount, date: newExpense.date, notes: newExpense.notes });
 
   if (state.currentShift) {
     if (!state.currentShift.drawerExpenses) state.currentShift.drawerExpenses = [];
@@ -238,21 +270,10 @@ function saveDrawerExpense() {
   }
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('drawer_expense', {
-      expenseId: newExpense.id,
-      amount: amount,
-      reason: reason
-    }, newExpense.id);
-  }
-
-  if (state.role === 'employee' && typeof pushDrawerExpenseToServer === 'function') {
-    pushDrawerExpenseToServer(newExpense).catch(function (e) {
-      console.warn('pushDrawerExpenseToServer failed:', e && e.message);
-    });
+    addAuditLog('drawer_expense', { expenseId: newExpense.id, amount: amount, reason: reason }, newExpense.id);
   }
 
   calcExpectedShiftCash();
-  
   saveData();
   renderExpenses();
   document.getElementById('drawerExpenseModal').style.display = 'none';
@@ -282,7 +303,6 @@ function sendDebtReminder(customerId) {
   const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
 
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
-  
   window.open(whatsappUrl, '_blank');
 }
 
@@ -427,17 +447,19 @@ function sendCustomerStatementWhatsApp() {
 }
 
 /* ============ استيراد المنتجات من CSV ============ */
-function importProductsCSV(event) {
+async function importProductsCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   if (state.role !== 'manager') return showNotification('للمدير فقط', 'error');
 
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     const text = e.target.result;
     const lines = text.split('\n');
     let addedCount = 0;
+    const newProductsToUpload = [];
+    const ownerId = state.currentUser.id;
 
     lines.forEach((line, index) => {
       if (index === 0 || !line.trim()) return;
@@ -451,22 +473,25 @@ function importProductsCSV(event) {
         const stock = parseInt(cols[4]) || 0;
 
         if (name) {
+          const newProd = {
+            id: uid('PRD'), user_id: ownerId, name: name, barcode: barcode,
+            category: 'عام', price: price, cost: cost, stock: stock, min_stock: 5
+          };
           state.products.push({
-            id: uid('PRD'),
-            name: name,
-            barcode: barcode,
-            category: 'عام',
-            price: price,
-            cost: cost,
-            stock: stock,
-            minStock: 5
+            id: newProd.id, name: newProd.name, barcode: newProd.barcode,
+            category: newProd.category, price: newProd.price, cost: newProd.cost,
+            stock: newProd.stock, minStock: newProd.min_stock
           });
+          newProductsToUpload.push(newProd);
           addedCount++;
         }
       }
     });
 
     if (addedCount > 0) {
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('products').insert(newProductsToUpload);
+      }
       if (typeof addAuditLog === 'function') {
         addAuditLog('import_products_csv', { count: addedCount });
       }

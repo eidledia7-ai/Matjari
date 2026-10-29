@@ -67,22 +67,7 @@ async function signUp() {
     const result = await supabaseClient.auth.signUp({ email: email, password: password });
     if (result.error) throw result.error;
 
-    if (result.data.user) {
-      const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-      try {
-        await supabaseClient
-          .from('shop_subscriptions')
-          .upsert({
-            user_id: result.data.user.id,
-            plan: 'trial',
-            status: 'active',
-            trial_ends_at: trialEnd
-          }, { onConflict: 'user_id' });
-      } catch (subErr) {
-        console.warn('Could not create trial subscription:', subErr);
-      }
-    }
-
+    // ملاحظة: الـ Trigger في السيرفر هيعمل صلاحيات المدير والاشتراك أوتوماتيك
     if (result.data.session && result.data.user) {
       await openUserSession(result.data.user);
     } else {
@@ -204,195 +189,81 @@ async function openUserSession(user) {
   document.getElementById('skeletonLoader').style.display = 'block';
   const main = document.querySelector('.main-content');
   if (main) main.style.display = 'none';
+  
   try {
-    // 1. تحديد الدور (Role) ورقم المدير (owner_id) والإيميل
+    // 1. تحديد الدور ورقم المدير
     const roleRes = await supabaseClient
       .from('shop_user_roles')
-      .select('role, owner_id, email')
+      .select('role, owner_id')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    state.role = 'employee';
-    state.ownerId = null;
-
     if (roleRes.data) {
-      if (roleRes.data.role === 'manager' && !roleRes.data.owner_id) {
-        state.role = 'manager';
-      } else if (roleRes.data.role === 'employee' && roleRes.data.owner_id) {
-        state.role = 'employee';
-        state.ownerId = roleRes.data.owner_id;
-      } else {
-        throw new Error('بيانات دور المستخدم غير متسقة. تواصل مع الدعم.');
-      }
+      state.role = roleRes.data.role;
+      state.ownerId = roleRes.data.owner_id || null;
     } else {
-      let hasShopData = false;
-      try {
-        const dataCheck = await supabaseClient
-          .from('shop_data')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (dataCheck.data) hasShopData = true;
-      } catch (e) { }
-
-      state.role = 'manager';
-      state.ownerId = null;
-      try {
-        await supabaseClient
-          .from('shop_user_roles')
-          .upsert({
-            user_id: user.id,
-            role: 'manager',
-            owner_id: null,
-            email: user.email || null
-          }, { onConflict: 'user_id' });
-      } catch (e) {
-        console.warn('تعذر إنشاء سطر الدور تلقائياً:', e.message);
-      }
+      throw new Error('لم يتم العثور على صلاحيات لهذا الحساب. تواصل مع الدعم.');
     }
 
-    // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
-    const subOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
-    let subRes = await supabaseClient
+    // 2. تحديد صاحب المحل (المدير) لجلب البيانات
+    const ownerId = state.role === 'employee' ? state.ownerId : user.id;
+
+    // 3. جلب الاشتراك (للموظف بيجيب اشتراك مديره)
+    const subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
-      .eq('user_id', subOwnerId) 
+      .eq('user_id', ownerId) 
       .maybeSingle();
 
-    // [إصلاح] لو الموظف ومالقيناش اشتراك المدير، نجرب نجيب اشتراك الموظف نفسه كخطة بديلة
-    if (state.role === 'employee' && (!subRes.data) && subOwnerId !== user.id) {
-       subRes = await supabaseClient
-        .from('shop_subscriptions')
-        .select('*')
-        .eq('user_id', user.id) 
-        .maybeSingle();
-    }
-
     if (subRes.data) {
-      state.subscription = {
-        plan: subRes.data.plan || 'trial',
-        status: subRes.data.status || 'active',
-        expires_at: subRes.data.expires_at,
-        trial_ends_at: subRes.data.trial_ends_at,
-        payment_method: subRes.data.payment_method
-      };
+      state.subscription = subRes.data;
     } else {
-      // لو مفيش اشتراك خالص، بنفترض trial 14 يوم
-      state.subscription = {
-        plan: 'trial',
-        status: 'active',
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-      };
+      state.subscription = { plan: 'trial', status: 'active', trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() };
     }
-    
-    // [إصلاح] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
     state.ownerPlan = state.subscription.plan;
 
-    // 3. تحديد مين صاحب البيانات (المدير) عشان نقرا كاشه ونحفظ فيه
-    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
+    // 4. تحميل البيانات (من الكاش أو من السيرفر)
+    const cacheOwnerId = ownerId;
     let localCache = null;
     try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + cacheOwnerId)); } catch (e) {}
 
-    let dataRes = { data: null, error: null };
+    // تحميل الكاش الأول (سريع)
+    if (localCache) {
+      if (localCache.products) state.products = localCache.products;
+      if (localCache.customers) state.customers = localCache.customers;
+      if (localCache.sales) state.sales = localCache.sales;
+      if (localCache.returns) state.returns = localCache.returns;
+      if (localCache.expenses) state.expenses = localCache.expenses;
+      if (localCache.shifts) state.shifts = localCache.shifts;
+      if (localCache.auditLogs) state.auditLogs = localCache.auditLogs;
+      if (localCache.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, localCache.storeSettings);
+    }
+
+    // التحميل من السيرفر (لو أونلاين)
     if (navigator.onLine && supabaseClient) {
-      try {
-        dataRes = await supabaseClient
-          .from('shop_data')
-          .select('shop_data')
-          .eq('user_id', cacheOwnerId)
-          .maybeSingle();
-        if (dataRes.error) throw dataRes.error;
-      } catch (e) { console.warn('Cloud fetch failed', e); }
+      await syncDown(ownerId);
     }
 
-    let d = null;
-    if (dataRes && dataRes.data && dataRes.data.shop_data && Object.keys(dataRes.data.shop_data).length > 0) {
-      d = dataRes.data.shop_data;
-      try { localStorage.setItem('matjari_cache_' + cacheOwnerId, JSON.stringify(d)); } catch (e) {}
-    } else if (localCache && (localCache.products || localCache.sales)) {
-      d = localCache;
-    }
-
-    if (d) {
-      state.products = d.products || [];
-      // [البند 4] الموظف ميشوفش فواتير الكاش المحلي القديمة
-      state.sales = (state.role === 'employee') ? [] : (d.sales || []);
-      state.customers = d.customers || [];
-      state.suppliers = d.suppliers || [];
-      state.expenses = d.expenses || [];
-      state.stockMoves = d.stockMoves || [];
-      state.returns = d.returns || [];
-      state.customerPayments = d.customerPayments || [];
-      state.supplierPayments = d.supplierPayments || [];
-      state.purchases = d.purchases || [];
-      state.shifts = d.shifts || [];
-      state.currentShift = d.currentShift || null;
-      state.heldCarts = d.heldCarts || [];
-      state.auditLogs = d.auditLogs || [];
-      if (d.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, d.storeSettings);
-    } else {
-      state.products = [];
-      state.sales = [];
+    // لو مفيش منتجات خالص، نضيف عميل افتراضي
+    if (!state.customers || state.customers.length === 0) {
       state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
-      state.suppliers = [];
-      state.expenses = [];
-      state.stockMoves = [];
-      state.returns = [];
-      state.customerPayments = [];
-      state.supplierPayments = [];
-      state.purchases = [];
-      state.shifts = [];
-      state.currentShift = null;
-    }
-
-    // جلب الفواتير من الجدول الجديد ودمجها مع القديمة
-    if (navigator.onLine && supabaseClient) {
-      try {
-        const salesRes = await supabaseClient
-          .from('sales')
-          .select('*')
-          .eq('user_id', cacheOwnerId)
-          .order('date', { ascending: false });
-          
-        if (state.role === 'employee') {
-          // [البند 4] الموظف: نستبدل دايماً ببيانات السيرفر، ولو فشل نمسح
-          if (salesRes.data && Array.isArray(salesRes.data)) {
-            state.sales = salesRes.data.map(s => ({
-              id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
-              total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
-              payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
-            }));
-          } else {
-            state.sales = [];
-          }
-        } else if (salesRes.data && Array.isArray(salesRes.data)) {
-          const newSales = salesRes.data.map(s => ({
-            id: s.id, date: s.date, items: s.items, subtotal: s.subtotal, discount: s.discount,
-            total: s.total, paid: s.paid, remaining: s.remaining, customerId: s.customer_id,
-            payMethod: s.pay_method, notes: s.notes, cashier: s.cashier, shiftId: s.shift_id
-          }));
-          const newSalesIds = new Set(newSales.map(s => s.id));
-          const oldSales = state.sales.filter(s => !newSalesIds.has(s.id));
-          state.sales = [...newSales, ...oldSales];
-        }
-      } catch (e) {
-        console.warn('Fetch sales failed', e);
-        if (state.role === 'employee') state.sales = [];
-      }
     }
 
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';
+    
     showLoggedInUI();
     applyRolePermissions();
     renderAll();
 
     checkSubscriptionStatus();
     enforceSubscriptionBlock();
+    
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settSubscription', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
+    
   } catch (e) {
     console.error(e);
     setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
@@ -400,7 +271,8 @@ async function openUserSession(user) {
   } finally {
     hideLoading();
   }
-  // [إصلاح] حفظ ownerId عشان loadOfflineSession يشتغل للموظف
+  
+  // حفظ الجلسة للأوفلاين
   try {
     localStorage.setItem('matjari_last_user', JSON.stringify({
       id: user.id,
@@ -417,26 +289,15 @@ function checkSubscriptionStatus() {
   const en = currentLang === 'en';
 
   if (sub.status !== 'active') {
-    showNotification(
-      en ? 'Your subscription is inactive. Please renew.' : 'اشتراكك غير نشط. جدد الآن.',
-      'error'
-    );
+    showNotification(en ? 'Your subscription is inactive.' : 'اشتراكك غير نشط. جدد الآن.', 'error');
     return;
   }
 
   const now = Date.now();
   let endDate = null;
 
-  if (sub.plan === 'trial') {
-    if (sub.trial_ends_at) {
-      endDate = new Date(sub.trial_ends_at).getTime();
-    } else {
-      showNotification(
-        en ? 'Trial data corrupted. Please subscribe.' : 'بيانات التجربة تالفة. يرجى الاشتراك.',
-        'error'
-      );
-      return;
-    }
+  if (sub.plan === 'trial' && sub.trial_ends_at) {
+    endDate = new Date(sub.trial_ends_at).getTime();
   } else if (sub.expires_at) {
     endDate = new Date(sub.expires_at).getTime();
   }
@@ -446,22 +307,11 @@ function checkSubscriptionStatus() {
   const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
 
   if (daysLeft < 0) {
-    showNotification(
-      en ? 'Your trial has expired. Please subscribe to continue.'
-         : 'انتهت فترة التجربة. اشترك للاستمرار.',
-      'error'
-    );
+    showNotification(en ? 'Your trial has expired.' : 'انتهت فترة التجربة. اشترك للاستمرار.', 'error');
   } else if (daysLeft === 0) {
-    showNotification(
-      en ? 'Your trial expires today!' : 'تجربتك تنتهي اليوم!',
-      'warning'
-    );
+    showNotification(en ? 'Your trial expires today!' : 'تجربتك تنتهي اليوم!', 'warning');
   } else if (daysLeft <= 3) {
-    showNotification(
-      en ? `Your trial expires in ${daysLeft} days. Subscribe now!`
-         : `تجربتك تنتهي خلال ${daysLeft} أيام. اشترك الآن!`,
-      'warning'
-    );
+    showNotification(en ? `Your trial expires in ${daysLeft} days.` : `تجربتك تنتهي خلال ${daysLeft} أيام.`, 'warning');
   }
 }
 
@@ -469,7 +319,7 @@ function applyRolePermissions() {
   const employee = state.role === 'employee';
   document.querySelectorAll('.sidebar-nav button, .nav-group').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    if (employee && page && page !== 'sales' && page !== 'home') {
+    if (employee && page && page !== 'sales' && page !== 'home' && page !== 'invReturns') {
       btn.style.display = 'none';
     } else {
       btn.style.display = '';
@@ -500,9 +350,7 @@ async function startAuth() {
     return;
   }
   try {
-    const isRecovery = location.hash.includes('type=recovery') ||
-                       location.hash.includes('type=invite') ||
-                       location.hash.includes('access_token');
+    const isRecovery = location.hash.includes('type=recovery') || location.hash.includes('type=invite') || location.hash.includes('access_token');
 
     if (isRecovery) {
       await supabaseClient.auth.signOut();

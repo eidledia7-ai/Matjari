@@ -1,8 +1,114 @@
-/* ============ التخزين السحابي والمحلي ============ */
+/* ============ محرك المزامنة (Sync Engine) - للجداول الجديدة ============ */
 
-/* ============ حفظ محلي ============ */
+/**
+ * تحميل كل البيانات من السيرفر (Jadwal) إلى الـ State
+ * @param {string} ownerId - صاحب المحل (المدير)
+ */
+async function syncDown(ownerId) {
+  if (!navigator.onLine || !supabaseClient) return;
+
+  const tables = [
+    { name: 'products', key: 'products' },
+    { name: 'customers', key: 'customers' },
+    { name: 'sales', key: 'sales' },
+    { name: 'returns', key: 'returns' },
+    { name: 'expenses', key: 'expenses' },
+    { name: 'shifts', key: 'shifts' },
+    { name: 'audit_logs', key: 'auditLogs' },
+    { name: 'suppliers', key: 'suppliers' },             // [جديد]
+    { name: 'purchases', key: 'purchases' },             // [جديد]
+    { name: 'customer_payments', key: 'customerPayments' }, // [جديد]
+    { name: 'supplier_payments', key: 'supplierPayments' }, // [جديد]
+    { name: 'stock_moves', key: 'stockMoves' },          // [جديد]
+    { name: 'held_carts', key: 'heldCarts' },            // [جديد]
+    { name: 'store_settings', key: 'storeSettings', single: true }
+  ];
+
+  for (const t of tables) {
+    try {
+      let query = supabaseClient.from(t.name).select('*').eq('user_id', ownerId);
+      
+      if (t.single) {
+        const { data } = await query.maybeSingle();
+        if (data) {
+          state[t.key] = {
+            name: data.name, phone: data.phone, address: data.address,
+            taxNumber: data.tax_number, currency: data.currency, logo: data.logo,
+            monthlyGoal: data.monthly_goal, pointsRate: data.points_rate,
+            pointValue: data.point_value, printType: data.print_type,
+            permissions: data.permissions || {}
+          };
+        }
+      } else {
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw error;
+        
+        if (data) {
+          state[t.key] = data.map(row => {
+            if (t.name === 'sales') return { id: row.id, date: row.date, subtotal: row.subtotal, discount: row.discount, total: row.total, paid: row.paid, remaining: row.remaining, customerId: row.customer_id, payMethod: row.pay_method, notes: row.notes, cashier: row.cashier, shiftId: row.shift_id, items: [] };
+            if (t.name === 'products') return { id: row.id, name: row.name, barcode: row.barcode, category: row.category, price: row.price, cost: row.cost, stock: row.stock, minStock: row.min_stock };
+            if (t.name === 'customers') return { id: row.id, name: row.name, phone: row.phone, openingDebt: row.opening_debt, points: row.points };
+            if (t.name === 'expenses') return { id: row.id, name: row.name, amount: row.amount, notes: row.notes, date: row.date };
+            if (t.name === 'returns') return { id: row.id, saleId: row.sale_id, productId: row.product_id, productName: row.product_name, qty: row.qty, reason: row.reason, date: row.date };
+            if (t.name === 'shifts') return { id: row.id, cashierName: row.cashier_name, startTime: row.start_time, endTime: row.end_time, actualCash: row.actual_cash, difference: row.difference, notes: row.notes };
+            if (t.name === 'audit_logs') return { id: row.id, action: row.action, details: row.details, date: row.created_at, userId: row.user_id, role: row.role };
+            if (t.name === 'suppliers') return { id: row.id, name: row.name, phone: row.phone, openingDebt: row.opening_debt };
+            if (t.name === 'purchases') return { id: row.id, date: row.date, supplierId: row.supplier_id, productId: row.product_id, productName: row.product_name, qty: row.qty, cost: row.cost, total: row.total, paid: row.paid, remaining: row.remaining };
+            if (t.name === 'customer_payments') return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, amount: row.amount, date: row.date, notes: row.notes };
+            if (t.name === 'supplier_payments') return { id: row.id, supplierId: row.supplier_id, supplierName: row.supplier_name, amount: row.amount, date: row.date, notes: row.notes };
+            if (t.name === 'stock_moves') return { id: row.id, date: row.date, productId: row.product_id, productName: row.product_name, type: row.type, qty: row.qty, oldStock: row.old_stock, newStock: row.new_stock, reason: row.reason };
+            if (t.name === 'held_carts') return { id: row.id, time: row.time, cart: row.cart_data, customerId: row.customer_id, customerName: row.customer_name, discount: row.discount, discountType: row.discount_type, notes: row.notes };
+            return row;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`SyncDown failed for ${t.name}:`, err.message);
+    }
+  }
+  
+  // جلب تفاصيل الفواتير
+  try {
+    const { data: items } = await supabaseClient.from('sale_items').select('*').eq('user_id', ownerId);
+    if (items && items.length > 0) {
+      state.sales.forEach(s => {
+        s.items = items.filter(i => i.sale_id === s.id).map(i => ({ id: i.product_id, name: i.product_name, qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost) }));
+      });
+    }
+  } catch (err) { console.warn('Failed to load sale items', err); }
+}
+/**
+ * رفع التعديلات (للمدير) للسيرفر
+ */
+async function syncUp(ownerId) {
+  if (!navigator.onLine || !supabaseClient) return;
+  
+  // إعدادات المحل
+  try {
+    await supabaseClient.from('store_settings').upsert({
+      user_id: ownerId,
+      name: state.storeSettings.name,
+      phone: state.storeSettings.phone,
+      address: state.storeSettings.address,
+      tax_number: state.storeSettings.taxNumber,
+      currency: state.storeSettings.currency,
+      logo: state.storeSettings.logo,
+      monthly_goal: state.storeSettings.monthlyGoal,
+      points_rate: state.storeSettings.pointsRate,
+      point_value: state.storeSettings.pointValue,
+      print_type: state.storeSettings.printType,
+      permissions: state.storeSettings.permissions,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+  } catch (e) { console.warn('Settings sync failed', e); }
+
+  // هنا تقدر تضيف رفع المنتجات والعملاء لو المدير عدلهم
+}
+
+/**
+ * حفظ محلي (للكاش)
+ */
 function saveData() {
-  // نحفظ على ownerId للموظف و user.id للمدير
   const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
   if (!cacheOwnerId) return;
   const key = 'matjari_cache_' + cacheOwnerId;
@@ -11,205 +117,79 @@ function saveData() {
       products: state.products,
       customers: state.customers,
       sales: state.sales,
-      suppliers: state.suppliers,
-      expenses: state.expenses,
-      stockMoves: state.stockMoves,
       returns: state.returns,
-      customerPayments: state.customerPayments,
-      supplierPayments: state.supplierPayments,
-      purchases: state.purchases,
+      expenses: state.expenses,
       shifts: state.shifts,
-      currentShift: state.currentShift,
-      heldCarts: state.heldCarts,
       auditLogs: state.auditLogs,
       storeSettings: state.storeSettings,
-      subscription: state.subscription   // [إضافة] عشان ownerPlan يشتغل أوفلاين
+      subscription: state.subscription
     };
     localStorage.setItem(key, JSON.stringify(cache));
-    scheduleSync();
   } catch (e) {}
 }
 
-/* ============ رفع مصروف الدرج فقط للموظف ============ */
 /**
- * ترفع مصروف درج واحد للموظف على shop_data المدير بعملية دمج آمنة.
- * تُستدعى من helpers.js (saveDrawerExpense) بعد إضافة مصروف درج.
+ * مزامنة الموظف: رفع الفواتير، المرتجعات، المصروفات، وسجل النشاط
  */
-async function pushDrawerExpenseToServer(expense) {
-  if (!navigator.onLine || !supabaseClient || !state.currentUser) return false;
-  if (state.role !== 'employee' || !state.ownerId) return false;
-  if (!expense || !expense.id) return false;
-
-  const ownerId = state.ownerId;
-  try {
-    const getRes = await supabaseClient
-      .from('shop_data')
-      .select('shop_data')
-      .eq('user_id', ownerId)
-      .maybeSingle();
-
-    let remote = (getRes && getRes.data && getRes.data.shop_data) ? getRes.data.shop_data : {};
-    const remoteExpenses = Array.isArray(remote.expenses) ? remote.expenses : [];
-    const exists = remoteExpenses.some(function (x) { return x && x.id === expense.id; });
-    if (!exists) remote.expenses = remoteExpenses.concat([expense]);
-
-    const upRes = await supabaseClient
-      .from('shop_data')
-      .upsert({
-        user_id: ownerId,
-        shop_data: remote,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id' });
-    if (upRes.error) throw upRes.error;
-
-    if (typeof addAuditLog === 'function') {
-      addAuditLog('drawer_expense_push', {
-        expenseId: expense.id,
-        name: expense.name,
-        amount: expense.amount
-      }, expense.id);
-    }
-    return true;
-  } catch (e) {
-    console.warn('pushDrawerExpenseToServer failed:', e && e.message);
-    return false;
-  }
-}
-
-/* ============ جدولة المزامنة (المدير فقط للحالة الكاملة) ============ */
-function scheduleSync() {
-  if (!state.currentUser || state.role === 'employee') return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(function() { uploadToCloud(); }, 2000);
-}
-
-/* ============ مزامنة الحالة الكاملة (للمدير فقط) ============ */
-async function uploadToCloud() {
-  if (!navigator.onLine) return;
-  if (!state.currentUser || isSyncing) return;
-  if (!supabaseClient) return;
-  if (state.role === 'employee') return; // حماية إضافية
-
-  isSyncing = true;
-  try {
-    const payload = {
-      products: state.products,
-      customers: state.customers,
-      suppliers: state.suppliers,
-      expenses: state.expenses,
-      stockMoves: state.stockMoves,
-      returns: state.returns,
-      customerPayments: state.customerPayments,
-      supplierPayments: state.supplierPayments,
-      purchases: state.purchases,
-      shifts: state.shifts,
-      currentShift: state.currentShift,
-      heldCarts: state.heldCarts,
-      auditLogs: state.auditLogs,
-      storeSettings: state.storeSettings
-    };
-    const result = await supabaseClient
-      .from('shop_data')
-      .upsert({
-        user_id: (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id,
-        shop_data: payload,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id' });
-    if (result.error) throw result.error;
-  } catch (e) {
-    console.warn('Cloud sync failed:', e && e.message);
-  } finally {
-    isSyncing = false;
-  }
-}
-
-/* ============ مزامنة الفواتير (لكل الأدوار) ============ */
-async function syncPendingSales() {
-  if (!navigator.onLine || !supabaseClient || !state.currentUser) return;
-  try {
-    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-
-    const salesToSync = state.sales.map(s => ({
-      id: s.id,
-      user_id: cacheOwnerId,
-      date: s.date,
-      items: s.items,
-      subtotal: s.subtotal,
-      discount: s.discount,
-      total: s.total,
-      paid: s.paid,
-      remaining: s.remaining,
-      customer_id: s.customerId,
-      pay_method: s.payMethod,
-      notes: s.notes,
-      cashier: s.cashier,
-      shift_id: s.shiftId
-    }));
-
-    if (!salesToSync.length) return;
-
-    const { error } = await supabaseClient
-      .from('sales')
-      .upsert(salesToSync, { onConflict: 'id' });
-
-    if (error) console.warn('Sync sales error:', error);
-  } catch (e) {
-    console.warn('Failed to sync sales:', e);
-  }
-}
-
-/* ============ مزامنة الموظف: فواتير + مصروفات درج فقط ============ */
 async function syncEmployeeChanges() {
-  if (!state.currentUser || state.role !== 'employee') return;
+  if (!state.currentUser || state.role !== 'employee' || !state.ownerId) return;
   if (!navigator.onLine || !supabaseClient) return;
 
-  // 1. الفواتير
-  await syncPendingSales();
+  const ownerId = state.ownerId;
 
-  // 2. مصروفات الدرج فقط (الاسم بيبدأ بـ "مصروف وردية: ")
-  const drawerExpenses = (state.expenses || []).filter(function (e) {
-    return e && typeof e.name === 'string' && e.name.startsWith('مصروف وردية:');
-  });
-
-  if (drawerExpenses.length && state.ownerId) {
+  // 1. رفع الفواتير (Sales & Sale Items)
+  for (const sale of state.sales) {
     try {
-      const getRes = await supabaseClient
-        .from('shop_data')
-        .select('shop_data')
-        .eq('user_id', state.ownerId)
-        .maybeSingle();
+      await supabaseClient.from('sales').upsert({
+        id: sale.id, user_id: ownerId, date: sale.date, subtotal: sale.subtotal,
+        discount: sale.discount, total: sale.total, paid: sale.paid, remaining: sale.remaining,
+        customer_id: sale.customerId, pay_method: sale.payMethod, notes: sale.notes,
+        cashier: sale.cashier, shift_id: sale.shiftId
+      }, { onConflict: 'id' });
 
-      let remote = (getRes && getRes.data && getRes.data.shop_data) ? getRes.data.shop_data : {};
-      const remoteExpenses = Array.isArray(remote.expenses) ? remote.expenses : [];
-      const remoteIds = new Set(remoteExpenses.map(function (x) { return x && x.id; }));
-
-      let added = 0;
-      drawerExpenses.forEach(function (exp) {
-        if (!remoteIds.has(exp.id)) {
-          remoteExpenses.push(exp);
-          remoteIds.add(exp.id);
-          added++;
-        }
-      });
-
-      if (added > 0) {
-        remote.expenses = remoteExpenses;
-        const upRes = await supabaseClient
-          .from('shop_data')
-          .upsert({
-            user_id: state.ownerId,
-            shop_data: remote,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id' });
-        if (upRes.error) throw upRes.error;
+      if (sale.items && sale.items.length > 0) {
+        const itemsToInsert = sale.items.map(i => ({
+          sale_id: sale.id, user_id: ownerId, product_id: i.id, product_name: i.name,
+          qty: i.qty, price: i.price, cost: i.cost
+        }));
+        await supabaseClient.from('sale_items').upsert(itemsToInsert, { onConflict: 'sale_id, product_id' });
       }
-    } catch (e) {
-      console.warn('syncEmployeeChanges: drawer expenses push failed:', e && e.message);
-    }
+    } catch (e) { console.warn('Sale upload failed', e); }
+  }
+
+  // 2. رفع المرتجعات
+  for (const ret of state.returns) {
+    try {
+      await supabaseClient.from('returns').upsert({
+        id: ret.id, user_id: ownerId, sale_id: ret.saleId, product_id: ret.productId,
+        product_name: ret.productName, qty: ret.qty, reason: ret.reason, date: ret.date
+      }, { onConflict: 'id' });
+    } catch (e) { console.warn('Return upload failed', e); }
+  }
+
+  // 3. رفع المصروفات
+  for (const exp of state.expenses) {
+    try {
+      await supabaseClient.from('expenses').upsert({
+        id: exp.id, user_id: ownerId, name: exp.name, amount: exp.amount, notes: exp.notes, date: exp.date
+      }, { onConflict: 'id' });
+    } catch (e) { console.warn('Expense upload failed', e); }
+  }
+
+  // 4. رفع سجل النشاط
+  for (const log of state.auditLogs) {
+    try {
+      await supabaseClient.from('audit_logs').upsert({
+        id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
+        role: 'employee', action: log.action, details: log.details, created_at: log.date || new Date().toISOString()
+      }, { onConflict: 'id' });
+    } catch (e) { console.warn('Audit log upload failed', e); }
   }
 }
 
-/* ============ المزامنة اليدوية (موجّهة حسب الدور) ============ */
+/**
+ * المزامنة اليدوية (موجّهة حسب الدور)
+ */
 async function syncNow() {
   if (!state.currentUser) return showNotification('سجّل الدخول أولاً', 'warning');
   if (!supabaseClient) return showNotification('لا يوجد اتصال بالسيرفر', 'error');
@@ -217,15 +197,16 @@ async function syncNow() {
 
   showLoading('جارٍ المزامنة...');
   try {
+    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
     if (state.role === 'employee') {
       await syncEmployeeChanges();
-      showNotification('تمت مزامنة شغلك بنجاح ✅');
     } else {
-      await uploadToCloud();
-      await syncPendingSales();
-      showNotification('تمت المزامنة بنجاح ✅');
+      await syncUp(ownerId);
     }
+    await syncDown(ownerId);
+    showNotification('تمت المزامنة بنجاح ✅');
   } catch (e) {
+    console.error(e);
     showNotification('تعذرت المزامنة', 'error');
   } finally {
     hideLoading();

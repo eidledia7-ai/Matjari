@@ -1,6 +1,5 @@
 /* ============ لوحة التحكم والهدف والتنبيهات ============ */
 function renderDashboard() {
-  // [إصلاح] Number() على كل القيم عشان نتحمل strings من السيرفر + حماية items null
   const totalSales = state.sales.reduce(function(sum, s) { return sum + (Number(s.total) || 0); }, 0);
   const totalExpenses = state.expenses.reduce(function(sum, e) { return sum + (Number(e.amount) || 0); }, 0);
   const totalProducts = state.products.length;
@@ -97,7 +96,6 @@ function renderMonthlyGoal() {
     return d >= monthStart && d <= monthEnd;
   });
 
-  // [إصلاح] Number() بدل الجمع المباشر
   const actualSales = monthSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
   const percent = Math.min(100, (actualSales / goal * 100));
   const remaining = Math.max(0, goal - actualSales);
@@ -126,7 +124,6 @@ function renderSalesChart() {
     days.push(d.toISOString().slice(0, 10));
   }
 
-  // [إصلاح] Number() بدل الجمع المباشر
   const data = days.map(function(day) {
     return state.sales
       .filter(function(s) { return (s.date || '').split('T')[0] === day; })
@@ -138,7 +135,6 @@ function renderSalesChart() {
     return d.toLocaleDateString(currentLang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short' });
   });
 
-  // [إصلاح] حماية destroy
   if (salesChartInstance) {
     try { salesChartInstance.destroy(); } catch (e) { console.warn('Chart destroy failed', e); }
     salesChartInstance = null;

@@ -56,17 +56,19 @@ function toggleSubMenu(id) {
   }
 }
 
-/* ============ الحالة العامة ============ */
+/* ============ الحالة العامة (State) ============ */
 let state = {
   currentUser: null,
   role: 'employee',
+  ownerId: null,
+  ownerPlan: null,
   cart: [],
   heldCarts: [],
   auditLogs: [],
   products: [],
   sales: [],
   customers: [],
-  suppliers: [],
+  suppliers: [], // سيتم إدارتها محلياً حالياً
   expenses: [],
   stockMoves: [],
   returns: [],
@@ -82,10 +84,12 @@ let state = {
     currency: 'ج.م',
     logo: '',
     taxNumber: '',
-    monthlyGoal: 0
+    monthlyGoal: 0,
+    pointsRate: 0,
+    pointValue: 0,
+    printType: 'thermal',
+    permissions: { canDiscount: false, canDelete: false, canEditPrice: false, canReturn: false }
   },
-  ownerId: null,
-ownerPlan: null,
   subscription: { plan: 'trial', status: 'active', expires_at: null }
 };
 
@@ -214,7 +218,7 @@ function getLastPage() {
   } catch (e) { return 'home'; }
 }
 
-/* ============ التنقل السلس والفتح الفردي للصفحات ============ */
+/* ============ التنقل ============ */
 function toggleSidebar(show) {
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
@@ -231,16 +235,15 @@ function toggleSidebar(show) {
 }
 
 function showPage(pageId) {
-  // قائمة الصفحات الممنوعة صراحةً على الموظف
-// الموظف مسموح له بصفحة البيع فقط
-if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'invReturns') {
-  showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
-  pageId = 'sales';
-}
-if (pageId === 'finCompare' && !canUse('compare')) {
-  upgradePrompt(currentLang === 'en' ? 'Compare Periods' : 'مقارنة الفترات');
-  return;
-}
+  // [تعديل] السماح للموظف بفتح صفحة المرتجعات
+  if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'invReturns' && pageId !== 'home') {
+    showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
+    pageId = 'sales';
+  }
+  if (pageId === 'finCompare' && !canUse('compare')) {
+    upgradePrompt(currentLang === 'en' ? 'Compare Periods' : 'مقارنة الفترات');
+    return;
+  }
   document.querySelectorAll('.page').forEach(function(p) {
     p.classList.remove('active');
     p.style.display = 'none';
@@ -278,8 +281,7 @@ if (pageId === 'finCompare' && !canUse('compare')) {
   if (pageId === 'finReports') renderReports();
   if (pageId === 'finCompare') { if (typeof onCompareTypeChange === 'function') onCompareTypeChange(); }
   if (pageId === 'finShift') { calcExpectedShiftCash(); renderShifts(); }
-if (pageId === 'settSubscription') renderSubscriptionPage();
+  if (pageId === 'settSubscription') renderSubscriptionPage();
   if (pageId === 'settStore') loadStoreSettings();
- if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
+  if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
 }
-

@@ -1,53 +1,45 @@
 /* ============ العملاء ============ */
-function saveCustomer() {
+async function saveCustomer() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة عملاء', 'error');
- 
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('customerId').value;
   const name = document.getElementById('customerName').value.trim();
   const phone = document.getElementById('customerPhone').value.trim();
   const rawDebt = parseFloat(document.getElementById('customerOpeningDebt').value);
-  // [إصلاح] تحقق من السالب و NaN
   const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
   if (!name) return showNotification('اسم العميل مطلوب', 'error');
 
+  const ownerId = state.currentUser.id;
+  const customerId = id || uid('CUST');
+  
+  const newCustomer = {
+    id: customerId,
+    user_id: ownerId,
+    name: name,
+    phone: phone,
+    opening_debt: openingDebt,
+    points: id ? (state.customers.find(c => c.id === id)?.points || 0) : 0
+  };
+
   if (id) {
-    // [إصلاح حرج] تعديل عميل موجود: منلمسش الديون إلا لو المستخدم عدلها صراحة
     const c = state.customers.find(function(item) { return item.id === id; });
     if (c) {
-      const oldDebt = Number(c.openingDebt) || 0;
-      c.name = name;
-      c.phone = phone;
-      // نحدّث الدين فقط لو الحقل اتغير عن القيمة القديمة
-      // (الحقل بيبدأ بقيمة الدين الحالية في الـ UI، فلو المستخدم ملمسوش، القيمة هتكون نفسها)
-      if (openingDebt !== oldDebt && openingDebt >= 0) {
-        c.openingDebt = openingDebt;
-        if (typeof addAuditLog === 'function') {
-          addAuditLog('edit_customer_debt', {
-            customerId: c.id,
-            customerName: name,
-            oldDebt: oldDebt,
-            newDebt: openingDebt
-          }, c.id);
-        }
-      }
-      if (typeof addAuditLog === 'function') {
-        addAuditLog('edit_customer', { customerId: c.id, customerName: name }, c.id);
-      }
+      c.name = name; c.phone = phone; c.openingDebt = openingDebt;
     }
   } else {
-    const newCust = { id: uid('CUST'), name: name, phone: phone, openingDebt: openingDebt };
-    state.customers.push(newCust);
-    // [إصلاح البند 5] سجل إضافة عميل
-    if (typeof addAuditLog === 'function') {
-      addAuditLog('add_customer', {
-        customerId: newCust.id,
-        customerName: newCust.name,
-        openingDebt: newCust.openingDebt
-      }, newCust.id);
-    }
+    state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, points: 0 });
+  }
+
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('customers').upsert(newCustomer, { onConflict: 'id' });
+    if (error) console.warn('Customer upload failed:', error);
+  }
+
+  if (typeof addAuditLog === 'function') {
+    addAuditLog(id ? 'edit_customer' : 'add_customer', { customerId, name }, customerId);
   }
 
   saveData();
@@ -81,7 +73,6 @@ function renderCustomers() {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
       const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
       const debtLabel = currentLang === 'en' ? ' (Debt: ' : ' (دين: ';
-      // [إصلاح] Number() بدل .toFixed المباشر
       paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + (Number(c.openingDebt) || 0).toFixed(2) + ')</option>';
     });
     if (currentVal) paySel.value = currentVal;
@@ -97,43 +88,40 @@ function renderCustomers() {
     const debtVal = Number(c.openingDebt) || 0;
     const debtClass = debtVal > 0 ? 'red-text' : '';
     html += '<tr>' +
-  '<td>' + escapeHTML(c.name) + '</td>' +
-  '<td>' + escapeHTML(c.phone || '-') + '</td>' +
-  '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
-  '<td style="white-space:nowrap;">' +
-    '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
-    '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
-  '</td>' +
-  '</tr>';
+      '<td>' + escapeHTML(c.name) + '</td>' +
+      '<td>' + escapeHTML(c.phone || '-') + '</td>' +
+      '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
+        '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
+      '</td>' +
+      '</tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
 
-function deleteCustomer(id) {
+async function deleteCustomer(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
 
   const cust = state.customers.find(function(c) { return c.id === id; });
-  // [إصلاح حرج] منع حذف عميل عليه ديون — تحذير صريح
   if (cust && (Number(cust.openingDebt) || 0) > 0) {
     const debt = Number(cust.openingDebt) || 0;
     const confirmMsg = currentLang === 'en'
-      ? 'This customer has an outstanding debt of ' + debt.toFixed(2) + '. Are you sure you want to delete? The debt will be lost.'
-      : 'هذا العميل عليه ديون ' + debt.toFixed(2) + ' جنيه. هل أنت متأكد من الحذف؟ ستفقد قيمة الدين نهائياً.';
+      ? 'This customer has an outstanding debt of ' + debt.toFixed(2) + '. Delete anyway?'
+      : 'هذا العميل عليه ديون ' + debt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة الدين نهائياً.';
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_customer'))) return;
   }
 
-  // [إصلاح البند 5] سجل حذف عميل
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('customers').delete().eq('id', id);
+  }
+
   if (cust && typeof addAuditLog === 'function') {
-    addAuditLog('delete_customer', {
-      customerId: cust.id,
-      customerName: cust.name,
-      phone: cust.phone,
-      outstandingDebt: Number(cust.openingDebt) || 0
-    }, cust.id);
+    addAuditLog('delete_customer', { customerId: cust.id, name: cust.name }, cust.id);
   }
 
   state.customers = state.customers.filter(function(c) { return c.id !== id; });
@@ -142,8 +130,8 @@ function deleteCustomer(id) {
   showNotification('تم الحذف');
 }
 
-function recordCustomerPayment() {
-if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
+async function recordCustomerPayment() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const customerId = document.getElementById('customerPaymentCustomer').value;
@@ -151,7 +139,6 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
   const date = document.getElementById('customerPaymentDate').value || today();
   const notes = document.getElementById('customerPaymentNotes').value.trim();
 
-  // [إصلاح] حماية من Infinity و NaN
   if (!customerId || !Number.isFinite(amount) || amount <= 0) return showNotification('أدخل مبلغاً صحيحاً', 'error');
 
   const cust = state.customers.find(function(c) { return c.id === customerId; });
@@ -161,29 +148,27 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
 
   if (amount > currentDebt) {
     if (!confirm('المبلغ أكبر من الدين. تسجيل الفرق كرصيد دائن؟')) return;
-    const diff = amount - currentDebt;
     cust.openingDebt = currentDebt - amount;
-    showNotification('تم الخصم. الفرق رصيد دائن: ' + diff.toFixed(2), 'info');
   } else {
     cust.openingDebt = Math.max(0, currentDebt - amount);
   }
 
+  const ownerId = state.currentUser.id;
   const newPayment = {
-    id: uid('CP'), customerId: customerId, customerName: cust.name,
+    id: uid('CP'), user_id: ownerId, customer_id: customerId, customer_name: cust.name,
     amount: amount, date: date, notes: notes
   };
-  state.customerPayments.unshift(newPayment);
+  state.customerPayments.unshift({ id: newPayment.id, customerId, customerName: cust.name, amount, date, notes });
 
-  // [إصلاح البند 5] سجل تحصيل دفعة
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('customer_payments').insert(newPayment);
+    // تحديث دين العميل في السيرفر
+    await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', customerId);
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('record_customer_payment', {
-      paymentId: newPayment.id,
-      customerId: customerId,
-      customerName: cust.name,
-      amount: amount,
-      debtBefore: currentDebt,
-      debtAfter: Number(cust.openingDebt) || 0
-    }, newPayment.id);
+    addAuditLog('record_customer_payment', { paymentId: newPayment.id, amount, customerId }, newPayment.id);
   }
 
   saveData();
@@ -203,7 +188,6 @@ function renderCustomerPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.customerPayments.forEach(function(p) {
-    // [إصلاح] Number() بدل .toFixed المباشر
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
       '<td>' + escapeHTML(p.customerName) + '</td>' +
@@ -216,50 +200,39 @@ function renderCustomerPayments() {
 }
 
 /* ============ الموردون والمشتريات ============ */
-function saveSupplier() {
+async function saveSupplier() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const id = document.getElementById('supplierId').value;
   const name = document.getElementById('supplierName').value.trim();
   const phone = document.getElementById('supplierPhone').value.trim();
   const rawDebt = parseFloat(document.getElementById('supplierOpeningDebt').value);
-  // [إصلاح] تحقق من السالب و NaN
   const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
   if (!name) return showNotification('اسم المورد مطلوب', 'error');
 
+  const ownerId = state.currentUser.id;
+  const supplierId = id || uid('SUP');
+
+  const newSupplier = {
+    id: supplierId, user_id: ownerId, name: name, phone: phone, opening_debt: openingDebt
+  };
+
   if (id) {
     const s = state.suppliers.find(function(item) { return item.id === id; });
-    if (s) {
-      const oldDebt = Number(s.openingDebt) || 0;
-      s.name = name;
-      s.phone = phone;
-      if (openingDebt !== oldDebt && openingDebt >= 0) {
-        s.openingDebt = openingDebt;
-        if (typeof addAuditLog === 'function') {
-          addAuditLog('edit_supplier_debt', {
-            supplierId: s.id,
-            supplierName: name,
-            oldDebt: oldDebt,
-            newDebt: openingDebt
-          }, s.id);
-        }
-      }
-      if (typeof addAuditLog === 'function') {
-        addAuditLog('edit_supplier', { supplierId: s.id, supplierName: name }, s.id);
-      }
-    }
+    if (s) { s.name = name; s.phone = phone; s.openingDebt = openingDebt; }
   } else {
-    const newSup = { id: uid('SUP'), name: name, phone: phone, openingDebt: openingDebt };
-    state.suppliers.push(newSup);
-    // [إصلاح البند 5] سجل إضافة مورد
-    if (typeof addAuditLog === 'function') {
-      addAuditLog('add_supplier', {
-        supplierId: newSup.id,
-        supplierName: newSup.name,
-        openingDebt: newSup.openingDebt
-      }, newSup.id);
-    }
+    state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt });
+  }
+
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('suppliers').upsert(newSupplier, { onConflict: 'id' });
+    if (error) console.warn('Supplier upload failed:', error);
+  }
+
+  if (typeof addAuditLog === 'function') {
+    addAuditLog(id ? 'edit_supplier' : 'add_supplier', { supplierId, name }, supplierId);
   }
 
   saveData();
@@ -347,29 +320,26 @@ function renderSuppliers() {
   container.innerHTML = html;
 }
 
-function deleteSupplier(id) {
+async function deleteSupplier(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const sup = state.suppliers.find(function(s) { return s.id === id; });
-  // [إصلاح حرج] منع حذف مورد عليه مستحقات
   if (sup && (Number(sup.openingDebt) || 0) > 0) {
     const debt = Number(sup.openingDebt) || 0;
     const confirmMsg = currentLang === 'en'
-      ? 'You owe this supplier ' + debt.toFixed(2) + '. Delete anyway? The payable will be lost.'
-      : 'عليك مستحقات لهذا المورد ' + debt.toFixed(2) + ' جنيه. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
+      ? 'You owe this supplier ' + debt.toFixed(2) + '. Delete anyway?'
+      : 'عليك مستحقات لهذا المورد ' + debt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_supplier'))) return;
   }
 
-  // [إصلاح البند 5] سجل حذف مورد
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('suppliers').delete().eq('id', id);
+  }
+
   if (sup && typeof addAuditLog === 'function') {
-    addAuditLog('delete_supplier', {
-      supplierId: sup.id,
-      supplierName: sup.name,
-      phone: sup.phone,
-      outstandingDebt: Number(sup.openingDebt) || 0
-    }, sup.id);
+    addAuditLog('delete_supplier', { supplierId: sup.id, name: sup.name }, sup.id);
   }
 
   state.suppliers = state.suppliers.filter(function(s) { return s.id !== id; });
@@ -386,8 +356,8 @@ function calcPurchaseTotal() {
   if (totEl) totEl.value = total.toFixed(2);
 }
 
-function savePurchase() {
-if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
+async function savePurchase() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const supplierId = document.getElementById('purchaseSupplier').value;
@@ -403,34 +373,36 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
   if (!supplierId) return showNotification(tr('notify_select_supplier'), 'error');
   if (qty < 1 || cost < 0) return showNotification('الكمية أو التكلفة غير صحيحة', 'error');
 
+  const ownerId = state.currentUser.id;
   let targetProdId = prodId;
   let targetProdName = '';
 
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
     if (p) {
-      const before = p.stock;
       p.stock += qty;
       p.cost = cost;
       targetProdName = p.name;
-      state.stockMoves.unshift({
-        id: uid('SM'), date: new Date().toISOString(),
-        productId: p.id, productName: p.name,
-        type: 'in', qty: qty, oldStock: before, newStock: p.stock,
-        reason: 'مشتريات'
-      });
+      
+      // تحديث المنتج في السيرفر
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('products').update({ stock: p.stock, cost: cost }).eq('id', p.id);
+      }
     }
   } else if (newName) {
-    const newProd = { id: uid('PRD'), name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 };
+    const newProdId = uid('PRD');
+    const newProd = { id: newProdId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 };
     state.products.push(newProd);
     targetProdId = newProd.id;
     targetProdName = newProd.name;
-    state.stockMoves.unshift({
-      id: uid('SM'), date: new Date().toISOString(),
-      productId: newProd.id, productName: newProd.name,
-      type: 'in', qty: qty, oldStock: 0, newStock: qty,
-      reason: 'منتج جديد - مشتريات'
-    });
+
+    // إضافة المنتج الجديد في السيرفر
+    if (navigator.onLine && supabaseClient) {
+      await supabaseClient.from('products').insert({
+        id: newProdId, user_id: ownerId, name: newName, barcode: '', category: 'عام',
+        price: purchaseSalePrice, cost: cost, stock: qty, min_stock: 5
+      });
+    }
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
   }
@@ -440,29 +412,27 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
 
   if (remaining > 0) {
     const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-    if (sup) sup.openingDebt = (Number(sup.openingDebt) || 0) + remaining;
+    if (sup) {
+      sup.openingDebt = (Number(sup.openingDebt) || 0) + remaining;
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', sup.id);
+      }
+    }
   }
 
   const newPurchase = {
-    id: uid('PUR'), date: new Date().toISOString(),
-    supplierId: supplierId, productId: targetProdId, productName: targetProdName,
-    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining
+    id: uid('PUR'), user_id: ownerId, supplier_id: supplierId, product_id: targetProdId, product_name: targetProdName,
+    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining, date: new Date().toISOString()
   };
-  state.purchases.unshift(newPurchase);
+  state.purchases.unshift({ id: newPurchase.id, date: newPurchase.date, supplierId, productId: targetProdId, productName: targetProdName, qty, cost, total, paid, remaining });
 
-  // [إصلاح البند 5] سجل تسجيل مشتريات
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('purchases').insert(newPurchase);
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_purchase', {
-      purchaseId: newPurchase.id,
-      supplierId: supplierId,
-      productId: targetProdId,
-      productName: targetProdName,
-      qty: qty,
-      cost: cost,
-      total: total,
-      paid: paid,
-      remaining: remaining
-    }, newPurchase.id);
+    addAuditLog('add_purchase', { purchaseId: newPurchase.id, total }, newPurchase.id);
   }
 
   saveData();
@@ -490,7 +460,6 @@ function renderPurchases() {
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.purchases.forEach(function(p) {
     const sup = state.suppliers.find(function(s) { return s.id === p.supplierId; });
-    // [إصلاح] Number() بدل .toFixed المباشر
     const totalNum = Number(p.total) || 0;
     const remainingNum = Number(p.remaining) || 0;
     html += '<tr>' +
@@ -508,7 +477,7 @@ function renderPurchases() {
   container.innerHTML = html;
 }
 
-function recordSupplierPayment() {
+async function recordSupplierPayment() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const supplierId = document.getElementById('supplierPaymentSupplier').value;
@@ -516,31 +485,28 @@ function recordSupplierPayment() {
   const date = document.getElementById('supplierPaymentDate').value || today();
   const notes = document.getElementById('supplierPaymentNotes').value.trim();
 
-  // [إصلاح] حماية من Infinity و NaN
   if (!supplierId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
 
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
   if (!sup) return showNotification('المورد غير موجود', 'error');
 
-  const debtBefore = Number(sup.openingDebt) || 0;
-  sup.openingDebt = Math.max(0, debtBefore - amount);
+  sup.openingDebt = Math.max(0, (Number(sup.openingDebt) || 0) - amount);
 
+  const ownerId = state.currentUser.id;
   const newPayment = {
-    id: uid('SUPP'), supplierId: supplierId, supplierName: sup.name,
+    id: uid('SUPP'), user_id: ownerId, supplier_id: supplierId, supplier_name: sup.name,
     amount: amount, date: date, notes: notes
   };
-  state.supplierPayments.unshift(newPayment);
+  state.supplierPayments.unshift({ id: newPayment.id, supplierId, supplierName: sup.name, amount, date, notes });
 
-  // [إصلاح البند 5] سجل سداد مورد
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('supplier_payments').insert(newPayment);
+    await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', supplierId);
+  }
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('record_supplier_payment', {
-      paymentId: newPayment.id,
-      supplierId: supplierId,
-      supplierName: sup.name,
-      amount: amount,
-      debtBefore: debtBefore,
-      debtAfter: Number(sup.openingDebt) || 0
-    }, newPayment.id);
+    addAuditLog('record_supplier_payment', { paymentId: newPayment.id, amount, supplierId }, newPayment.id);
   }
 
   saveData();
@@ -560,7 +526,6 @@ function renderSupplierPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_amount_paid">المبلغ المدفوع</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.supplierPayments.forEach(function(p) {
-    // [إصلاح] Number() بدل .toFixed المباشر
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
       '<td>' + escapeHTML(p.supplierName) + '</td>' +

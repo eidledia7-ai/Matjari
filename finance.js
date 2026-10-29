@@ -1,6 +1,6 @@
 /* ============ المصروفات ============ */
-function saveExpense() {
-if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
+async function saveExpense() {
+  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const name = document.getElementById('expenseName').value.trim();
@@ -10,12 +10,26 @@ if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أول
 
   if (!name || isNaN(amount) || amount <= 0) return showNotification('أدخل البند والمبلغ بشكل صحيح', 'error');
 
-  const newExpense = { id: uid('EXP'), name: name, amount: amount, date: date, notes: notes };
-  state.expenses.unshift(newExpense);
+  const ownerId = state.currentUser.id;
+  const newExpense = { 
+    id: uid('EXP'), 
+    user_id: ownerId, 
+    name: name, 
+    amount: amount, 
+    date: date, 
+    notes: notes 
+  };
 
-  // [إصلاح البند 5] سجل النشاط
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('expenses').insert(newExpense);
+    if (error) console.warn('Expense upload failed:', error);
+  }
+
+  state.expenses.unshift({ id: newExpense.id, name, amount, date, notes });
+
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_expense', { id: newExpense.id, name: newExpense.name, amount: newExpense.amount }, newExpense.id);
+    addAuditLog('add_expense', { id: newExpense.id, name, amount }, newExpense.id);
   }
 
   saveData();
@@ -36,7 +50,6 @@ function renderExpenses() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_item_name">البند</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.expenses.forEach(function(e) {
-    // [إصلاح] amount ممكن يكون string من السيرفر
     html += '<tr>' +
       '<td>' + escapeHTML(e.date) + '</td>' +
       '<td>' + escapeHTML(e.name) + '</td>' +
@@ -69,15 +82,17 @@ function renderReports() {
 
   const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const totalSales = filteredSales.reduce(function(sum, s) { return sum + s.total; }, 0);
-  const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + (s.discount || 0); }, 0);
+  const totalSales = filteredSales.reduce(function(sum, s) { return sum + Number(s.total || 0); }, 0);
+  const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
 
   let totalCost = 0;
   filteredSales.forEach(function(s) {
-    s.items.forEach(function(i) { totalCost += (i.cost || 0) * i.qty; });
+    if (s.items && Array.isArray(s.items)) {
+      s.items.forEach(function(i) { totalCost += (Number(i.cost) || 0) * (Number(i.qty) || 0); });
+    }
   });
 
-  const totalExpenses = filteredExpenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
+  const totalExpenses = filteredExpenses.reduce(function(sum, e) { return sum + Number(e.amount || 0); }, 0);
   const netProfit = totalSales - totalCost - totalExpenses;
   const avgInvoice = filteredSales.length > 0 ? totalSales / filteredSales.length : 0;
 
@@ -104,17 +119,17 @@ function renderReports() {
       '<p>عدد المصروفات: <b>' + filteredExpenses.length + '</b></p>';
   }
 
-  const cashSales = filteredSales.filter(s => s.payMethod === 'cash').reduce((sum, s) => sum + s.paid, 0);
-  const cardSales = filteredSales.filter(s => s.payMethod === 'visa' || s.payMethod === 'card').reduce((sum, s) => sum + s.paid, 0);
-  const transferSales = filteredSales.filter(s => s.payMethod === 'transfer').reduce((sum, s) => sum + s.paid, 0);
-  const debtSales = filteredSales.reduce((sum, s) => sum + s.remaining, 0);
+  const cashSales = filteredSales.filter(s => s.payMethod === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
+  const cardSales = filteredSales.filter(s => s.payMethod === 'visa' || s.payMethod === 'card').reduce((sum, s) => sum + Number(s.paid || 0), 0);
+  const transferSales = filteredSales.filter(s => s.payMethod === 'transfer').reduce((sum, s) => sum + Number(s.paid || 0), 0);
+  const debtSales = filteredSales.reduce((sum, s) => sum + Number(s.remaining || 0), 0);
 
   const customerTotals = {};
   filteredSales.forEach(s => {
     if (s.customerId) {
       const custName = state.customers.find(c => c.id === s.customerId)?.name || 'نقدي';
       if (custName !== 'عميل نقدي عام') {
-        customerTotals[custName] = (customerTotals[custName] || 0) + s.total;
+        customerTotals[custName] = (customerTotals[custName] || 0) + Number(s.total || 0);
       }
     }
   });
@@ -161,10 +176,11 @@ function renderReports() {
   if (topContainer) {
     const salesByProduct = {};
     filteredSales.forEach(function(s) {
+      if (!s.items || !Array.isArray(s.items)) return;
       s.items.forEach(function(i) {
         if (!salesByProduct[i.name]) salesByProduct[i.name] = { name: i.name, qty: 0, total: 0 };
-salesByProduct[i.name].qty += i.qty;
-salesByProduct[i.name].total += i.price * i.qty;
+        salesByProduct[i.name].qty += Number(i.qty || 0);
+        salesByProduct[i.name].total += Number(i.price || 0) * Number(i.qty || 0);
       });
     });
     const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
@@ -225,16 +241,18 @@ function calcExpectedShiftCash() {
   state.sales.forEach(function(s) {
     const saleTime = new Date(s.date).getTime();
     if (saleTime >= shiftStart && s.payMethod === 'cash') {
-      cashSales += s.paid;
+      cashSales += Number(s.paid || 0);
     }
   });
 
-  // [إصلاح] drawerExpenses في الوردية الحالية مصفوفة، لكن احتياطاً لو رقم
+  // حساب مصروفات الدرج
   let drawerExpensesTotal = 0;
-  if (Array.isArray(shift.drawerExpenses)) {
-    drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-  } else if (typeof shift.drawerExpenses === 'number') {
-    drawerExpensesTotal = shift.drawerExpenses;
+  if (shift.drawerExpenses) {
+    if (Array.isArray(shift.drawerExpenses)) {
+       drawerExpensesTotal = shift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    } else if (typeof shift.drawerExpenses === 'number') {
+       drawerExpensesTotal = shift.drawerExpenses;
+    }
   }
   
   // الكاش المتوقع = المبيعات - مصروفات الدرج
@@ -268,7 +286,7 @@ function calculateShiftDiff() {
   }
 }
 
-function closeShift() {
+async function closeShift() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const cashierName = (document.getElementById('shiftCashierName').value || '').trim();
@@ -279,10 +297,7 @@ function closeShift() {
 
   if (!state.currentShift) {
     state.currentShift = {
-      id: uid('SHIFT'),
-      name: cashierName,
-      cashierName: cashierName,
-      startTime: new Date().toISOString()
+      id: uid('SHIFT'), name: cashierName, cashierName: cashierName, startTime: new Date().toISOString()
     };
   }
 
@@ -293,52 +308,45 @@ function closeShift() {
 
   const cashSales = shiftSales
   .filter(function(s) { return s.payMethod === 'cash'; })
-  .reduce(function(sum, s) { return sum + s.paid; }, 0);
+  .reduce(function(sum, s) { return sum + Number(s.paid || 0); }, 0);
 
-const totalSales = shiftSales.reduce(function(sum, s) { return sum + s.total; }, 0);
+  const totalSales = shiftSales.reduce(function(sum, s) { return sum + Number(s.total || 0); }, 0);
 
-// [إصلاح] نفس منطق calcExpectedShiftCash (مصفوفة أو رقم)
-let drawerExpensesTotal = 0;
-if (Array.isArray(state.currentShift.drawerExpenses)) {
-  drawerExpensesTotal = state.currentShift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-} else if (typeof state.currentShift.drawerExpenses === 'number') {
-  drawerExpensesTotal = state.currentShift.drawerExpenses;
-}
+  let drawerExpensesTotal = 0;
+  if (Array.isArray(state.currentShift.drawerExpenses)) {
+    drawerExpensesTotal = state.currentShift.drawerExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  } else if (typeof state.currentShift.drawerExpenses === 'number') {
+    drawerExpensesTotal = state.currentShift.drawerExpenses;
+  }
 
-// الكاش المتوقع الحقيقي = مبيعات الكاش - مصروفات الدرج
-const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+  const expectedCash = Math.max(0, cashSales - drawerExpensesTotal);
+  const drawerListSnapshot = Array.isArray(state.currentShift.drawerExpenses) ? state.currentShift.drawerExpenses.slice() : [];
 
-// [إصلاح] ناخد نسخة من القائمة قبل ما نصفر currentShift
-const drawerListSnapshot = Array.isArray(state.currentShift.drawerExpenses) ? state.currentShift.drawerExpenses.slice() : [];
+  const closedShift = {
+    id: state.currentShift.id, name: cashierName, cashierName: cashierName,
+    startTime: state.currentShift.startTime, endTime: new Date().toISOString(),
+    saleCount: shiftSales.length, totalSales: totalSales, cashSales: cashSales, 
+    drawerExpenses: drawerExpensesTotal, drawerExpensesList: drawerListSnapshot,
+    actualCash: actualCash, difference: actualCash - expectedCash, notes: notes
+  };
 
-const closedShift = {
-  id: state.currentShift.id,
-  name: cashierName,
-  cashierName: cashierName,
-  startTime: state.currentShift.startTime,
-  endTime: new Date().toISOString(),
-  saleCount: shiftSales.length,
-  totalSales: totalSales,
-  cashSales: cashSales,
-  drawerExpenses: drawerExpensesTotal,
-  drawerExpensesList: drawerListSnapshot,
-  actualCash: actualCash,
-  difference: actualCash - expectedCash,
-  notes: notes
-};
+  const ownerId = state.currentUser.id;
+
+  // الرفع للسيرفر
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('shifts').insert({
+      id: closedShift.id, user_id: ownerId, cashier_name: cashierName, start_time: closedShift.startTime,
+      end_time: closedShift.endTime, actual_cash: actualCash, difference: closedShift.difference, notes: notes
+    });
+  }
 
   state.shifts.unshift(closedShift);
   state.currentShift = null;
 
-  // [إصلاح البند 5] سجل النشاط لإغلاق الوردية
   if (typeof addAuditLog === 'function') {
     addAuditLog('close_shift', {
-      shiftId: closedShift.id,
-      cashierName: closedShift.cashierName,
-      cashSales: cashSales,
-      drawerExpenses: drawerExpensesTotal,
-      actualCash: actualCash,
-      difference: closedShift.difference
+      shiftId: closedShift.id, cashierName: closedShift.cashierName, cashSales: cashSales,
+      drawerExpenses: drawerExpensesTotal, actualCash: actualCash, difference: closedShift.difference
     }, closedShift.id);
   }
 
@@ -388,7 +396,6 @@ function printShiftReport() {
   const transferSales = sales.filter(function(sale) { return (sale.payMethod || sale.paymentMethod) === 'transfer'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
   const actualCash = current ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift && shift.actualCash) || 0);
 
-  // [إصلاح] نفس منطق closeShift: نخصم مصروفات الدرج
   let drawerExpensesTotal = 0;
   if (current) {
     if (Array.isArray(current.drawerExpenses)) {
@@ -436,7 +443,6 @@ function toggleExportDateRange(show) {
 function executeExportAction(action) {
   const type = activeExportContext.type;
   const scopeEl = document.querySelector('input[name="exportScope"]:checked');
-  // [إصلاح] حماية من عدم اختيار scope
   if (!scopeEl) return showNotification('اختر نطاق التصدير أولاً', 'warning');
   const scope = scopeEl.value;
   let from = '';
@@ -469,7 +475,7 @@ function getFilteredDataForExport(tableType, from, to) {
       headers = ['رقم', 'التاريخ', 'العميل', 'الإجمالي', 'المدفوع', 'المتبقي'];
       rawData = filterByPeriod(state.sales, 'date', from, to).map(s => {
         const cust = state.customers.find(c => c.id === s.customerId);
-        return [s.id, new Date(s.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), cust ? ((cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer') ? (translations[currentLang] || translations.ar).cash_customer : cust.name) : ((translations[currentLang] || translations.ar).cash_customer), s.total.toFixed(2), s.paid.toFixed(2), s.remaining.toFixed(2)];
+        return [s.id, new Date(s.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), cust ? ((cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer') ? (translations[currentLang] || translations.ar).cash_customer : cust.name) : ((translations[currentLang] || translations.ar).cash_customer), (Number(s.total) || 0).toFixed(2), (Number(s.paid) || 0).toFixed(2), (Number(s.remaining) || 0).toFixed(2)];
       });
       break;
     case 'products':
@@ -490,40 +496,40 @@ function getFilteredDataForExport(tableType, from, to) {
     case 'customers':
       title = 'قائمة العملاء';
       headers = ['الاسم', 'الهاتف', 'الديون'];
-      rawData = state.customers.map(c => [c.name, c.phone || '-', (c.openingDebt || 0).toFixed(2)]);
+      rawData = state.customers.map(c => [c.name, c.phone || '-', (Number(c.openingDebt) || 0).toFixed(2)]);
       break;
     case 'customerPayments':
       title = 'تحصيلات العملاء';
       headers = ['التاريخ', 'العميل', 'المبلغ', 'ملاحظات'];
-      rawData = filterByPeriod(state.customerPayments, 'date', from, to).map(p => [p.date, p.customerName, p.amount.toFixed(2), p.notes || '-']);
+      rawData = filterByPeriod(state.customerPayments, 'date', from, to).map(p => [p.date, p.customerName, (Number(p.amount) || 0).toFixed(2), p.notes || '-']);
       break;
     case 'suppliers':
       title = 'قائمة الموردين';
       headers = ['الاسم', 'الهاتف', 'المستحقات'];
-      rawData = state.suppliers.map(s => [s.name, s.phone || '-', (s.openingDebt || 0).toFixed(2)]);
+      rawData = state.suppliers.map(s => [s.name, s.phone || '-', (Number(s.openingDebt) || 0).toFixed(2)]);
       break;
     case 'purchases':
       title = 'المشتريات';
       headers = ['التاريخ', 'المورد', 'المنتج', 'الكمية', 'التكلفة', 'الإجمالي'];
       rawData = filterByPeriod(state.purchases, 'date', from, to).map(p => {
         const sup = state.suppliers.find(s => s.id === p.supplierId);
-        return [new Date(p.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), sup ? sup.name : '-', p.productName, p.qty, p.cost, p.total.toFixed(2)];
+        return [new Date(p.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), sup ? sup.name : '-', p.productName, p.qty, p.cost, (Number(p.total) || 0).toFixed(2)];
       });
       break;
     case 'supplierPayments':
       title = tr('supplier_payments_title');
       headers = ['التاريخ', 'المورد', 'المبلغ', 'ملاحظات'];
-      rawData = filterByPeriod(state.supplierPayments, 'date', from, to).map(p => [p.date, p.supplierName, p.amount.toFixed(2), p.notes || '-']);
+      rawData = filterByPeriod(state.supplierPayments, 'date', from, to).map(p => [p.date, p.supplierName, (Number(p.amount) || 0).toFixed(2), p.notes || '-']);
       break;
     case 'expenses':
       title = 'المصروفات';
       headers = ['التاريخ', 'البند', 'المبلغ', 'ملاحظات'];
-      rawData = filterByPeriod(state.expenses, 'date', from, to).map(e => [e.date, e.name, e.amount.toFixed(2), e.notes || '-']);
+      rawData = filterByPeriod(state.expenses, 'date', from, to).map(e => [e.date, e.name, (Number(e.amount) || 0).toFixed(2), e.notes || '-']);
       break;
     case 'shifts':
       title = 'سجل الورديات';
       headers = ['التاريخ', 'الكاشير', 'عدد الفواتير', 'الكاش المتوقع', 'الفعلي', 'الفرق'];
-      rawData = filterByPeriod(state.shifts, 'endTime', from, to).map(s => [new Date(s.endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG'), s.cashierName, s.saleCount, s.cashSales.toFixed(2), s.actualCash.toFixed(2), s.difference.toFixed(2)]);
+      rawData = filterByPeriod(state.shifts, 'endTime', from, to).map(s => [new Date(s.endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG'), s.cashierName, s.saleCount, (Number(s.cashSales) || 0).toFixed(2), (Number(s.actualCash) || 0).toFixed(2), (Number(s.difference) || 0).toFixed(2)]);
       break;
   }
   return { title, headers, rows: rawData };
