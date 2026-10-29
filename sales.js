@@ -54,7 +54,6 @@ function renderCart() {
   let pointValue = state.storeSettings.pointValue || 0;
 
   if (pointsGroup) {
-    // [إصلاح] حماية cust null
     if (availablePoints > 0 && pointValue > 0 && cust && cust.name !== 'عميل نقدي عام') {
       pointsGroup.style.display = 'flex';
       if (pointsLabel) pointsLabel.innerText = availablePoints;
@@ -277,7 +276,7 @@ if (customerId) {
   }
 }
 
-  // [إصلاح البند 5] سجل النشاط للخصم — بعد ما الفاتورة اتسجلت فعلاً
+  // [البند 5] سجل النشاط للخصم
   if (discountAmount > 0 && typeof addAuditLog === 'function') {
     addAuditLog('apply_discount', {
       saleId: saleObj.id,
@@ -387,7 +386,13 @@ function renderSales() {
 
 /* ============ إدارة الحذف الآمن ============ */
 function safeDeleteRecord(type, id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  // [إصلاح] قراءة الصلاحيات من إعدادات المحل بدل الحماية الثابتة للمدير فقط
+  if (state.role === 'employee') {
+    const perms = state.storeSettings.permissions || {};
+    if (!perms.canDelete) {
+      return showNotification('هذه العملية للمدير فقط (الموظف غير مسموح له بالحذف)', 'warning');
+    }
+  }
   
   showCustomConfirm('تأكيد الحذف', tr('msg_delete_mistake'), () => {
     executeDeleteRecord(type, id);

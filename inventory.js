@@ -32,15 +32,14 @@ function saveProduct() {
   if (id) {
     const prod = state.products.find(function(p) { return p.id === id; });
     if (prod) {
-      // [إصلاح حرج] تعديل المنتج مش بيلمس المخزون — المخزون بيتعدل من saveStockAdjustment/quickAddStock بس
+      // تعديل المنتج مش بيلمس المخزون — المخزون بيتعدل من saveStockAdjustment/quickAddStock بس
       prod.name = name;
       prod.barcode = barcode;
       prod.category = category;
       prod.price = price;
       prod.cost = cost;
       prod.minStock = minStock;
-      // ملاحظة: prod.stock مش بيتم لمسه هنا
-
+      
       // [إصلاح البند 5] سجل تعديل منتج
       if (typeof addAuditLog === 'function') {
         addAuditLog('edit_product', {
@@ -157,7 +156,6 @@ function deleteProduct(id) {
   const prod = state.products.find(function(p) { return p.id === id; });
   if (!prod) return;
 
-  // [إصلاح حرج] تحقق إن المنتج مش في فواتير
   const salesCount = state.sales.reduce(function (count, s) {
     if (!s.items) return count;
     return count + (s.items.some(function (i) { return i.id === id; }) ? 1 : 0);
@@ -172,7 +170,6 @@ function deleteProduct(id) {
     if (!confirm(tr('msg_delete_product'))) return;
   }
 
-  // [إصلاح البند 5] سجل حذف منتج
   if (typeof addAuditLog === 'function') {
     addAuditLog('delete_product', {
       productId: prod.id,
@@ -196,7 +193,7 @@ function populateAdjustDropdown() {
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ') + (Number(p.stock) || 0) + ')</option>';
+    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ') + (Number(p.stock) || 0) + '</option>';
   });
 }
 
@@ -233,7 +230,6 @@ function saveStockAdjustment() {
     oldStock: oldStock, newStock: newStock, reason: reason
   });
 
-  // [إصلاح البند 5] سجل تعديل مخزون
   if (typeof addAuditLog === 'function') {
     addAuditLog('stock_adjustment', {
       productId: prod.id,
@@ -320,7 +316,13 @@ function updateReturnProducts() {
 }
 
 function saveReturn() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  // [إصلاح] قراءة الصلاحيات للموظف بدل الحماية الثابتة
+  if (state.role === 'employee') {
+    const perms = state.storeSettings.permissions || {};
+    if (!perms.canReturn) {
+      return showNotification('هذه العملية للمدير فقط (الموظف غير مسموح له بتسجيل مرتجع)', 'warning');
+    }
+  }
 
   const saleId = document.getElementById('returnSale').value;
   const prodId = document.getElementById('returnProduct').value;
@@ -360,7 +362,6 @@ function saveReturn() {
   };
   state.returns.unshift(newReturn);
 
-  // [إصلاح البند 5] سجل مرتجع
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_return', {
       returnId: newReturn.id,

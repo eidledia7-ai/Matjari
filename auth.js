@@ -253,11 +253,20 @@ async function openUserSession(user) {
 
     // 2. جلب بيانات الاشتراك (للمدير أو للموظف عن طريق مديره)
     const subOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : user.id;
-    const subRes = await supabaseClient
+    let subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
       .eq('user_id', subOwnerId) 
       .maybeSingle();
+
+    // [إصلاح] لو الموظف ومالقيناش اشتراك المدير، نجرب نجيب اشتراك الموظف نفسه كخطة بديلة
+    if (state.role === 'employee' && (!subRes.data) && subOwnerId !== user.id) {
+       subRes = await supabaseClient
+        .from('shop_subscriptions')
+        .select('*')
+        .eq('user_id', user.id) 
+        .maybeSingle();
+    }
 
     if (subRes.data) {
       state.subscription = {
@@ -268,13 +277,15 @@ async function openUserSession(user) {
         payment_method: subRes.data.payment_method
       };
     } else {
+      // لو مفيش اشتراك خالص، بنفترض trial 14 يوم
       state.subscription = {
         plan: 'trial',
         status: 'active',
         trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       };
     }
-    // [البند 1] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
+    
+    // [إصلاح] نضبط ownerPlan دايماً (موظف أو مدير) بعد تحديد subscription
     state.ownerPlan = state.subscription.plan;
 
     // 3. تحديد مين صاحب البيانات (المدير) عشان نقرا كاشه ونحفظ فيه

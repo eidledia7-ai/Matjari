@@ -9,16 +9,22 @@ function loadStoreSettings() {
   set('storeCurrency', s.currency);
   set('storeMonthlyGoal', s.monthlyGoal);
   set('storePointsRate', s.pointsRate);
-set('storePointValue', s.pointValue);
-const perms = s.permissions || {};
-const pDiscount = document.getElementById('perm_canDiscount');
-const pDelete = document.getElementById('perm_canDelete');
-const pEdit = document.getElementById('perm_canEditPrice');
-if (pDiscount) pDiscount.checked = perms.canDiscount || false;
-if (pDelete) pDelete.checked = perms.canDelete || false;
-if (pEdit) pEdit.checked = perms.canEditPrice || false;
+  set('storePointValue', s.pointValue);
+  
+  const perms = s.permissions || {};
+  const pDiscount = document.getElementById('perm_canDiscount');
+  const pDelete = document.getElementById('perm_canDelete');
+  const pEdit = document.getElementById('perm_canEditPrice');
+  const pReturn = document.getElementById('perm_canReturn'); // [إضافة] صلاحية المرتجعات
+  
+  if (pDiscount) pDiscount.checked = perms.canDiscount || false;
+  if (pDelete) pDelete.checked = perms.canDelete || false;
+  if (pEdit) pEdit.checked = perms.canEditPrice || false;
+  if (pReturn) pReturn.checked = perms.canReturn || false; // [إضافة]
+  
   const printTypeEl = document.getElementById('storePrintType');
-if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
+  if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
+  
   const preview = document.getElementById('storeLogoPreview');
   if (preview && s.logo) { preview.src = s.logo; preview.style.display = 'block'; }
   else if (preview) { preview.style.display = 'none'; }
@@ -29,30 +35,35 @@ if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
 
 function saveStoreSettings() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  
   state.storeSettings.name = (document.getElementById('storeName').value || '').trim() || 'متجري';
   state.storeSettings.phone = (document.getElementById('storePhone').value || '').trim();
   state.storeSettings.address = (document.getElementById('storeAddress').value || '').trim();
   state.storeSettings.taxNumber = (document.getElementById('storeTaxNumber').value || '').trim();
   state.storeSettings.currency = (document.getElementById('storeCurrency').value || 'ج.م').trim();
   state.storeSettings.monthlyGoal = parseFloat(document.getElementById('storeMonthlyGoal').value) || 0;
-state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
-state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
+  state.storeSettings.pointsRate = parseFloat(document.getElementById('storePointsRate').value) || 0;
+  state.storeSettings.pointValue = parseFloat(document.getElementById('storePointValue').value) || 0;
 
-// [إصلاح] حماية من null للـ checkboxes
-const permDiscountEl = document.getElementById('perm_canDiscount');
-const permDeleteEl = document.getElementById('perm_canDelete');
-const permEditEl = document.getElementById('perm_canEditPrice');
-state.storeSettings.permissions = {
-  canDiscount: permDiscountEl ? permDiscountEl.checked : false,
-  canDelete: permDeleteEl ? permDeleteEl.checked : false,
-  canEditPrice: permEditEl ? permEditEl.checked : false
-};
-const printTypeEl = document.getElementById('storePrintType');
-state.storeSettings.printType = printTypeEl ? printTypeEl.value : 'thermal';
+  const permDiscountEl = document.getElementById('perm_canDiscount');
+  const permDeleteEl = document.getElementById('perm_canDelete');
+  const permEditEl = document.getElementById('perm_canEditPrice');
+  const permReturnEl = document.getElementById('perm_canReturn'); // [إضافة]
+
+  state.storeSettings.permissions = {
+    canDiscount: permDiscountEl ? permDiscountEl.checked : false,
+    canDelete: permDeleteEl ? permDeleteEl.checked : false,
+    canEditPrice: permEditEl ? permEditEl.checked : false,
+    canReturn: permReturnEl ? permReturnEl.checked : false // [إضافة]
+  };
+
+  const printTypeEl = document.getElementById('storePrintType');
+  state.storeSettings.printType = printTypeEl ? printTypeEl.value : 'thermal';
+  
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
 
-  // [إصلاح البند 5] سجل تعديل الإعدادات
+  // سجل تعديل الإعدادات
   if (typeof addAuditLog === 'function') {
     addAuditLog('save_store_settings', {
       storeName: state.storeSettings.name,
@@ -98,34 +109,6 @@ async function verifyCurrentUserPassword(password) {
   } catch (e) { return false; }
 }
 
-// [إصلاح] استخدام النسخة الموحّدة من backup.js لو موجودة
-function buildBackupData() {
-  // لو النسخة في backup.js محمّلة، استخدمها
-  if (typeof window.__buildBackupDataImpl === 'function') return window.__buildBackupDataImpl();
-  return { version: 5, storeSettings: state.storeSettings, products: state.products, customers: state.customers, suppliers: state.suppliers, expenses: state.expenses, sales: state.sales, stockMoves: state.stockMoves, returns: state.returns, customerPayments: state.customerPayments, supplierPayments: state.supplierPayments, purchases: state.purchases, shifts: state.shifts };
-}
-
-async function downloadEncryptedBackup(pass, silent) {
-  // [إصلاح] لو النسخة في backup.js محمّلة، استخدمها
-  if (typeof window.__downloadEncryptedBackupImpl === 'function') {
-    return window.__downloadEncryptedBackupImpl(pass, silent);
-  }
-  if (typeof encryptData !== 'function') {
-    throw new Error('Encryption not available');
-  }
-  const encrypted = await encryptData(JSON.stringify(buildBackupData()), pass);
-  const blob = new Blob([JSON.stringify({ encrypted: true, data: encrypted })], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'backup-matjari-' + today() + '.shopbak';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
-  if (!silent) showNotification(currentLang === 'en' ? 'Encrypted backup downloaded.' : 'تم تنزيل النسخة الاحتياطية المشفرة ✅');
-}
-
 /* ============ حماية منطقة الخطر ============ */
 async function safeClearAllDataPrompt() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
@@ -135,7 +118,6 @@ async function safeClearAllDataPrompt() {
 
   if (!confirm(tr('msg_wipe_all'))) return;
 
-  // [إصلاح] حماية من undefined
   try {
     if (typeof downloadEncryptedBackup !== 'function') throw new Error('Backup function not available');
     await downloadEncryptedBackup(pass, true);
@@ -158,18 +140,16 @@ async function safeClearAllDataPrompt() {
   state.currentShift = null;
   state.cart = [];
 
-  // [إصلاح] استخدام ownerId للموظف في مسح الكاش
   if (state.currentUser) {
     const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
     localStorage.removeItem('matjari_cache_' + cacheOwnerId);
   }
-// مسح الفواتير من الجدول المنفصل
-if (navigator.onLine && supabaseClient && state.currentUser) {
-  const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-  await supabaseClient.from('sales').delete().eq('user_id', cacheOwnerId);
-}
 
-  // [إصلاح البند 5] سجل مسح البيانات
+  if (navigator.onLine && supabaseClient && state.currentUser) {
+    const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+    await supabaseClient.from('sales').delete().eq('user_id', cacheOwnerId);
+  }
+
   if (typeof addAuditLog === 'function') {
     addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });
   }
