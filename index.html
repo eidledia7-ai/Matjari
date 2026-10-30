@@ -174,10 +174,10 @@
       </div>
 
       <!-- أزرار أساسية تظهر للكل (خارج الـ nav-group) -->
-      <button data-action="sync" onclick="syncNow()" style="margin-top: 15px;" data-i18n="sync_now">🔄 مزامنة الآن</button>
-      <button onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
-      <button onclick="changePasswordPrompt()" data-i18n="change_pass_btn" style="background:#1769aa; margin-top: 10px;">🔑 تغيير كلمة المرور</button>
-      <button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
+<button data-action="sync" class="sync-btn" onclick="syncNow()" style="margin-top: 15px;" data-i18n="sync_now">🔄 مزامنة الآن</button>
+<button onclick="toggleDarkMode()" data-i18n="toggle_theme">🌙 تبديل الوضع</button>
+<button class="btn primary w-100" onclick="changePasswordPrompt()" data-i18n="change_pass_btn" style="margin-top: 10px;">🔑 تغيير كلمة المرور</button>
+<button onclick="handleLogout()" data-i18n="logout_btn">🚪 تسجيل الخروج</button>
     </nav>
   </aside>
 
@@ -290,14 +290,14 @@
 </div>
         </div>
 
-    <div class="btn-group mt-15" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-  <button class="btn green" onclick="completeSale()" style="grid-column: span 2;" data-i18n="complete_sale_btn">تأكيد الحفظ وطباعة الفاتورة (F9)</button>
+     <div class="btn-group mt-15" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+  <button class="btn green" onclick="completeSale()" style="grid-column: span 2; font-size: 18px; padding: 15px;" data-i18n="complete_sale_btn">تأكيد الحفظ وطباعة الفاتورة (F9)</button>
   
-  <button class="btn orange" onclick="holdCurrentSale()">⏸️ تعليق</button>
-  <button class="btn primary" onclick="openHeldCartsModal()" style="background:#4f46e5;">📋 المعلقة (<span id="heldCartsCount">0</span>)</button>
+  <button class="btn orange small-btn" onclick="holdCurrentSale()">⏸️ تعليق</button>
+  <button class="btn primary small-btn" onclick="openHeldCartsModal()" style="background:#4f46e5;">📋 المعلقة (<span id="heldCartsCount">0</span>)</button>
   
-  <button class="btn red" onclick="openDrawerExpenseModal()" style="background:#dc2626;">💸 مصروف درج</button>
-  <button class="btn grey" onclick="clearCart()" data-i18n="clear_cart_btn">تفريغ (F8)</button>
+  <button class="btn red small-btn" onclick="openDrawerExpenseModal()" style="background:#dc2626;">💸 مصروف درج</button>
+  <button class="btn grey small-btn" onclick="clearCart()" data-i18n="clear_cart_btn">تفريغ (F8)</button>
 </div>
        
 

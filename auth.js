@@ -320,27 +320,25 @@ function checkSubscriptionStatus() {
 
 function applyRolePermissions() {
   const employee = state.role === 'employee';
-  document.querySelectorAll('.sidebar-nav button, .nav-group').forEach(function(btn) {
+
+  // 1) الموظف: إخفاء كل الـ nav-group بالكامل
+  document.querySelectorAll('.nav-group').forEach(function(group) {
+    group.style.display = employee ? 'none' : '';
+  });
+
+  // 2) الموظف: إخفاء أي زرار data-page مش sales/invReturns
+  document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    
-    // [التعديل] الموظف ميشوفش غير نقطة البيع والمرتجعات
-    if (employee && page && page !== 'sales' && page !== 'invReturns') {
+    if (employee && page !== 'sales' && page !== 'invReturns') {
       btn.style.display = 'none';
     } else {
       btn.style.display = '';
     }
   });
-  
-  const syncBtn = document.querySelector('.sidebar-nav button[data-action="sync"]');
-  if (syncBtn) syncBtn.style.display = employee ? 'none' : '';
 
-  document.querySelectorAll('.nav-group').forEach(function(group) {
-    const buttons = group.querySelectorAll('button');
-    let anyVisible = false;
-    buttons.forEach(function(b) {
-      if (b.style.display !== 'none') anyVisible = true;
-    });
-    group.style.display = anyVisible ? '' : 'none';
+  // 3) إخفاء زرار المزامنة عن الموظف
+  document.querySelectorAll('.sync-btn').forEach(function(btn) {
+    btn.style.display = employee ? 'none' : '';
   });
 }
 
