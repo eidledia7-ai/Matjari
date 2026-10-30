@@ -2,10 +2,10 @@
 function enforceSubscriptionBlock() {
   const existing = document.getElementById('subscriptionBlock');
   if (existing) existing.remove();
-  
+
   const oldBanner = document.getElementById('readOnlyBanner');
   if (oldBanner) oldBanner.remove();
-  
+
   document.body.style.overflow = '';
 
   const sub = state.subscription || {};
@@ -15,8 +15,8 @@ function enforceSubscriptionBlock() {
 
   const now = Date.now();
   const isActive = sub.status === 'active' && (!endDate || endDate > now);
-  
-  window.isReadOnlyMode = !isActive; 
+
+  window.isReadOnlyMode = !isActive;
 
   if (isActive) {
     document.body.style.paddingTop = '0';
@@ -27,7 +27,7 @@ function enforceSubscriptionBlock() {
   const banner = document.createElement('div');
   banner.id = 'readOnlyBanner';
   banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#ef4444; color:#fff; text-align:center; padding:12px; z-index:99999; font-weight:bold; font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;';
-  
+
   banner.innerHTML = `
     <span>⚠️ ${en ? 'Subscription expired. Read-Only mode.' : 'اشتراكك منتهي. أنت الآن في وضع القراءة فقط (لا يمكنك البيع أو التعديل).'}</span>
     <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">
@@ -35,7 +35,7 @@ function enforceSubscriptionBlock() {
     </button>
     <button onclick="this.parentElement.remove(); document.body.style.paddingTop='0';" style="background:transparent; border:none; color:#fff; cursor:pointer; font-size:18px; padding:0 5px;">✕</button>
   `;
-  
+
   document.body.prepend(banner);
   document.body.style.paddingTop = '50px';
 }
@@ -54,6 +54,9 @@ async function holdCurrentSale() {
   const custId = document.getElementById('saleCustomer').value;
   const cust = state.customers.find(c => c.id === custId);
 
+  // الحصول على shift_id الحالي (لو فيه)
+  const currentShiftId = state.currentShift ? state.currentShift.id : null;
+
   const heldSale = {
     id: uid('HOLD'),
     time: new Date().toISOString(),
@@ -62,7 +65,8 @@ async function holdCurrentSale() {
     customerName: cust ? cust.name : 'عميل نقدي',
     discount: document.getElementById('saleDiscount').value || 0,
     discountType: document.getElementById('saleDiscountType').value,
-    notes: document.getElementById('saleNotes').value || ''
+    notes: document.getElementById('saleNotes').value || '',
+    shiftId: currentShiftId
   };
 
   if (!state.heldCarts) state.heldCarts = [];
@@ -72,9 +76,11 @@ async function holdCurrentSale() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('held_carts').insert({
-      id: heldSale.id, user_id: ownerId, cart_data: heldSale.cart, customer_id: heldSale.customerId,
-      customer_name: heldSale.customerName, discount: heldSale.discount, discount_type: heldSale.discountType,
-      notes: heldSale.notes, time: heldSale.time
+      id: heldSale.id, user_id: ownerId, cart_data: heldSale.cart,
+      customer_id: heldSale.customerId, customer_name: heldSale.customerName,
+      discount: heldSale.discount, discount_type: heldSale.discountType,
+      notes: heldSale.notes, time: heldSale.time,
+      shift_id: heldSale.shiftId
     });
   }
 
@@ -109,7 +115,7 @@ function renderHeldCartsList() {
   state.heldCarts.forEach(sale => {
     const date = new Date(sale.time).toLocaleTimeString(currentLang === 'en' ? 'en-US' : 'ar-EG');
     const total = sale.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    
+
     html += `
       <div style="background:var(--bg-body); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div>
@@ -136,9 +142,9 @@ function resumeHeldSale(id) {
 
   const index = state.heldCarts.findIndex(s => s.id === id);
   if (index === -1) return;
-  
+
   const sale = state.heldCarts[index];
-  
+
   state.cart = sale.cart;
   document.getElementById('saleCustomer').value = sale.customerId;
   document.getElementById('saleDiscount').value = sale.discount;
@@ -146,12 +152,12 @@ function resumeHeldSale(id) {
   document.getElementById('saleNotes').value = sale.notes;
 
   state.heldCarts.splice(index, 1);
-  
+
   // مسح من السيرفر بعد الاسترجاع
   if (navigator.onLine && supabaseClient) {
     supabaseClient.from('held_carts').delete().eq('id', id);
   }
-  
+
   closeHeldCartsModal();
   renderCart();
   updateHeldCartsCount();
@@ -161,13 +167,13 @@ function resumeHeldSale(id) {
 
 async function deleteHeldSale(id) {
   if (!confirm('هل أنت متأكد من حذف هذه الفاتورة المعلقة نهائياً؟')) return;
-  
+
   state.heldCarts = state.heldCarts.filter(s => s.id !== id);
-  
+
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('held_carts').delete().eq('id', id);
   }
-  
+
   renderHeldCartsList();
   updateHeldCartsCount();
   saveData();
@@ -178,15 +184,15 @@ async function deleteHeldSale(id) {
 async function quickAddStock(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
-  
+
   const prod = state.products.find(p => p.id === id);
   if (!prod) return;
 
   const qtyInput = prompt('إضافة كمية للمنتج: "' + prod.name + '"\n\nالمخزون الحالي: ' + prod.stock + '\n\nأدخل الكمية اللي هتضيفها (مثال: 10):');
-  
+
   if (qtyInput === null) return;
   const qty = parseInt(qtyInput);
-  
+
   if (isNaN(qty) || qty <= 0) {
     return showNotification('أدخل رقم صحيح أكبر من صفر', 'error');
   }
@@ -194,7 +200,7 @@ async function quickAddStock(id) {
   const oldStock = prod.stock;
   prod.stock += qty;
 
-  const ownerId = state.currentUser.id;
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
   // تحديث المنتج في السيرفر
   if (navigator.onLine && supabaseClient) {
@@ -206,7 +212,7 @@ async function quickAddStock(id) {
     type: 'in', qty: qty, old_stock: oldStock, new_stock: prod.stock,
     reason: 'إضافة سريعة من قائمة المنتجات', date: new Date().toISOString()
   };
-  state.stockMoves.unshift({ id: moveObj.id, date: moveObj.date, productId: prod.id, productName: prod.name, type: 'in', qty, oldStock, newStock: prod.stock, reason: moveObj.reason });
+  state.stockMoves.unshift({ id: moveObj.id, date: moveObj.date, product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name, type: 'in', qty, old_stock: oldStock, oldStock: oldStock, new_stock: prod.stock, newStock: prod.stock, reason: moveObj.reason });
 
   // رفع حركة المخزون للسيرفر
   if (navigator.onLine && supabaseClient) {
@@ -228,7 +234,12 @@ async function quickAddStock(id) {
 /* ============ مصروفات الدرج ============ */
 function openDrawerExpenseModal() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً', 'error');
-  if (!state.currentShift) {
+
+  // البحث عن وردية مفتوحة في state.shifts
+  const userId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
+
+  if (!openShift && !state.currentShift) {
     return showNotification('لا توجد وردية مفتوحة حالياً. ابدأ بيع أولاً.', 'warning');
   }
   document.getElementById('drawerExpenseAmount').value = '';
@@ -248,21 +259,48 @@ async function saveDrawerExpense() {
   }
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+
+  // الحصول على shift_id الحالي (من state.currentShift أو من state.shifts)
+  let currentShiftId = null;
+  if (state.currentShift) {
+    currentShiftId = state.currentShift.id;
+  } else {
+    const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
+    if (openShift) currentShiftId = openShift.id;
+  }
+
   const newExpense = {
     id: uid('EXP'),
     user_id: ownerId,
     name: 'مصروف وردية: ' + reason,
     amount: amount,
     date: today(),
-    notes: 'تم سحبه من درج الكاشير أثناء الوردية'
+    notes: 'تم سحبه من درج الكاشير أثناء الوردية',
+    shift_id: currentShiftId,
+    pay_method: 'cash'
   };
 
   // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('expenses').insert(newExpense);
+    const { error } = await supabaseClient.from('expenses').insert(newExpense);
+    if (error) {
+      console.warn('Drawer expense upload failed:', error);
+      return showNotification('تعذر حفظ المصروف: ' + error.message, 'error');
+    }
   }
 
-  state.expenses.unshift({ id: newExpense.id, name: newExpense.name, amount: newExpense.amount, date: newExpense.date, notes: newExpense.notes });
+  // التحديث المحلي (camel + snake للتوافقية)
+  state.expenses.unshift({
+    id: newExpense.id,
+    name: newExpense.name,
+    amount: newExpense.amount,
+    date: newExpense.date,
+    notes: newExpense.notes,
+    shift_id: newExpense.shift_id,
+    shiftId: newExpense.shift_id,
+    pay_method: newExpense.pay_method,
+    payMethod: newExpense.pay_method
+  });
 
   if (state.currentShift) {
     if (!state.currentShift.drawerExpenses) state.currentShift.drawerExpenses = [];
@@ -273,9 +311,14 @@ async function saveDrawerExpense() {
     addAuditLog('drawer_expense', { expenseId: newExpense.id, amount: amount, reason: reason }, newExpense.id);
   }
 
-  calcExpectedShiftCash();
+  // تحديث الكاش المتوقع للوردية (لو الدالة موجودة)
+  if (typeof calcExpectedShiftCash === 'function') {
+    calcExpectedShiftCash();
+  }
+
   saveData();
-  renderExpenses();
+
+  if (typeof renderExpenses === 'function') renderExpenses();
   document.getElementById('drawerExpenseModal').style.display = 'none';
   showNotification('تم تسجيل المصروف وخصمه من الدرج ✅', 'success');
 }
@@ -284,15 +327,15 @@ async function saveDrawerExpense() {
 function sendDebtReminder(customerId) {
   const cust = state.customers.find(c => c.id === customerId);
   if (!cust) return showNotification('العميل غير موجود', 'error');
-  
-  const debt = Number(cust.openingDebt) || 0;
+
+  const debt = Number(cust.opening_debt ?? cust.openingDebt) || 0;
   if (debt <= 0) {
     return showNotification('هذا العميل ليس عليه أي ديون', 'info');
   }
 
   const storeName = state.storeSettings.name || 'متجري';
   const currency = state.storeSettings.currency || 'ج.م';
-  
+
   const message = `أهلاً ${cust.name}،\n\n` +
                   `تذكير ودود بخصوص حسابكم معنا في "${storeName}".\n` +
                   `المبلغ المتبقي: ${debt.toFixed(2)} ${currency}.\n\n` +
@@ -314,23 +357,31 @@ function getStatementData(custId) {
   if (!cust) return null;
 
   let transactions = [];
-  
-  state.sales.filter(s => s.customerId === custId).forEach(s => {
-    if (s.remaining > 0) {
-      transactions.push({ date: s.date, desc: 'فاتورة رقم ' + s.id, debit: s.remaining, credit: 0 });
+
+  // مبيعات (باستخدام customer_id أو customerId)
+  state.sales.filter(s => (s.customer_id === custId || s.customerId === custId)).forEach(s => {
+    if (Number(s.remaining) > 0) {
+      transactions.push({ date: s.date, desc: 'فاتورة رقم ' + s.id, debit: Number(s.remaining), credit: 0 });
     }
   });
 
-  state.customerPayments.filter(p => p.customerId === custId).forEach(p => {
-    transactions.push({ date: p.date, desc: 'دفعة (تحصيل)', debit: 0, credit: p.amount });
+  // دفعات
+  state.customerPayments.filter(p => (p.customer_id === custId || p.customerId === custId)).forEach(p => {
+    transactions.push({ date: p.date, desc: 'دفعة (تحصيل)', debit: 0, credit: Number(p.amount) });
+  });
+
+  // مرتجعات credit (لو موجودة)
+  (state.returns || []).filter(r => (r.customer_id === custId || r.customerId === custId) && r.refund_method === 'credit').forEach(r => {
+    transactions.push({ date: r.date, desc: 'مرتجع رقم ' + r.id, debit: 0, credit: Number(r.total) || 0 });
   });
 
   transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   let totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
   let totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
-  let currentDebt = cust.openingDebt || 0;
-  let initialBalance = currentDebt - totalDebit + totalCredit;
+  const opening = Number(cust.opening_debt ?? cust.openingDebt) || 0;
+  let currentDebt = opening;
+  let initialBalance = opening - totalDebit + totalCredit;
 
   return { cust, transactions, initialBalance, currentDebt };
 }
@@ -346,7 +397,7 @@ function showCustomerStatement(custId) {
   document.getElementById('statementCustName').innerText = cust.name;
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ</th><th>البيان</th><th>عليه (مدين)</th><th>له (دائن)</th><th>الرصيد</th></tr></thead><tbody>';
-  
+
   let runningBalance = initialBalance;
   html += `<tr><td>-</td><td>رصيد سابق</td><td>-</td><td>-</td><td><b>${runningBalance.toFixed(2)}</b></td></tr>`;
 
@@ -422,13 +473,13 @@ function sendCustomerStatementWhatsApp() {
 
   let message = `أهلاً ${cust.name}،\n`;
   message += `كشف حسابكم في "${storeName}":\n\n`;
-  
+
   if (initialBalance !== 0) {
     message += `🔹 رصيد سابق: ${initialBalance.toFixed(2)} ${cur}\n`;
   }
-  
+
   message += `🔹 الحركات الأخيرة:\n`;
-  
+
   const recentTransactions = transactions.slice(-5).reverse();
   recentTransactions.forEach(t => {
     if (t.debit > 0) message += `- فاتورة بـ ${t.debit.toFixed(2)} ${cur}\n`;
@@ -463,7 +514,7 @@ async function importProductsCSV(event) {
 
     lines.forEach((line, index) => {
       if (index === 0 || !line.trim()) return;
-      
+
       const cols = line.split(',');
       if (cols.length >= 5) {
         const name = cols[0].trim();
@@ -480,7 +531,7 @@ async function importProductsCSV(event) {
           state.products.push({
             id: newProd.id, name: newProd.name, barcode: newProd.barcode,
             category: newProd.category, price: newProd.price, cost: newProd.cost,
-            stock: newProd.stock, minStock: newProd.min_stock
+            stock: newProd.stock, min_stock: newProd.min_stock, minStock: newProd.min_stock
           });
           newProductsToUpload.push(newProd);
           addedCount++;
@@ -512,9 +563,9 @@ function toggleActionMenu(event, id) {
   const menu = document.getElementById('menu-' + id);
   if (!menu) return;
   const isShowing = menu.classList.contains('show');
-  
+
   document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
-  
+
   if (!isShowing) menu.classList.add('show');
 }
 
@@ -549,7 +600,7 @@ function showCustomConfirm(title, message, onConfirm) {
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
-  
+
   document.getElementById('confirmBtn').onclick = () => {
     document.getElementById('customConfirmModal').remove();
     onConfirm();

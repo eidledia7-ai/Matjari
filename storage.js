@@ -23,7 +23,7 @@ async function syncDown(ownerId) {
   for (const t of tables) {
     try {
       let query = supabaseClient.from(t.name).select('*').eq('user_id', ownerId);
-      
+
       if (t.single) {
         const { data } = await query.maybeSingle();
         if (data) {
@@ -36,33 +36,31 @@ async function syncDown(ownerId) {
           };
         }
       } else {
-        // [إصلاح] الترتيب بيتم حسب العمود الصح
-        const orderColumn = (t.name === 'returns' || t.name === 'shifts') ? 'date' : 'created_at';
-        let finalQuery = query;
-        if (t.name !== 'returns' && t.name !== 'shifts') {
-            finalQuery = query.order('created_at', { ascending: false });
+        let finalQuery;
+        if (t.name === 'returns' || t.name === 'shifts') {
+          finalQuery = query.order('date', { ascending: false });
         } else {
-            finalQuery = query.order('date', { ascending: false });
+          finalQuery = query.order('created_at', { ascending: false });
         }
 
         const { data, error } = await finalQuery;
         if (error) throw error;
-        
+
         if (data) {
           state[t.key] = data.map(row => {
-            if (t.name === 'sales') return { id: row.id, date: row.date, subtotal: row.subtotal, discount: row.discount, total: row.total, paid: row.paid, remaining: row.remaining, customerId: row.customer_id, payMethod: row.pay_method, notes: row.notes, cashier: row.cashier, shiftId: row.shift_id, items: [] };
-            if (t.name === 'products') return { id: row.id, name: row.name, barcode: row.barcode, category: row.category, price: row.price, cost: row.cost, stock: row.stock, minStock: row.min_stock };
-            if (t.name === 'customers') return { id: row.id, name: row.name, phone: row.phone, openingDebt: row.opening_debt, points: row.points };
-            if (t.name === 'expenses') return { id: row.id, name: row.name, amount: row.amount, notes: row.notes, date: row.date };
-            if (t.name === 'returns') return { id: row.id, saleId: row.sale_id, productId: row.product_id, productName: row.product_name, qty: row.qty, reason: row.reason, date: row.date };
-            if (t.name === 'shifts') return { id: row.id, cashierName: row.cashier_name, startTime: row.start_time, endTime: row.end_time, actualCash: row.actual_cash, difference: row.difference, notes: row.notes };
+            if (t.name === 'sales') return { id: row.id, date: row.date, subtotal: row.subtotal, discount: row.discount, total: row.total, paid: row.paid, remaining: row.remaining, returned_total: row.returned_total, net_total: row.net_total, customer_id: row.customer_id, customerId: row.customer_id, pay_method: row.pay_method, payMethod: row.pay_method, notes: row.notes, cashier: row.cashier, shift_id: row.shift_id, shiftId: row.shift_id, items: [] };
+            if (t.name === 'products') return { id: row.id, name: row.name, barcode: row.barcode, category: row.category, price: row.price, cost: row.cost, stock: row.stock, min_stock: row.min_stock, minStock: row.min_stock };
+            if (t.name === 'customers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt, points: row.points };
+            if (t.name === 'expenses') return { id: row.id, name: row.name, amount: row.amount, notes: row.notes, date: row.date, shift_id: row.shift_id, shiftId: row.shift_id, pay_method: row.pay_method, payMethod: row.pay_method };
+            if (t.name === 'returns') return { id: row.id, sale_id: row.sale_id, saleId: row.sale_id, product_id: row.product_id, productId: row.product_id, product_name: row.product_name, productName: row.product_name, qty: row.qty, price: row.price, total: row.total, refund_method: row.refund_method, refundMethod: row.refund_method, shift_id: row.shift_id, shiftId: row.shift_id, customer_id: row.customer_id, customerId: row.customer_id, reason: row.reason, date: row.date };
+            if (t.name === 'shifts') return { id: row.id, cashier_name: row.cashier_name, cashierName: row.cashier_name, start_time: row.start_time, startTime: row.start_time, end_time: row.end_time, endTime: row.end_time, opening_cash: row.opening_cash, openingCash: row.opening_cash, expected_cash: row.expected_cash, expectedCash: row.expected_cash, actual_cash: row.actual_cash, actualCash: row.actual_cash, difference: row.difference, notes: row.notes };
             if (t.name === 'audit_logs') return { id: row.id, action: row.action, details: row.details, date: row.created_at, userId: row.user_id, role: row.role };
-            if (t.name === 'suppliers') return { id: row.id, name: row.name, phone: row.phone, openingDebt: row.opening_debt };
-            if (t.name === 'purchases') return { id: row.id, date: row.date, supplierId: row.supplier_id, productId: row.product_id, productName: row.product_name, qty: row.qty, cost: row.cost, total: row.total, paid: row.paid, remaining: row.remaining };
-            if (t.name === 'customer_payments') return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, amount: row.amount, date: row.date, notes: row.notes };
-            if (t.name === 'supplier_payments') return { id: row.id, supplierId: row.supplier_id, supplierName: row.supplier_name, amount: row.amount, date: row.date, notes: row.notes };
-            if (t.name === 'stock_moves') return { id: row.id, date: row.date, productId: row.product_id, productName: row.product_name, type: row.type, qty: row.qty, oldStock: row.old_stock, newStock: row.new_stock, reason: row.reason };
-            if (t.name === 'held_carts') return { id: row.id, time: row.time, cart: row.cart_data, customerId: row.customer_id, customerName: row.customer_name, discount: row.discount, discountType: row.discount_type, notes: row.notes };
+            if (t.name === 'suppliers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt };
+            if (t.name === 'purchases') return { id: row.id, date: row.date, supplier_id: row.supplier_id, supplierId: row.supplier_id, product_id: row.product_id, productId: row.product_id, product_name: row.product_name, productName: row.product_name, qty: row.qty, cost: row.cost, total: row.total, paid: row.paid, remaining: row.remaining };
+            if (t.name === 'customer_payments') return { id: row.id, customer_id: row.customer_id, customerId: row.customer_id, customer_name: row.customer_name, customerName: row.customer_name, amount: row.amount, date: row.date, notes: row.notes, shift_id: row.shift_id, shiftId: row.shift_id, pay_method: row.pay_method, payMethod: row.pay_method };
+            if (t.name === 'supplier_payments') return { id: row.id, supplier_id: row.supplier_id, supplierId: row.supplier_id, supplier_name: row.supplier_name, supplierName: row.supplier_name, amount: row.amount, date: row.date, notes: row.notes };
+            if (t.name === 'stock_moves') return { id: row.id, date: row.date, product_id: row.product_id, productId: row.product_id, product_name: row.product_name, productName: row.product_name, type: row.type, qty: row.qty, old_stock: row.old_stock, oldStock: row.old_stock, new_stock: row.new_stock, newStock: row.new_stock, reason: row.reason };
+            if (t.name === 'held_carts') return { id: row.id, time: row.time, cart: row.cart_data, customer_id: row.customer_id, customerId: row.customer_id, customer_name: row.customer_name, customerName: row.customer_name, discount: row.discount, discount_type: row.discount_type, discountType: row.discount_type, notes: row.notes, shift_id: row.shift_id, shiftId: row.shift_id };
             return row;
           });
         }
@@ -71,23 +69,52 @@ async function syncDown(ownerId) {
       console.warn(`SyncDown failed for ${t.name}:`, err.message);
     }
   }
-  
+
   // التأكد من وجود العميل النقدي العام
   if (!state.customers || state.customers.length === 0) {
-    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 }];
   } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
-    state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
+    state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 });
   }
 
-  // جلب تفاصيل الفواتير
+  // جلب تفاصيل الفواتير + بناء state.saleItems (flat)
   try {
     const { data: items } = await supabaseClient.from('sale_items').select('*').eq('user_id', ownerId);
     if (items && items.length > 0) {
+      const flatItems = items.map(i => ({
+        id: i.id,
+        sale_id: i.sale_id,
+        saleId: i.sale_id,
+        user_id: i.user_id,
+        product_id: i.product_id,
+        productId: i.product_id,
+        product_name: i.product_name,
+        productName: i.product_name,
+        qty: Number(i.qty),
+        price: Number(i.price),
+        cost: Number(i.cost)
+      }));
+
+      // 1) ربط items بكل فاتورة في state.sales
       state.sales.forEach(s => {
-        s.items = items.filter(i => i.sale_id === s.id).map(i => ({ id: i.product_id, name: i.product_name, qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost) }));
+        s.items = flatItems.filter(i => i.sale_id === s.id).map(i => ({
+          id: i.product_id,
+          name: i.product_name,
+          qty: i.qty,
+          price: i.price,
+          cost: i.cost
+        }));
       });
+
+      // 2) بناء state.saleItems كـ flat array لـ finance-core COGS
+      state.saleItems = flatItems;
+    } else {
+      state.saleItems = [];
     }
-  } catch (err) { console.warn('Failed to load sale items', err); }
+  } catch (err) {
+    console.warn('Failed to load sale items', err);
+    if (!state.saleItems) state.saleItems = [];
+  }
 }
 
 async function syncUp(ownerId) {
@@ -121,7 +148,8 @@ function saveData() {
       expenses: state.expenses, shifts: state.shifts, auditLogs: state.auditLogs, storeSettings: state.storeSettings,
       subscription: state.subscription, suppliers: state.suppliers, purchases: state.purchases,
       customerPayments: state.customerPayments, supplierPayments: state.supplierPayments,
-      stockMoves: state.stockMoves, heldCarts: state.heldCarts
+      stockMoves: state.stockMoves, heldCarts: state.heldCarts,
+      saleItems: state.saleItems
     };
     localStorage.setItem(key, JSON.stringify(cache));
   } catch (e) {}
@@ -138,8 +166,8 @@ async function syncEmployeeChanges() {
       await supabaseClient.from('sales').upsert({
         id: sale.id, user_id: ownerId, date: sale.date, subtotal: sale.subtotal,
         discount: sale.discount, total: sale.total, paid: sale.paid, remaining: sale.remaining,
-        customer_id: sale.customerId, pay_method: sale.payMethod, notes: sale.notes,
-        cashier: sale.cashier, shift_id: sale.shiftId
+        customer_id: sale.customerId || sale.customer_id, pay_method: sale.payMethod || sale.pay_method,
+        notes: sale.notes, cashier: sale.cashier, shift_id: sale.shiftId || sale.shift_id
       }, { onConflict: 'id' });
 
       if (sale.items && sale.items.length > 0) {
@@ -155,8 +183,13 @@ async function syncEmployeeChanges() {
   for (const ret of state.returns) {
     try {
       await supabaseClient.from('returns').upsert({
-        id: ret.id, user_id: ownerId, sale_id: ret.saleId, product_id: ret.productId,
-        product_name: ret.productName, qty: ret.qty, reason: ret.reason, date: ret.date
+        id: ret.id, user_id: ownerId, sale_id: ret.saleId || ret.sale_id,
+        product_id: ret.productId || ret.product_id, product_name: ret.productName || ret.product_name,
+        qty: ret.qty, price: ret.price, total: ret.total,
+        refund_method: ret.refundMethod || ret.refund_method,
+        shift_id: ret.shiftId || ret.shift_id,
+        customer_id: ret.customerId || ret.customer_id,
+        reason: ret.reason, date: ret.date
       }, { onConflict: 'id' });
     } catch (e) { console.warn('Return upload failed', e); }
   }
@@ -164,9 +197,25 @@ async function syncEmployeeChanges() {
   for (const exp of state.expenses) {
     try {
       await supabaseClient.from('expenses').upsert({
-        id: exp.id, user_id: ownerId, name: exp.name, amount: exp.amount, notes: exp.notes, date: exp.date
+        id: exp.id, user_id: ownerId, name: exp.name, amount: exp.amount,
+        notes: exp.notes, date: exp.date,
+        shift_id: exp.shiftId || exp.shift_id,
+        pay_method: exp.payMethod || exp.pay_method
       }, { onConflict: 'id' });
     } catch (e) { console.warn('Expense upload failed', e); }
+  }
+
+  for (const pay of (state.customerPayments || [])) {
+    try {
+      await supabaseClient.from('customer_payments').upsert({
+        id: pay.id, user_id: ownerId,
+        customer_id: pay.customerId || pay.customer_id,
+        customer_name: pay.customerName || pay.customer_name,
+        amount: pay.amount, date: pay.date, notes: pay.notes,
+        shift_id: pay.shiftId || pay.shift_id,
+        pay_method: pay.payMethod || pay.pay_method
+      }, { onConflict: 'id' });
+    } catch (e) { console.warn('Customer payment upload failed', e); }
   }
 
   for (const log of state.auditLogs) {

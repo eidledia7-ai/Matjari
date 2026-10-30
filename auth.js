@@ -32,8 +32,8 @@ function setAuthBusy(busy) {
 async function signIn() {
   const email = (document.getElementById('authEmail').value || '').trim();
   const password = document.getElementById('authPassword').value || '';
-  
-  if (!supabaseClient) initSupabase(); 
+
+  if (!supabaseClient) initSupabase();
   if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
 
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
@@ -55,8 +55,8 @@ async function signIn() {
 async function signUp() {
   const email = (document.getElementById('authEmail').value || '').trim();
   const password = document.getElementById('authPassword').value || '';
-  
-  if (!supabaseClient) initSupabase(); 
+
+  if (!supabaseClient) initSupabase();
   if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
 
   if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
@@ -146,7 +146,7 @@ async function handleLogout() {
   if (!confirm(tr('msg_logout'))) return;
   try {
     await supabaseClient.auth.signOut();
-    localStorage.removeItem('matjari_last_user'); 
+    localStorage.removeItem('matjari_last_user');
     showLoggedOutUI();
   } catch (e) {
     showNotification('تعذر الخروج', 'error');
@@ -160,11 +160,11 @@ async function changePasswordPrompt() {
   }
   const newPass = prompt(currentLang === 'en' ? 'Enter new password (at least 6 characters):' : 'أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
   if (newPass === null) return;
-  
+
   if (newPass.length < 6) {
     return showNotification(currentLang === 'en' ? 'Password must be at least 6 characters.' : 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.', 'error');
   }
-  
+
   const confirmPass = prompt(currentLang === 'en' ? 'Confirm new password:' : 'تأكيد كلمة المرور الجديدة:');
   if (confirmPass !== newPass) {
     return showNotification(currentLang === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.', 'error');
@@ -184,11 +184,11 @@ async function changePasswordPrompt() {
 
 async function openUserSession(user) {
   state.currentUser = user;
-  
+
   document.getElementById('skeletonLoader').style.display = 'block';
   const main = document.querySelector('.main-content');
   if (main) main.style.display = 'none';
-  
+
   try {
     // 1. تحديد الدور ورقم المدير
     const roleRes = await supabaseClient
@@ -211,7 +211,7 @@ async function openUserSession(user) {
     const subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
-      .eq('user_id', ownerId) 
+      .eq('user_id', ownerId)
       .maybeSingle();
 
     if (subRes.data) {
@@ -236,6 +236,14 @@ async function openUserSession(user) {
       if (localCache.shifts) state.shifts = localCache.shifts;
       if (localCache.auditLogs) state.auditLogs = localCache.auditLogs;
       if (localCache.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, localCache.storeSettings);
+      if (localCache.suppliers) state.suppliers = localCache.suppliers;
+      if (localCache.purchases) state.purchases = localCache.purchases;
+      if (localCache.customerPayments) state.customerPayments = localCache.customerPayments;
+      if (localCache.supplierPayments) state.supplierPayments = localCache.supplierPayments;
+      if (localCache.stockMoves) state.stockMoves = localCache.stockMoves;
+      if (localCache.heldCarts) state.heldCarts = localCache.heldCarts;
+      // ✨ جديد: saleItems (flat) للـ finance-core COGS
+      if (localCache.saleItems) state.saleItems = localCache.saleItems;
     }
 
     // التحميل من السيرفر (لو أونلاين)
@@ -243,28 +251,50 @@ async function openUserSession(user) {
       await syncDown(ownerId);
     }
 
+    // لو saleItems مش موجود (كاش قديم)، ابنيه من sales[].items
+    if (!state.saleItems || state.saleItems.length === 0) {
+      state.saleItems = [];
+      (state.sales || []).forEach(s => {
+        (s.items || []).forEach(i => {
+          state.saleItems.push({
+            id: uid('SI'),
+            sale_id: s.id,
+            saleId: s.id,
+            user_id: ownerId,
+            product_id: i.id,
+            productId: i.id,
+            product_name: i.name,
+            productName: i.name,
+            qty: Number(i.qty) || 0,
+            price: Number(i.price) || 0,
+            cost: Number(i.cost) || 0
+          });
+        });
+      });
+    }
+
     // التأكد من وجود العميل النقدي العام
     if (!state.customers || state.customers.length === 0) {
-      state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+      state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 }];
     } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
-      state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 });
+      state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 });
     }
 
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';
-    
+
     showLoggedInUI();
     applyRolePermissions();
     renderAll();
 
     checkSubscriptionStatus();
     enforceSubscriptionBlock();
-    
+
     const lastPage = getLastPage();
     const validPages = ['home', 'sales', 'invProducts', 'invMoves', 'invReturns', 'partCustomers', 'partSuppliers', 'finExpenses', 'finReports', 'finCompare', 'finShift', 'settStore', 'settLang', 'settSubscription', 'settBackup', 'settUpdates', 'settStaff', 'supportContact', 'supportGuide', 'supportAbout'];
     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
-    
+
   } catch (e) {
     console.error(e);
     document.getElementById('skeletonLoader').style.display = 'none';
@@ -274,7 +304,7 @@ async function openUserSession(user) {
   } finally {
     hideLoading();
   }
-  
+
   // حفظ الجلسة للأوفلاين
   try {
     localStorage.setItem('matjari_last_user', JSON.stringify({

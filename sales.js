@@ -54,7 +54,7 @@ function renderCart() {
   const pointsGroup = document.getElementById('pointsRedeemGroup');
   const pointsInput = document.getElementById('salePointsUsed');
   const pointsLabel = document.getElementById('custAvailPoints');
-  
+
   let availablePoints = (cust && cust.points) ? Number(cust.points) : 0;
   let pointValue = state.storeSettings.pointValue || 0;
 
@@ -100,7 +100,7 @@ function renderCart() {
     const perms = state.storeSettings.permissions || {};
     if (!perms.canDiscount) discountAmount = 0;
   }
-  
+
   let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
   if (!Number.isFinite(pointsUsed) || pointsUsed < 0) pointsUsed = 0;
   if (pointsUsed > availablePoints) { pointsUsed = availablePoints; pointsInput.value = pointsUsed; }
@@ -151,6 +151,103 @@ function clearCart() {
   const pts = document.getElementById('salePointsUsed'); if (pts) pts.value = 0;
 }
 
+/* ============================================================
+   دالة مساعدة: ضمان وجود وردية مفتوحة
+   ============================================================ */
+async function ensureOpenShift() {
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+
+  // 1) لو state.currentShift موجود ومش مقفول، ارجعه
+  if (state.currentShift && !state.currentShift.end_time && !state.currentShift.endTime) {
+    return state.currentShift.id;
+  }
+
+  // 2) دوّر في state.shifts على وردية مفتوحة
+  const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
+  if (openShift) {
+    state.currentShift = openShift;
+    return openShift.id;
+  }
+
+  // 3) مفيش — افتح وردية جديدة
+  const newShiftId = uid('SHIFT');
+  const newShift = {
+    id: newShiftId,
+    user_id: ownerId,
+    cashier_name: state.currentUser.email,
+    cashierName: state.currentUser.email,
+    start_time: new Date().toISOString(),
+    startTime: new Date().toISOString(),
+    opening_cash: 0,
+    openingCash: 0,
+    expected_cash: 0,
+    expectedCash: 0
+  };
+
+  if (navigator.onLine && supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('shifts').insert({
+        id: newShiftId,
+        user_id: ownerId,
+        cashier_name: newShift.cashier_name,
+        start_time: newShift.start_time,
+        opening_cash: 0
+      });
+      if (error) console.warn('Shift auto-open error:', error);
+    } catch (e) {
+      console.warn('Shift auto-open failed:', e);
+    }
+  }
+
+  if (!state.shifts) state.shifts = [];
+  state.shifts.unshift(newShift);
+  state.currentShift = newShift;
+  return newShiftId;
+}
+
+/* ============================================================
+   دالة مساعدة: سؤال المستخدم عن طريقة الاسترداد للمرتجع
+   ============================================================ */
+function askRefundMethod(sale, soldItem, qty) {
+  const total = (Number(soldItem.price) || 0) * qty;
+  const wasCredit = Number(sale.remaining) > 0;
+
+  if (wasCredit) {
+    // الفاتورة آجل → الافتراضي خصم من الدين
+    const choice = confirm(
+      `الفاتورة آجل. هل تريد خصم ${total.toFixed(2)} من دين العميل؟\n\n` +
+      `موافق = خصم من الدين (credit)\n` +
+      `إلغاء = استرداد كاش من الدرج (cash)`
+    );
+    return choice ? 'credit' : 'cash';
+  }
+
+  // الفاتورة كاش → استرداد كاش
+  return 'cash';
+}
+
+/* ============================================================
+   دالة مساعدة: خصم نقاط العميل
+   ============================================================ */
+async function deductCustomerPoints(customerId, pointsToDeduct) {
+  if (!customerId || pointsToDeduct <= 0) return;
+  const cust = state.customers.find(c => c.id === customerId);
+  if (!cust) return;
+
+  cust.points = Math.max(0, (Number(cust.points) || 0) - pointsToDeduct);
+
+  if (navigator.onLine && supabaseClient) {
+    try {
+      await supabaseClient.from('customers').update({ points: cust.points }).eq('id', customerId);
+    } catch (e) {
+      console.warn('Deduct customer points failed:', e);
+    }
+  }
+}
+
+/* ============================================================
+   إتمام البيع
+   ============================================================ */
 async function completeSale() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لتتمكن من البيع', 'error');
   if (state.cart.length === 0) {
@@ -161,6 +258,16 @@ async function completeSale() {
   showLoading(currentLang === 'en' ? 'Saving invoice...' : 'جارٍ حفظ الفاتورة...');
   await new Promise(function(resolve) { requestAnimationFrame(function() { resolve(); }); });
 
+  // 1) ضمان وجود وردية مفتوحة
+  let shiftId;
+  try {
+    shiftId = await ensureOpenShift();
+  } catch (e) {
+    hideLoading();
+    return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
+  }
+
+  // 2) الحسابات
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
@@ -170,14 +277,14 @@ async function completeSale() {
     const perms = state.storeSettings.permissions || {};
     if (!perms.canDiscount) discountAmount = 0;
   }
-  
+
   const pointsInput = document.getElementById('salePointsUsed');
   let pointsUsed = pointsInput ? (parseInt(pointsInput.value) || 0) : 0;
   if (!Number.isFinite(pointsUsed) || pointsUsed < 0) pointsUsed = 0;
   const pointValue = state.storeSettings.pointValue || 0;
   const pointsDiscount = Math.max(0, Math.min(pointsUsed * pointValue, subtotal - discountAmount));
   const total = Math.max(0, subtotal - discountAmount - pointsDiscount);
-  
+
   const paidInput = document.getElementById('salePaid');
   const rawPaid = paidInput ? paidInput.value.trim() : '';
   let paid;
@@ -187,11 +294,12 @@ async function completeSale() {
     const parsed = parseFloat(rawPaid);
     paid = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, total)) : total;
   }
-  
+
   const customerId = document.getElementById('saleCustomer').value;
   const customer = state.customers.find(c => c.id === customerId);
-  
-  if (customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer') && paid < total) {
+  const isCashCustomer = customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer');
+
+  if (isCashCustomer && paid < total) {
     hideLoading();
     return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
   }
@@ -199,48 +307,52 @@ async function completeSale() {
   const payMethod = document.getElementById('salePayMethod').value;
   const notes = document.getElementById('saleNotes').value.trim();
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const remaining = Math.max(0, total - paid);
 
-  if (!state.currentShift) {
-    state.currentShift = { id: uid('SHIFT'), name: 'وردية تلقائية', cashierName: state.currentUser.email, startTime: new Date().toISOString() };
-    
-    // رفع الوردية للسيرفر أول ما تفتح تلقائي
-    if (navigator.onLine && supabaseClient) {
-      supabaseClient.from('shifts').insert({
-        id: state.currentShift.id, user_id: ownerId, cashier_name: state.currentShift.cashierName, start_time: state.currentShift.startTime
-      }).then(({error}) => { if(error) console.log('Shift auto-open error:', error); });
-    }
-  }
-
-  state.cart.forEach(function(item) {
-    const prod = state.products.find(function(p) { return p.id === item.id; });
-    if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
-  });
+  // 3) بناء الفاتورة
+  const saleId = 'INV-' + new Date().getFullYear() + (new Date().getMonth()+1).toString().padStart(2,'0') + new Date().getDate().toString().padStart(2,'0') + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
   const saleObj = {
-    id: 'INV-' + new Date().getFullYear() + (new Date().getMonth()+1).toString().padStart(2,'0') + new Date().getDate().toString().padStart(2,'0') + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
+    id: saleId,
     date: new Date().toISOString(),
     items: JSON.parse(JSON.stringify(state.cart)),
-    subtotal: subtotal, discount: discountAmount, pointsDiscount: pointsDiscount, pointsUsed: pointsUsed,
-    total: total, paid: paid, remaining: Math.max(0, total - paid),
-    customerId: (customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer')) ? null : customerId, 
-    payMethod: payMethod, notes: notes,
-    cashier: state.currentUser.email, shiftId: state.currentShift.id
+    subtotal: subtotal,
+    discount: discountAmount,
+    pointsDiscount: pointsDiscount,
+    pointsUsed: pointsUsed,
+    total: total,
+    paid: paid,
+    remaining: remaining,
+    returned_total: 0,
+    returnedTotal: 0,
+    net_total: total,
+    netTotal: total,
+    customer_id: isCashCustomer ? null : customerId,
+    customerId: isCashCustomer ? null : customerId,
+    pay_method: payMethod,
+    payMethod: payMethod,
+    notes: notes,
+    cashier: state.currentUser.email,
+    shift_id: shiftId,
+    shiftId: shiftId
   };
 
+  // 4) الحفظ في Supabase
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: saleErr } = await supabaseClient.from('sales').insert({
         id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
-        discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid, remaining: saleObj.remaining,
-        customer_id: saleObj.customerId, pay_method: saleObj.payMethod, notes: saleObj.notes,
-        cashier: saleObj.cashier, shift_id: saleObj.shiftId
+        discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
+        // remaining: هيحسبها الـ trigger BEFORE INSERT
+        customer_id: saleObj.customerId, pay_method: saleObj.payMethod,
+        notes: saleObj.notes, cashier: saleObj.cashier, shift_id: saleObj.shiftId
       });
       if (saleErr) throw saleErr;
 
       if (saleObj.items.length > 0) {
         const itemsData = saleObj.items.map(i => ({
-          sale_id: saleObj.id, user_id: ownerId, product_id: i.id, product_name: i.name,
-          qty: i.qty, price: i.price, cost: i.cost
+          sale_id: saleObj.id, user_id: ownerId, product_id: i.id,
+          product_name: i.name, qty: i.qty, price: i.price, cost: i.cost
         }));
         const { error: itemsErr } = await supabaseClient.from('sale_items').insert(itemsData);
         if (itemsErr) throw itemsErr;
@@ -251,30 +363,58 @@ async function completeSale() {
     }
   }
 
+  // 5) التحديث المحلي
   state.sales.unshift(saleObj);
 
-  if (saleObj.remaining > 0 && saleObj.customerId) {
-    const cust = state.customers.find(function(c) { return c.id === saleObj.customerId; });
-    if (cust) {
-      cust.openingDebt = (Number(cust.openingDebt) || 0) + saleObj.remaining;
-      if (navigator.onLine && supabaseClient) {
-        await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', cust.id);
-      }
-    }
-  }
+  // 5a) إضافة الـ sale_items للـ flat array (finance-core)
+  if (!state.saleItems) state.saleItems = [];
+  saleObj.items.forEach(i => {
+    state.saleItems.push({
+      id: uid('SI'),
+      sale_id: saleObj.id,
+      saleId: saleObj.id,
+      user_id: ownerId,
+      product_id: i.id,
+      productId: i.id,
+      product_name: i.name,
+      productName: i.name,
+      qty: i.qty,
+      price: i.price,
+      cost: i.cost
+    });
+  });
 
+  // 5b) خصم المخزون محلياً (الـ trigger بيعملها في السيرفر)
+  state.cart.forEach(function(item) {
+    const prod = state.products.find(function(p) { return p.id === item.id; });
+    if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
+  });
+
+  // 5c) ⚠️ مهم: ممنوع نزوّد cust.openingDebt — الدين بيتحسب من sales.remaining
+  // (finance-core.calcCustomerBalance و get_customer_balance RPC بيعملوا ده)
+
+  // 5d) خصم النقاط المستخدمة وإضافة النقاط المكتسبة
   if (saleObj.customerId) {
     const cust = state.customers.find(c => c.id === saleObj.customerId);
     if (cust) {
-      if (!cust.points) cust.points = 0;
-      cust.points = Math.max(0, cust.points - pointsUsed);
+      // خصم النقاط المستخدمة
+      if (pointsUsed > 0) {
+        cust.points = Math.max(0, (Number(cust.points) || 0) - pointsUsed);
+      }
+
+      // إضافة النقاط المكتسبة
       const pointsRate = state.storeSettings.pointsRate || 0;
       if (pointsRate > 0) {
         const earnedPoints = Math.floor(total / pointsRate);
         if (earnedPoints > 0) {
-          cust.points += earnedPoints;
+          cust.points = (Number(cust.points) || 0) + earnedPoints;
           setTimeout(() => showNotification('💎 العميل كسب ' + earnedPoints + ' نقطة!', 'info'), 1500);
         }
+      }
+
+      // تحديث النقاط في السيرفر
+      if (navigator.onLine && supabaseClient) {
+        supabaseClient.from('customers').update({ points: cust.points }).eq('id', cust.id).then();
       }
     }
   }
@@ -321,7 +461,8 @@ function renderSales() {
   const to = toInput ? toInput.value : '';
 
   const filtered = state.sales.filter(function(s) {
-    const cust = state.customers.find(function(c) { return c.id === s.customerId; });
+    const custId = s.customer_id || s.customerId;
+    const cust = state.customers.find(function(c) { return c.id === custId; });
     const haystack = (s.id + ' ' + (cust ? cust.name : '') + ' ' + (s.notes || '')).toLowerCase();
     const matchSearch = haystack.indexOf(search) !== -1;
     const sDate = (s.date || '').split('T')[0];
@@ -341,8 +482,10 @@ function renderSales() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_paid">المدفوع</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_payment_method">طريقة الدفع</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(s) {
-    const cust = state.customers.find(function(c) { return c.id === s.customerId; });
-    const payText = payLabels[s.payMethod] || s.payMethod || '-';
+    const custId = s.customer_id || s.customerId;
+    const cust = state.customers.find(function(c) { return c.id === custId; });
+    const payMethod = s.pay_method || s.payMethod;
+    const payText = payLabels[payMethod] || payMethod || '-';
     const totalNum = Number(s.total) || 0;
     const paidNum = Number(s.paid) || 0;
     const remainingNum = Number(s.remaining) || 0;
@@ -376,7 +519,7 @@ function safeDeleteRecord(type, id) {
     const perms = state.storeSettings.permissions || {};
     if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
   }
-  
+
   showCustomConfirm('تأكيد الحذف', tr('msg_delete_mistake'), () => {
     executeDeleteRecord(type, id);
   });
@@ -389,7 +532,7 @@ async function executeDeleteRecord(type, id) {
     const idx = state.sales.findIndex(function(s) { return s.id === id; });
     if (idx === -1) return;
     const s = state.sales[idx];
-    
+
     s.items.forEach(function(item) {
       const prod = state.products.find(function(p) { return p.id === item.id; });
       if (prod) {
@@ -400,15 +543,8 @@ async function executeDeleteRecord(type, id) {
       }
     });
 
-    if (s.customerId) {
-      const cust = state.customers.find(function(c) { return c.id === s.customerId; });
-      if (cust) {
-        cust.openingDebt = Math.max(0, (Number(cust.openingDebt) || 0) - (Number(s.remaining) || 0));
-        if (navigator.onLine && supabaseClient) {
-          supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', cust.id).then();
-        }
-      }
-    }
+    // ⚠️ ممنوع نخصم من openingDebt — الدين بيتحسب من sales.remaining
+    // حذف الفاتورة هيشيل الـ remaining تلقائياً من الحساب
 
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('sales').delete().eq('id', id);
@@ -416,14 +552,19 @@ async function executeDeleteRecord(type, id) {
 
     state.sales.splice(idx, 1);
 
+    // إزالة sale_items من الـ flat array
+    if (state.saleItems) {
+      state.saleItems = state.saleItems.filter(si => si.sale_id !== id && si.saleId !== id);
+    }
+
     if (typeof addAuditLog === 'function') {
       addAuditLog('delete_sale', { saleId: s.id, total: s.total }, s.id);
     }
-    
+
   } else if (type === 'expense') {
     const exp = state.expenses.find(function(e) { return e.id === id; });
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
-    
+
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('expenses').delete().eq('id', id);
     }
@@ -436,8 +577,8 @@ async function executeDeleteRecord(type, id) {
     const idx = state.purchases.findIndex(function(p) { return p.id === id; });
     if (idx !== -1) {
       const p = state.purchases[idx];
-      
-      const prod = state.products.find(function(pr) { return pr.id === p.productId; });
+
+      const prod = state.products.find(function(pr) { return pr.id === (p.product_id || p.productId); });
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock) - p.qty);
         if (navigator.onLine && supabaseClient) {
@@ -445,21 +586,9 @@ async function executeDeleteRecord(type, id) {
         }
       }
 
-      if (p.remaining > 0) {
-        const sup = state.suppliers.find(s => s.id === p.supplierId);
-        if (sup) {
-          sup.openingDebt = Math.max(0, Number(sup.openingDebt) - Number(p.remaining));
-          if (navigator.onLine && supabaseClient) {
-             await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', sup.id);
-          }
-        }
-      }
-
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('purchases').delete().eq('id', id);
-        await supabaseClient.from('stock_moves').delete().eq('product_id', p.productId).eq('type', 'in').like('reason', '%مشتريات%');
       }
-      state.stockMoves = state.stockMoves.filter(m => !(m.productId === p.productId && m.reason.includes('مشتريات')));
 
       state.purchases.splice(idx, 1);
 
@@ -482,7 +611,7 @@ function clearTableLog(logType) {
   if (!confirm(tr('msg_clear_log'))) return;
 
   let clearedCount = 0;
-  if (logType === 'sales') { clearedCount = state.sales.length; state.sales = []; }
+  if (logType === 'sales') { clearedCount = state.sales.length; state.sales = []; state.saleItems = []; }
   else if (logType === 'expenses') { clearedCount = state.expenses.length; state.expenses = []; }
 
   if (typeof addAuditLog === 'function') {
