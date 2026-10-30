@@ -37,11 +37,13 @@ async function syncDown(ownerId) {
         }
       } else {
         let finalQuery;
-        if (t.name === 'returns' || t.name === 'shifts') {
-          finalQuery = query.order('date', { ascending: false });
-        } else {
-          finalQuery = query.order('created_at', { ascending: false });
-        }
+if (t.name === 'returns') {
+  finalQuery = query.order('date', { ascending: false });
+} else if (t.name === 'shifts') {
+  finalQuery = query.order('start_time', { ascending: false });
+} else {
+  finalQuery = query.order('created_at', { ascending: false });
+}
 
         const { data, error } = await finalQuery;
         if (error) throw error;
