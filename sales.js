@@ -295,14 +295,17 @@ async function completeSale() {
     paid = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, total)) : total;
   }
 
-  const customerId = document.getElementById('saleCustomer').value;
-  const customer = state.customers.find(c => c.id === customerId);
-  const isCashCustomer = customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer');
+const customerId = document.getElementById('saleCustomer').value;
+const customer = state.customers.find(c => c.id === customerId);
+const isCashCustomer = customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer');
 
-  if (isCashCustomer && paid < total) {
-    hideLoading();
-    return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
-  }
+// ✨ [إصلاح] لو العميل نقدي، بنبعت null للسيرفر عشان ميرفضش الفاتورة
+const saleCustomerId = isCashCustomer ? null : customerId;
+
+if (isCashCustomer && paid < total) {
+  hideLoading();
+  return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
+}
 
   const payMethod = document.getElementById('salePayMethod').value;
   const notes = document.getElementById('saleNotes').value.trim();
@@ -341,12 +344,13 @@ async function completeSale() {
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: saleErr } = await supabaseClient.from('sales').insert({
-        id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
-        discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
-        // remaining: هيحسبها الـ trigger BEFORE INSERT
-        customer_id: saleObj.customerId, pay_method: saleObj.payMethod,
-        notes: saleObj.notes, cashier: saleObj.cashier, shift_id: saleObj.shiftId
-      });
+  id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
+  discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
+  // remaining: هيحسبها الـ trigger BEFORE INSERT
+  customer_id: saleCustomerId, // ✨ [إصلاح] بدل saleObj.customerId
+  pay_method: saleObj.payMethod,
+  notes: saleObj.notes, cashier: saleObj.cashier, shift_id: saleObj.shiftId
+});
       if (saleErr) throw saleErr;
 
       if (saleObj.items.length > 0) {
@@ -622,3 +626,9 @@ function clearTableLog(logType) {
   renderAll();
   showNotification('تم تصفير السجل محلياً بنجاح ✅');
 }
+/* ✨ [إصلاح] تحديث السلة تلقائياً لما نختار عميل */
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'saleCustomer') {
+    renderCart();
+  }
+});
