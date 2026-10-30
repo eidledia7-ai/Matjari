@@ -532,38 +532,39 @@ function safeDeleteRecord(type, id) {
 async function executeDeleteRecord(type, id) {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  if (type === 'sale') {
-    const idx = state.sales.findIndex(function(s) { return s.id === id; });
-    if (idx === -1) return;
-    const s = state.sales[idx];
+ if (type === 'sale') {
+  const idx = state.sales.findIndex(function(s) { return s.id === id; });
+  if (idx === -1) return;
+  const s = state.sales[idx];
 
+  // نمسح من السيرفر (الـ trigger هيرجع المخزون ويمسح sale_items)
+  if (navigator.onLine && supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('sales').delete().eq('id', id);
+      if (error) throw error;
+    } catch (e) {
+      console.error('Error deleting sale:', e);
+      showNotification('تعذر حذف الفاتورة: ' + e.message, 'error');
+      return;
+    }
+  } else {
+    // أوفلاين: نرجّع المخزون يدوياً
     s.items.forEach(function(item) {
       const prod = state.products.find(function(p) { return p.id === item.id; });
-      if (prod) {
-        prod.stock += item.qty;
-        if (navigator.onLine && supabaseClient) {
-          supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id).then();
-        }
-      }
+      if (prod) prod.stock += item.qty;
     });
+  }
 
-    // ⚠️ ممنوع نخصم من openingDebt — الدين بيتحسب من sales.remaining
-    // حذف الفاتورة هيشيل الـ remaining تلقائياً من الحساب
+  // نمسح من الـ state
+  state.sales.splice(idx, 1);
+  if (state.saleItems) {
+    state.saleItems = state.saleItems.filter(si => si.sale_id !== id && si.saleId !== id);
+  }
 
-    if (navigator.onLine && supabaseClient) {
-      await supabaseClient.from('sales').delete().eq('id', id);
-    }
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('delete_sale', { saleId: s.id, total: s.total }, s.id);
+  }
 
-    state.sales.splice(idx, 1);
-
-    // إزالة sale_items من الـ flat array
-    if (state.saleItems) {
-      state.saleItems = state.saleItems.filter(si => si.sale_id !== id && si.saleId !== id);
-    }
-
-    if (typeof addAuditLog === 'function') {
-      addAuditLog('delete_sale', { saleId: s.id, total: s.total }, s.id);
-    }
 
   } else if (type === 'expense') {
     const exp = state.expenses.find(function(e) { return e.id === id; });
