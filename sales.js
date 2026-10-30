@@ -185,19 +185,25 @@ async function ensureOpenShift() {
   };
 
   if (navigator.onLine && supabaseClient) {
-    try {
-      const { error } = await supabaseClient.from('shifts').insert({
-        id: newShiftId,
-        user_id: ownerId,
-        cashier_name: newShift.cashier_name,
-        start_time: newShift.start_time,
-        opening_cash: 0
-      });
-      if (error) console.warn('Shift auto-open error:', error);
-    } catch (e) {
-      console.warn('Shift auto-open failed:', e);
+  try {
+    // ✨ [حل جذري] نستخدم upsert عشان لو الوردية موجودة، تتحدث بدل ما ترفض
+    const { error } = await supabaseClient.from('shifts').upsert({
+      id: newShiftId,
+      user_id: ownerId,
+      cashier_name: newShift.cashier_name,
+      start_time: newShift.start_time,
+      opening_cash: 0
+    }, { onConflict: 'id' });
+    
+    if (error) {
+      // لو فشل حفظ الوردية، منمنعش الفاتورة
+      throw new Error('تعذر حفظ الوردية: ' + error.message);
     }
+  } catch (e) {
+    console.error('Shift auto-open failed:', e);
+    return null; // نرجع null عشان نمنع حفظ الفاتورة
   }
+}
 
   if (!state.shifts) state.shifts = [];
   state.shifts.unshift(newShift);
@@ -259,13 +265,19 @@ async function completeSale() {
   await new Promise(function(resolve) { requestAnimationFrame(function() { resolve(); }); });
 
   // 1) ضمان وجود وردية مفتوحة
-  let shiftId;
-  try {
-    shiftId = await ensureOpenShift();
-  } catch (e) {
-    hideLoading();
-    return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
-  }
+let shiftId;
+try {
+  shiftId = await ensureOpenShift();
+} catch (e) {
+  hideLoading();
+  return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
+}
+
+// ✨ [حل جذري] لو الوردية مش موجودة، منمنعش الفاتورة
+if (!shiftId) {
+  hideLoading();
+  return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
+}
 
   // 2) الحسابات
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
@@ -347,9 +359,9 @@ if (isCashCustomer && paid < total) {
   id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
   discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
   // remaining: هيحسبها الـ trigger BEFORE INSERT
-  customer_id: saleCustomerId, // ✨ [إصلاح] بدل saleObj.customerId
-  pay_method: saleObj.payMethod,
-  notes: saleObj.notes, cashier: saleObj.cashier, shift_id: saleObj.shiftId
+    customer_id: saleCustomerId, 
+        pay_method: saleObj.payMethod,
+        notes: saleObj.notes, cashier: saleObj.cashier, shift_id: shiftId
 });
       if (saleErr) throw saleErr;
 
