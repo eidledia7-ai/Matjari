@@ -11,9 +11,9 @@ async function saveCustomer() {
 
   if (!name) return showNotification('اسم العميل مطلوب', 'error');
 
-  const ownerId = state.currentUser.id;
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = id || uid('CUST');
-  
+
   const newCustomer = {
     id: customerId,
     user_id: ownerId,
@@ -26,15 +26,24 @@ async function saveCustomer() {
   if (id) {
     const c = state.customers.find(function(item) { return item.id === id; });
     if (c) {
-      c.name = name; c.phone = phone; c.openingDebt = openingDebt;
+      c.name = name;
+      c.phone = phone;
+      c.openingDebt = openingDebt;
+      c.opening_debt = openingDebt;
     }
   } else {
-    state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, points: 0 });
+    state.customers.push({
+      id: customerId, name: name, phone: phone,
+      openingDebt: openingDebt, opening_debt: openingDebt, points: 0
+    });
   }
 
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('customers').upsert(newCustomer, { onConflict: 'id' });
-    if (error) console.warn('Customer upload failed:', error);
+    if (error) {
+      console.warn('Customer upload failed:', error);
+      return showNotification('تعذر حفظ العميل: ' + error.message, 'error');
+    }
   }
 
   if (typeof addAuditLog === 'function') {
@@ -64,6 +73,7 @@ function renderCustomers() {
       (c.phone || '').indexOf(search) !== -1;
   });
 
+  // قائمة اختيار العميل في التحصيل (بتعرض الدين الحقيقي)
   const paySel = document.getElementById('customerPaymentCustomer');
   if (paySel) {
     const currentVal = paySel.value;
@@ -72,7 +82,9 @@ function renderCustomers() {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
       const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
       const debtLabel = currentLang === 'en' ? ' (Debt: ' : ' (دين: ';
-      paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + (Number(c.openingDebt) || 0).toFixed(2) + ')</option>';
+      // الدين الحقيقي من financeCore (openingDebt + sales.remaining - payments - returns.credit)
+      const realDebt = financeCore.calcCustomerBalance(c.id);
+      paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + realDebt.toFixed(2) + ')</option>';
     });
     if (currentVal) paySel.value = currentVal;
   }
@@ -84,7 +96,8 @@ function renderCustomers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_debts">الديون</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(c) {
-    const debtVal = Number(c.openingDebt) || 0;
+    // الدين الحقيقي من financeCore
+    const debtVal = financeCore.calcCustomerBalance(c.id);
     const debtClass = debtVal > 0 ? 'red-text' : '';
     html += '<tr>' +
       '<td>' + escapeHTML(c.name) + '</td>' +
@@ -102,19 +115,20 @@ function renderCustomers() {
 
 async function deleteCustomer(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-  
+
   const cust = state.customers.find(c => c.id === id);
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
     return showNotification('لا يمكن حذف العميل النقدي العام', 'warning');
   }
-  
+
   if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
 
-  if (cust && (Number(cust.openingDebt) || 0) > 0) {
-    const debt = Number(cust.openingDebt) || 0;
+  // استخدام الدين الحقيقي في تحذير الحذف
+  const realDebt = financeCore.calcCustomerBalance(id);
+  if (realDebt > 0) {
     const confirmMsg = currentLang === 'en'
-      ? 'This customer has an outstanding debt of ' + debt.toFixed(2) + '. Delete anyway?'
-      : 'هذا العميل عليه ديون ' + debt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة الدين نهائياً.';
+      ? 'This customer has an outstanding debt of ' + realDebt.toFixed(2) + '. Delete anyway?'
+      : 'هذا العميل عليه ديون ' + realDebt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة الدين نهائياً.';
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_customer'))) return;
@@ -148,25 +162,59 @@ async function recordCustomerPayment() {
   const cust = state.customers.find(function(c) { return c.id === customerId; });
   if (!cust) return showNotification('العميل غير موجود', 'error');
 
-  const currentDebt = Number(cust.openingDebt) || 0;
+  // الدين الحقيقي من financeCore
+  const currentDebt = financeCore.calcCustomerBalance(customerId);
 
   if (amount > currentDebt) {
     if (!confirm('المبلغ أكبر من الدين. تسجيل الفرق كرصيد دائن؟')) return;
-    cust.openingDebt = currentDebt - amount;
-  } else {
-    cust.openingDebt = Math.max(0, currentDebt - amount);
   }
 
-  const ownerId = state.currentUser.id;
+  // ملاحظة: لا نعدل openingDebt — الدين بيتحسب من sales.remaining - payments - returns.credit
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+
+  // ربط الدفعة بالوردية الحالية (لو فيه)
+  let currentShiftId = null;
+  if (state.currentShift) {
+    currentShiftId = state.currentShift.id;
+  } else {
+    const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
+    if (openShift) currentShiftId = openShift.id;
+  }
+
   const newPayment = {
-    id: uid('CP'), user_id: ownerId, customer_id: customerId, customer_name: cust.name,
-    amount: amount, date: date, notes: notes
+    id: uid('CP'),
+    user_id: ownerId,
+    customer_id: customerId,
+    customer_name: cust.name,
+    amount: amount,
+    date: date,
+    notes: notes,
+    shift_id: currentShiftId,
+    pay_method: 'cash'
   };
-  state.customerPayments.unshift({ id: newPayment.id, customerId, customerName: cust.name, amount, date, notes });
+
+  // التحديث المحلي (camel + snake للتوافقية)
+  state.customerPayments.unshift({
+    id: newPayment.id,
+    customer_id: customerId,
+    customerId: customerId,
+    customer_name: cust.name,
+    customerName: cust.name,
+    amount: amount,
+    date: date,
+    notes: notes,
+    shift_id: currentShiftId,
+    shiftId: currentShiftId,
+    pay_method: 'cash',
+    payMethod: 'cash'
+  });
 
   if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('customer_payments').insert(newPayment);
-    await supabaseClient.from('customers').update({ opening_debt: cust.openingDebt }).eq('id', customerId);
+    const { error } = await supabaseClient.from('customer_payments').insert(newPayment);
+    if (error) {
+      console.warn('Payment upload failed:', error);
+      return showNotification('تعذر حفظ التحصيل: ' + error.message, 'error');
+    }
   }
 
   if (typeof addAuditLog === 'function') {
@@ -178,6 +226,10 @@ async function recordCustomerPayment() {
   document.getElementById('customerPaymentNotes').value = '';
   renderCustomers();
   renderCustomerPayments();
+  renderDashboard();
+
+  if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
+
   showNotification('تم تسجيل التحصيل ✅');
 }
 
@@ -190,9 +242,10 @@ function renderCustomerPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.customerPayments.forEach(function(p) {
+    const custName = p.customerName || p.customer_name || '-';
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
-      '<td>' + escapeHTML(p.customerName) + '</td>' +
+      '<td>' + escapeHTML(custName) + '</td>' +
       '<td><b>' + (Number(p.amount) || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(p.notes || '-') + '</td>' +
       '</tr>';
@@ -200,7 +253,6 @@ function renderCustomerPayments() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-
 /* ============ الموردون والمشتريات ============ */
 async function saveSupplier() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
@@ -213,7 +265,7 @@ async function saveSupplier() {
 
   if (!name) return showNotification('اسم المورد مطلوب', 'error');
 
-  const ownerId = state.currentUser.id;
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const supplierId = id || uid('SUP');
 
   const newSupplier = {
@@ -222,14 +274,22 @@ async function saveSupplier() {
 
   if (id) {
     const s = state.suppliers.find(function(item) { return item.id === id; });
-    if (s) { s.name = name; s.phone = phone; s.openingDebt = openingDebt; }
+    if (s) {
+      s.name = name;
+      s.phone = phone;
+      s.openingDebt = openingDebt;
+      s.opening_debt = openingDebt;
+    }
   } else {
-    state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt });
+    state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt });
   }
 
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('suppliers').upsert(newSupplier, { onConflict: 'id' });
-    if (error) console.warn('Supplier upload failed:', error);
+    if (error) {
+      console.warn('Supplier upload failed:', error);
+      return showNotification('تعذر حفظ المورد: ' + error.message, 'error');
+    }
   }
 
   if (typeof addAuditLog === 'function') {
@@ -249,7 +309,7 @@ function editSupplier(id) {
   document.getElementById('supplierId').value = s.id;
   document.getElementById('supplierName').value = s.name || '';
   document.getElementById('supplierPhone').value = s.phone || '';
-  document.getElementById('supplierOpeningDebt').value = Number(s.openingDebt) || 0;
+  document.getElementById('supplierOpeningDebt').value = Number(s.openingDebt ?? s.opening_debt) || 0;
   const title = document.getElementById('supplierFormTitle');
   if (title) title.innerText = 'تعديل مورد: ' + s.name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -268,6 +328,7 @@ function renderSuppliers() {
   const container = document.getElementById('suppliersTable');
   if (!container) return;
 
+  // قائمة اختيار المورد في المشتريات
   const purSupSel = document.getElementById('purchaseSupplier');
   if (purSupSel) {
     const curVal = purSupSel.value;
@@ -278,16 +339,20 @@ function renderSuppliers() {
     if (curVal) purSupSel.value = curVal;
   }
 
+  // قائمة اختيار المورد في السداد (بتعرض المستحقات الحقيقية)
   const suppPaySel = document.getElementById('supplierPaymentSupplier');
   if (suppPaySel) {
     const curVal = suppPaySel.value;
     suppPaySel.innerHTML = '<option value="">' + tr('opt_select_supplier') + '</option>';
     state.suppliers.forEach(function(s) {
-      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + (currentLang === 'en' ? ' (Payables: ' : ' (له مستحقات: ') + (Number(s.openingDebt) || 0).toFixed(2) + ')</option>';
+      // المستحقات الحقيقية من financeCore
+      const realBalance = financeCore.calcSupplierBalance(s.id);
+      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + (currentLang === 'en' ? ' (Payables: ' : ' (له مستحقات: ') + realBalance.toFixed(2) + ')</option>';
     });
     if (curVal) suppPaySel.value = curVal;
   }
 
+  // قائمة اختيار المنتج في المشتريات
   const purProdSel = document.getElementById('purchaseProduct');
   if (purProdSel) {
     const curVal = purProdSel.value;
@@ -305,7 +370,8 @@ function renderSuppliers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_payables">المستحقات (له فلوس)</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.suppliers.forEach(function(s) {
-    const debtVal = Number(s.openingDebt) || 0;
+    // المستحقات الحقيقية من financeCore
+    const debtVal = financeCore.calcSupplierBalance(s.id);
     const debtClass = debtVal > 0 ? 'green-text' : '';
     html += '<tr>' +
       '<td>' + escapeHTML(s.name) + '</td>' +
@@ -325,11 +391,13 @@ async function deleteSupplier(id) {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
 
   const sup = state.suppliers.find(function(s) { return s.id === id; });
-  if (sup && (Number(sup.openingDebt) || 0) > 0) {
-    const debt = Number(sup.openingDebt) || 0;
+
+  // استخدام الرصيد الحقيقي في تحذير الحذف
+  const realBalance = financeCore.calcSupplierBalance(id);
+  if (realBalance > 0) {
     const confirmMsg = currentLang === 'en'
-      ? 'You owe this supplier ' + debt.toFixed(2) + '. Delete anyway?'
-      : 'عليك مستحقات لهذا المورد ' + debt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
+      ? 'You owe this supplier ' + realBalance.toFixed(2) + '. Delete anyway?'
+      : 'عليك مستحقات لهذا المورد ' + realBalance.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_supplier'))) return;
@@ -374,44 +442,82 @@ async function savePurchase() {
   if (!supplierId) return showNotification(tr('notify_select_supplier'), 'error');
   if (qty < 1 || cost < 0) return showNotification('الكمية أو التكلفة غير صحيحة', 'error');
 
-  const ownerId = state.currentUser.id;
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   let targetProdId = prodId;
   let targetProdName = '';
   let newProductData = null;
 
+  // ⚠️ ملاحظة مهمة: الـ trigger handle_purchase بيعمل:
+  // 1) زيادة products.stock
+  // 2) حساب weighted average cost
+  // 3) إضافة stock_moves entry
+  // عشان منعملش double-counting، إحنا هنرفع المنتج للسيرفر بالبيانات الأصلية
+  // (من غير ما نضيف qty في stock) والـ trigger هيضيفها.
+  // لكن في الـ state المحلي، إحنا بنضيف qty عشان الأوفلاين.
+
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
     if (p) {
-      p.stock += qty;
-      p.cost = cost;
-      targetProdName = p.name;
-      
-      if (navigator.onLine && supabaseClient) {
-        await supabaseClient.from('products').update({ stock: p.stock, cost: cost }).eq('id', p.id);
-        await supabaseClient.from('stock_moves').insert({
-          id: uid('SM'), user_id: ownerId, product_id: p.id, product_name: p.name,
-          type: 'in', qty: qty, old_stock: p.stock - qty, new_stock: p.stock,
-          reason: 'مشتريات', date: new Date().toISOString()
-        });
-        state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: p.id, productName: p.name, type: 'in', qty: qty, oldStock: p.stock - qty, newStock: p.stock, reason: 'مشتريات' });
+      const oldStock = Number(p.stock) || 0;
+      const oldCost = Number(p.cost) || 0;
+      let newCost = cost;
+      if ((oldStock + qty) > 0) {
+        newCost = ((oldStock * oldCost) + (qty * cost)) / (oldStock + qty);
       }
+
+      // التحديث المحلي (للأوفلاين والسرعة)
+      p.stock = oldStock + qty;
+      p.cost = newCost;
+      targetProdName = p.name;
+
+      // ملاحظة: بنعمل update للمنتج في السيرفر بالـ cost الجديد بس (مش stock)
+      // الـ trigger handle_purchase هيزود stock تلقائياً
+      if (navigator.onLine && supabaseClient) {
+        await supabaseClient.from('products').update({ cost: newCost }).eq('id', p.id);
+      }
+
+      // إضافة حركة مخزون محلياً (الـ trigger بيضيفها في السيرفر تلقائياً)
+      state.stockMoves.unshift({
+        id: uid('SM'), date: new Date().toISOString(),
+        product_id: p.id, productId: p.id,
+        product_name: p.name, productName: p.name,
+        type: 'purchase', qty: qty,
+        old_stock: oldStock, oldStock: oldStock,
+        new_stock: p.stock, newStock: p.stock,
+        reason: 'مشتريات'
+      });
     }
   } else if (newName) {
+    // منتج جديد — بنعمله الأول عشان الـ trigger يقدر يعمل عليه update
     targetProdId = uid('PRD');
-    newProductData = { id: targetProdId, user_id: ownerId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, min_stock: 5 };
-    
-    state.products.push({ id: targetProdId, name: newName, barcode: '', category: 'عام', price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5 });
+    newProductData = {
+      id: targetProdId, user_id: ownerId, name: newName, barcode: '',
+      category: 'عام', price: purchaseSalePrice, cost: cost,
+      stock: 0, min_stock: 5
+    };
+
+    // التحديث المحلي
+    state.products.push({
+      id: targetProdId, name: newName, barcode: '', category: 'عام',
+      price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5
+    });
     targetProdName = newName;
 
+    // بنرفع المنتج للسيرفر بـ stock=0، والـ trigger هيضيف qty
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('products').insert(newProductData);
-      await supabaseClient.from('stock_moves').insert({
-        id: uid('SM'), user_id: ownerId, product_id: targetProdId, product_name: targetProdName,
-        type: 'in', qty: qty, old_stock: 0, new_stock: qty,
-        reason: 'منتج جديد - مشتريات', date: new Date().toISOString()
-      });
-      state.stockMoves.unshift({ id: uid('SM'), date: new Date().toISOString(), productId: targetProdId, productName: targetProdName, type: 'in', qty: qty, oldStock: 0, newStock: qty, reason: 'منتج جديد - مشتريات' });
     }
+
+    // إضافة حركة مخزون محلياً
+    state.stockMoves.unshift({
+      id: uid('SM'), date: new Date().toISOString(),
+      product_id: targetProdId, productId: targetProdId,
+      product_name: targetProdName, productName: targetProdName,
+      type: 'purchase', qty: qty,
+      old_stock: 0, oldStock: 0,
+      new_stock: qty, newStock: qty,
+      reason: 'منتج جديد - مشتريات'
+    });
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
   }
@@ -419,24 +525,45 @@ async function savePurchase() {
   const total = qty * cost;
   const remaining = Math.max(0, total - paid);
 
-  if (remaining > 0) {
-    const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-    if (sup) {
-      sup.openingDebt = (Number(sup.openingDebt) || 0) + remaining;
-      if (navigator.onLine && supabaseClient) {
-        await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', sup.id);
-      }
-    }
-  }
+  // ملاحظة: لا نعدل sup.openingDebt — الرصيد بيتحسب من purchases.remaining - supplier_payments
+  // (financeCore.calcSupplierBalance و get_supplier_balance RPC بيعملوا ده)
 
   const newPurchase = {
-    id: uid('PUR'), user_id: ownerId, supplier_id: supplierId, product_id: targetProdId, product_name: targetProdName,
-    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining, date: new Date().toISOString()
+    id: uid('PUR'),
+    user_id: ownerId,
+    supplier_id: supplierId,
+    product_id: targetProdId,
+    product_name: targetProdName,
+    qty: qty,
+    cost: cost,
+    total: total,
+    paid: paid,
+    remaining: remaining,
+    date: new Date().toISOString()
   };
-  state.purchases.unshift({ id: newPurchase.id, date: newPurchase.date, supplierId, productId: targetProdId, productName: targetProdName, qty, cost, total, paid, remaining });
+
+  state.purchases.unshift({
+    id: newPurchase.id,
+    date: newPurchase.date,
+    supplier_id: supplierId,
+    supplierId: supplierId,
+    product_id: targetProdId,
+    productId: targetProdId,
+    product_name: targetProdName,
+    productName: targetProdName,
+    qty: qty,
+    cost: cost,
+    total: total,
+    paid: paid,
+    remaining: remaining
+  });
 
   if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('purchases').insert(newPurchase);
+    const { error } = await supabaseClient.from('purchases').insert(newPurchase);
+    if (error) {
+      console.warn('Purchase upload failed:', error);
+      return showNotification('تعذر حفظ المشتريات: ' + error.message, 'error');
+    }
   }
 
   if (typeof addAuditLog === 'function') {
@@ -454,6 +581,7 @@ async function savePurchase() {
   renderPurchases();
   renderProducts();
   renderStockMoves();
+  renderDashboard();
   updateStockBadge();
   showNotification('تم تسجيل المشتريات ✅');
 }
@@ -467,13 +595,15 @@ function renderPurchases() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.purchases.forEach(function(p) {
-    const sup = state.suppliers.find(function(s) { return s.id === p.supplierId; });
+    const supId = p.supplier_id || p.supplierId;
+    const sup = state.suppliers.find(function(s) { return s.id === supId; });
+    const productName = p.product_name || p.productName;
     const totalNum = Number(p.total) || 0;
     const remainingNum = Number(p.remaining) || 0;
     html += '<tr>' +
       '<td>' + new Date(p.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
       '<td>' + escapeHTML(sup ? sup.name : '-') + '</td>' +
-      '<td>' + escapeHTML(p.productName) + '</td>' +
+      '<td>' + escapeHTML(productName) + '</td>' +
       '<td>' + p.qty + '</td>' +
       '<td>' + p.cost + '</td>' +
       '<td>' + totalNum.toFixed(2) + '</td>' +
@@ -498,18 +628,36 @@ async function recordSupplierPayment() {
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
   if (!sup) return showNotification('المورد غير موجود', 'error');
 
-  sup.openingDebt = Math.max(0, (Number(sup.openingDebt) || 0) - amount);
+  // ملاحظة: لا نعدل openingDebt — الرصيد بيتحسب من purchases.remaining - supplier_payments
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  const ownerId = state.currentUser.id;
   const newPayment = {
-    id: uid('SUPP'), user_id: ownerId, supplier_id: supplierId, supplier_name: sup.name,
-    amount: amount, date: date, notes: notes
+    id: uid('SUPP'),
+    user_id: ownerId,
+    supplier_id: supplierId,
+    supplier_name: sup.name,
+    amount: amount,
+    date: date,
+    notes: notes
   };
-  state.supplierPayments.unshift({ id: newPayment.id, supplierId, supplierName: sup.name, amount, date, notes });
+
+  state.supplierPayments.unshift({
+    id: newPayment.id,
+    supplier_id: supplierId,
+    supplierId: supplierId,
+    supplier_name: sup.name,
+    supplierName: sup.name,
+    amount: amount,
+    date: date,
+    notes: notes
+  });
 
   if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('supplier_payments').insert(newPayment);
-    await supabaseClient.from('suppliers').update({ opening_debt: sup.openingDebt }).eq('id', supplierId);
+    const { error } = await supabaseClient.from('supplier_payments').insert(newPayment);
+    if (error) {
+      console.warn('Supplier payment upload failed:', error);
+      return showNotification('تعذر حفظ السداد: ' + error.message, 'error');
+    }
   }
 
   if (typeof addAuditLog === 'function') {
@@ -533,9 +681,10 @@ function renderSupplierPayments() {
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_amount_paid">المبلغ المدفوع</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
   state.supplierPayments.forEach(function(p) {
+    const supName = p.supplierName || p.supplier_name || '-';
     html += '<tr>' +
       '<td>' + escapeHTML(p.date) + '</td>' +
-      '<td>' + escapeHTML(p.supplierName) + '</td>' +
+      '<td>' + escapeHTML(supName) + '</td>' +
       '<td><b>' + (Number(p.amount) || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(p.notes || '-') + '</td>' +
       '</tr>';
