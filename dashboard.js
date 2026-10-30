@@ -5,6 +5,7 @@
 */
 
 function _getAllTimeStart() {
+  // بداية زمنية آمنة (قبل أي بيانات)
   return '2000-01-01';
 }
 
@@ -21,7 +22,6 @@ function _getCurrentMonthRange() {
 
 /**
  * غلاف آمن لاستدعاء financeCore.calcPeriodSummary
- * يرجع object أو null (عشان نعمل fallback في المكان اللي بنستدعي فيه).
  */
 function _safeCalcPeriodSummary(from, to) {
   try {
@@ -41,14 +41,14 @@ function _safeCalcPeriodSummary(from, to) {
 function renderDashboard() {
   const cur = state.storeSettings.currency;
 
-  // ===== الحسابات الأساسية من financeCore =====
+  // 1) الحسابات الأساسية من financeCore
   const allTimeFrom = _getAllTimeStart();
   const allTimeTo   = _getTodayStr();
 
-  let netSales      = 0;
-  let cogs          = 0;
-  let expensesTotal = 0;
-  let netProfit     = 0;
+  let netSales        = 0;
+  let cogs            = 0;
+  let expensesTotal   = 0;
+  let netProfit       = 0;
 
   const summary = _safeCalcPeriodSummary(allTimeFrom, allTimeTo);
   if (summary) {
@@ -57,7 +57,7 @@ function renderDashboard() {
     expensesTotal = Number(summary.expenses_total) || 0;
     netProfit     = Number(summary.net_profit)     || 0;
   } else {
-    // fallback: الحساب اليدوي القديم
+    // Fallback: الحساب اليدوي القديم
     const totalSales = state.sales.reduce(function(sum, s) {
       return sum + (Number(s.total) || 0);
     }, 0);
@@ -78,7 +78,7 @@ function renderDashboard() {
     netProfit = totalSales - totalCost - expensesTotal;
   }
 
-  // ===== customerDebt / supplierDue / stockValue: من state مباشرة =====
+  // 2) customerDebt / supplierDue / stockValue: من state مباشرة
   const customerDebt = state.customers.reduce(function(sum, c) {
     return sum + (Number(c.openingDebt) || 0);
   }, 0);
@@ -91,8 +91,8 @@ function renderDashboard() {
     return sum + ((Number(p.stock) || 0) * (Number(p.cost) || 0));
   }, 0);
 
-  const totalProducts = state.products.length;
-  const lowStockCount = state.products.filter(function(p) {
+  const totalProducts  = state.products.length;
+  const lowStockCount  = state.products.filter(function(p) {
     const min = Number.isFinite(Number(p.minStock)) ? Number(p.minStock) : 5;
     return (Number(p.stock) || 0) <= min;
   }).length;
@@ -179,7 +179,6 @@ function renderMonthlyGoal() {
   if (monthSummary) {
     actualSales = Number(monthSummary.net_sales) || 0;
   } else {
-    // fallback
     const monthSales = state.sales.filter(function(s) {
       const d = (s.date || '').split('T')[0];
       return d >= range.start && d <= range.end;
@@ -221,7 +220,6 @@ function renderSalesChart() {
     if (daySummary) {
       return Number(daySummary.net_sales) || 0;
     }
-    // fallback
     return state.sales
       .filter(function(s) { return (s.date || '').split('T')[0] === day; })
       .reduce(function(sum, s) { return sum + (Number(s.total) || 0); }, 0);
