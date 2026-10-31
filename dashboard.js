@@ -1,11 +1,10 @@
 /* ============ لوحة التحكم والهدف والتنبيهات ============ */
-/* [تعديل] الحسابات المالية تمر عبر financeCore.calcPeriodSummary
-   - نستخدم تواريخ حقيقية (مش null)
-   - customerDebt / supplierDue / stockValue تُحسب من state مباشرة
+/* [تحديث جذري] ديون العملاء/الموردين من financeCore (وليس openingDebt فقط)
+   - customerDebt و supplierDue يستخدمان financeCore.calcCustomerBalance/calcSupplierBalance
+   - بقية الحسابات من financeCore.calcPeriodSummary
 */
 
 function _getAllTimeStart() {
-  // بداية زمنية آمنة (قبل أي بيانات)
   return '2000-01-01';
 }
 
@@ -38,10 +37,36 @@ function _safeCalcPeriodSummary(from, to) {
   }
 }
 
+/**
+ * ✅ غلاف آمن لاستدعاء financeCore.calcCustomerBalance / calcSupplierBalance
+ */
+function _safeCustomerBalance(custId) {
+  try {
+    if (typeof financeCore === 'undefined' ||
+        typeof financeCore.calcCustomerBalance !== 'function') return null;
+    const v = financeCore.calcCustomerBalance(custId);
+    return Number.isFinite(Number(v)) ? Number(v) : 0;
+  } catch (e) {
+    console.warn('calcCustomerBalance failed:', e);
+    return null;
+  }
+}
+
+function _safeSupplierBalance(supId) {
+  try {
+    if (typeof financeCore === 'undefined' ||
+        typeof financeCore.calcSupplierBalance !== 'function') return null;
+    const v = financeCore.calcSupplierBalance(supId);
+    return Number.isFinite(Number(v)) ? Number(v) : 0;
+  } catch (e) {
+    console.warn('calcSupplierBalance failed:', e);
+    return null;
+  }
+}
+
 function renderDashboard() {
   const cur = state.storeSettings.currency;
 
-  // 1) الحسابات الأساسية من financeCore
   const allTimeFrom = _getAllTimeStart();
   const allTimeTo   = _getTodayStr();
 
@@ -78,13 +103,28 @@ function renderDashboard() {
     netProfit = totalSales - totalCost - expensesTotal;
   }
 
-  // 2) customerDebt / supplierDue / stockValue: من state مباشرة
+  // ══════════════════════════════════════════════════════════════
+  // ✅ customerDebt / supplierDue: من financeCore (الدين الحقيقي)
+  // ══════════════════════════════════════════════════════════════
   const customerDebt = state.customers.reduce(function(sum, c) {
-    return sum + (Number(c.openingDebt) || 0);
+    // تجاهل العميل النقدي (مش بيتحسب)
+    const isCash = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
+    if (isCash) return sum;
+    const bal = _safeCustomerBalance(c.id);
+    if (bal === null) {
+      // fallback: openingDebt فقط (مش دقيق، بس احتياطي)
+      return sum + (Number(c.openingDebt ?? c.opening_debt) || 0);
+    }
+    // نسجل الرصيد موجب فقط (لأن ممكن يكون -credit)
+    return sum + Math.max(0, bal);
   }, 0);
 
   const supplierDue = state.suppliers.reduce(function(sum, s) {
-    return sum + (Number(s.openingDebt) || 0);
+    const bal = _safeSupplierBalance(s.id);
+    if (bal === null) {
+      return sum + (Number(s.openingDebt ?? s.opening_debt) || 0);
+    }
+    return sum + Math.max(0, bal);
   }, 0);
 
   const stockValue = state.products.reduce(function(sum, p) {

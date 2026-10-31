@@ -1,22 +1,13 @@
 /* ============================================================
    finance-core.js — Single Source of Truth للعمليات المالية
-   ============================================================
-   كل رقم مالي في التطبيق لازم يمر من هنا.
-   ممنوع أي query مالي مباشر في الملفات التانية.
    ============================================================ */
 
 window.financeCore = (function () {
   'use strict';
 
-  /* ============================================================
-     Helpers
-     ============================================================ */
-
   function ownerId() {
     return (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
   }
-
-  // ملاحظة: نستخدم money() من core.js — مش بنكررها هنا
 
   function toISO(date) {
     if (!date) return null;
@@ -36,16 +27,6 @@ window.financeCore = (function () {
     return d;
   }
 
-  /* ============================================================
-     RPC Wrappers (الباك اند بيحسب، إحنا بنستدعي)
-     ============================================================ */
-
-  /**
-   * ملخص فترة كامل — يستخدم في dashboard, reports, compare
-   * @returns {Promise<{gross_sales, net_sales, returns_total, cash_collected,
-   *                    credit_remaining, invoices_count, expenses_total,
-   *                    collections_total, cogs, net_profit}>}
-   */
   async function getPeriodSummary(from, to) {
     if (!supabaseClient) throw new Error('No Supabase client');
     const { data, error } = await supabaseClient.rpc('get_period_summary', {
@@ -61,10 +42,6 @@ window.financeCore = (function () {
     };
   }
 
-  /**
-   * الكاش المتوقع في وردية معينة
-   * @returns {Promise<number>}
-   */
   async function getShiftExpectedCash(shiftId) {
     if (!shiftId) return 0;
     if (!supabaseClient) throw new Error('No Supabase client');
@@ -75,10 +52,6 @@ window.financeCore = (function () {
     return Number(data) || 0;
   }
 
-  /**
-   * رصيد العميل (دين)
-   * @returns {Promise<number>} موجب = العميل مدين لنا
-   */
   async function getCustomerBalance(customerId) {
     if (!customerId) return 0;
     if (!supabaseClient) throw new Error('No Supabase client');
@@ -89,10 +62,6 @@ window.financeCore = (function () {
     return Number(data) || 0;
   }
 
-  /**
-   * رصيد المورد (مستحق له)
-   * @returns {Promise<number>} موجب = إحنا مدينين للمورد
-   */
   async function getSupplierBalance(supplierId) {
     if (!supplierId) return 0;
     if (!supabaseClient) throw new Error('No Supabase client');
@@ -103,23 +72,14 @@ window.financeCore = (function () {
     return Number(data) || 0;
   }
 
-  /* ============================================================
-     Aggregations من الـ state المحلي (للسرعة في الـ UI)
-     ============================================================
-     ملاحظة: دي بتحسب من الـ arrays المحملة في state
-     (sales, saleItems, returns, expenses, customers, suppliers).
-     لازم تتطابق مع RPC.
-     ============================================================ */
-
+  // ✅ _inRange محسّن للتعامل مع null/invalid dates
   function _inRange(dateStr, from, to) {
+    if (!dateStr) return false;
     const t = new Date(dateStr).getTime();
+    if (!Number.isFinite(t)) return false;
     return t >= from.getTime() && t <= to.getTime();
   }
 
-  /**
-   * حساب ملخص فترة من الـ state (fallback سريع للأوفلاين)
-   * يستخدم نفس منطق get_period_summary
-   */
   function calcPeriodSummary(from, to) {
     const f = new Date(from), t = new Date(to);
     const sales = (state.sales || []).filter(s => _inRange(s.date, f, t));
@@ -129,13 +89,19 @@ window.financeCore = (function () {
 
     const gross = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
     const returnsTotal = sales.reduce((sum, s) => sum + (Number(s.returned_total) || 0), 0);
-    const net = sales.reduce((sum, s) => sum + (Number(s.net_total) ?? ((Number(s.total) || 0) - (Number(s.returned_total) || 0))), 0);
+    
+    // ✅ net_total: نستخدم العمود إن وجد كـ number صالح، وإلا نحسب
+    const net = sales.reduce((sum, s) => {
+      const n = Number(s.net_total);
+      if (Number.isFinite(n)) return sum + n;
+      return sum + ((Number(s.total) || 0) - (Number(s.returned_total) || 0));
+    }, 0);
+    
     const cashCollected = sales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
     const creditRemaining = sales.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0);
     const expensesTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const collectionsTotal = collections.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-    // COGS: نستخدم snapshot التكلفة من saleItems (flat array)
     const saleIds = new Set(sales.map(s => s.id));
     const cogs = (state.saleItems || [])
       .filter(si => saleIds.has(si.sale_id))
@@ -155,9 +121,6 @@ window.financeCore = (function () {
     };
   }
 
-  /**
-   * رصيد عميل من الـ state (fallback سريع)
-   */
   function calcCustomerBalance(customerId) {
     const cust = (state.customers || []).find(c => c.id === customerId);
     const opening = Number(cust?.opening_debt) || 0;
@@ -177,9 +140,6 @@ window.financeCore = (function () {
     return opening + salesDebt - payments - returnsCredit;
   }
 
-  /**
-   * رصيد مورد من الـ state (fallback سريع)
-   */
   function calcSupplierBalance(supplierId) {
     const sup = (state.suppliers || []).find(s => s.id === supplierId);
     const opening = Number(sup?.opening_debt) || 0;
@@ -195,9 +155,6 @@ window.financeCore = (function () {
     return opening + purchasesDebt - payments;
   }
 
-  /**
-   * كاش متوقع لوردية من الـ state (fallback سريع)
-   */
   function calcShiftExpectedCash(shiftId) {
     const shift = (state.shifts || []).find(s => s.id === shiftId);
     const opening = Number(shift?.opening_cash ?? shift?.openingCash) || 0;
@@ -220,10 +177,6 @@ window.financeCore = (function () {
 
     return opening + cashSales + cashCollections - cashReturns - cashExpenses;
   }
-
-  /* ============================================================
-     دوال مساعدة للفترات (تستخدم في التقارير)
-     ============================================================ */
 
   function getPeriod(type) {
     const now = new Date();
@@ -253,24 +206,15 @@ window.financeCore = (function () {
     }
   }
 
-  /* ============================================================
-     Public API
-     ============================================================ */
-
   return {
-    // RPCs (server-authoritative)
     getPeriodSummary,
     getShiftExpectedCash,
     getCustomerBalance,
     getSupplierBalance,
-
-    // Local fallbacks (fast, offline-friendly)
     calcPeriodSummary,
     calcCustomerBalance,
     calcSupplierBalance,
     calcShiftExpectedCash,
-
-    // Helpers
     getPeriod,
     startOfDay,
     endOfDay,

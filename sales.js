@@ -20,7 +20,6 @@ function populateSalesDropdowns() {
     custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + pointsLabel + '</option>';
   });
 
-  // استدعاء دالة العرض عشان تظبط المدفوع لو أول عميل نقدي
   renderCart();
 }
 
@@ -115,7 +114,6 @@ function renderCart() {
     t.innerText = totalText;
   }
 
-  // ملء المدفوع تلقائياً للعميل النقدي
   const paidInput = document.getElementById('salePaid');
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer') && paidInput) {
       paidInput.value = finalTotal.toFixed(2);
@@ -157,19 +155,16 @@ function clearCart() {
 async function ensureOpenShift() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // 1) لو state.currentShift موجود ومش مقفول، ارجعه
   if (state.currentShift && !state.currentShift.end_time && !state.currentShift.endTime) {
     return state.currentShift.id;
   }
 
-  // 2) دوّر في state.shifts على وردية مفتوحة
   const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
   if (openShift) {
     state.currentShift = openShift;
     return openShift.id;
   }
 
-  // 3) مفيش — افتح وردية جديدة
   const newShiftId = uid('SHIFT');
   const newShift = {
     id: newShiftId,
@@ -185,25 +180,23 @@ async function ensureOpenShift() {
   };
 
   if (navigator.onLine && supabaseClient) {
-  try {
-    // ✨ [حل جذري] نستخدم upsert عشان لو الوردية موجودة، تتحدث بدل ما ترفض
-    const { error } = await supabaseClient.from('shifts').upsert({
-      id: newShiftId,
-      user_id: ownerId,
-      cashier_name: newShift.cashier_name,
-      start_time: newShift.start_time,
-      opening_cash: 0
-    }, { onConflict: 'id' });
-    
-    if (error) {
-      // لو فشل حفظ الوردية، منمنعش الفاتورة
-      throw new Error('تعذر حفظ الوردية: ' + error.message);
+    try {
+      const { error } = await supabaseClient.from('shifts').upsert({
+        id: newShiftId,
+        user_id: ownerId,
+        cashier_name: newShift.cashier_name,
+        start_time: newShift.start_time,
+        opening_cash: 0
+      }, { onConflict: 'id' });
+      
+      if (error) {
+        throw new Error('تعذر حفظ الوردية: ' + error.message);
+      }
+    } catch (e) {
+      console.error('Shift auto-open failed:', e);
+      return null;
     }
-  } catch (e) {
-    console.error('Shift auto-open failed:', e);
-    return null; // نرجع null عشان نمنع حفظ الفاتورة
   }
-}
 
   if (!state.shifts) state.shifts = [];
   state.shifts.unshift(newShift);
@@ -219,7 +212,6 @@ function askRefundMethod(sale, soldItem, qty) {
   const wasCredit = Number(sale.remaining) > 0;
 
   if (wasCredit) {
-    // الفاتورة آجل → الافتراضي خصم من الدين
     const choice = confirm(
       `الفاتورة آجل. هل تريد خصم ${total.toFixed(2)} من دين العميل؟\n\n` +
       `موافق = خصم من الدين (credit)\n` +
@@ -228,12 +220,11 @@ function askRefundMethod(sale, soldItem, qty) {
     return choice ? 'credit' : 'cash';
   }
 
-  // الفاتورة كاش → استرداد كاش
   return 'cash';
 }
 
 /* ============================================================
-   دالة مساعدة: خصم نقاط العميل
+   دالة مساعدة: خصم نقاط العميل (للأوفلاين فقط)
    ============================================================ */
 async function deductCustomerPoints(customerId, pointsToDeduct) {
   if (!customerId || pointsToDeduct <= 0) return;
@@ -241,14 +232,7 @@ async function deductCustomerPoints(customerId, pointsToDeduct) {
   if (!cust) return;
 
   cust.points = Math.max(0, (Number(cust.points) || 0) - pointsToDeduct);
-
-  if (navigator.onLine && supabaseClient) {
-    try {
-      await supabaseClient.from('customers').update({ points: cust.points }).eq('id', customerId);
-    } catch (e) {
-      console.warn('Deduct customer points failed:', e);
-    }
-  }
+  // ⚠️ ممنوع UPDATE للسيرفر — trigger handle_sale_points بيتولى الحساب
 }
 
 /* ============================================================
@@ -264,22 +248,19 @@ async function completeSale() {
   showLoading(currentLang === 'en' ? 'Saving invoice...' : 'جارٍ حفظ الفاتورة...');
   await new Promise(function(resolve) { requestAnimationFrame(function() { resolve(); }); });
 
-  // 1) ضمان وجود وردية مفتوحة
-let shiftId;
-try {
-  shiftId = await ensureOpenShift();
-} catch (e) {
-  hideLoading();
-  return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
-}
+  let shiftId;
+  try {
+    shiftId = await ensureOpenShift();
+  } catch (e) {
+    hideLoading();
+    return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
+  }
 
-// ✨ [حل جذري] لو الوردية مش موجودة، منمنعش الفاتورة
-if (!shiftId) {
-  hideLoading();
-  return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
-}
+  if (!shiftId) {
+    hideLoading();
+    return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
+  }
 
-  // 2) الحسابات
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
@@ -307,24 +288,22 @@ if (!shiftId) {
     paid = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, total)) : total;
   }
 
-const customerId = document.getElementById('saleCustomer').value;
-const customer = state.customers.find(c => c.id === customerId);
-const isCashCustomer = customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer');
+  const customerId = document.getElementById('saleCustomer').value;
+  const customer = state.customers.find(c => c.id === customerId);
+  const isCashCustomer = customer && (customer.name === 'عميل نقدي عام' || customer.name === 'Cash Customer');
 
-// ✨ [إصلاح] لو العميل نقدي، بنبعت null للسيرفر عشان ميرفضش الفاتورة
-const saleCustomerId = isCashCustomer ? null : customerId;
+  const saleCustomerId = isCashCustomer ? null : customerId;
 
-if (isCashCustomer && paid < total) {
-  hideLoading();
-  return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
-}
+  if (isCashCustomer && paid < total) {
+    hideLoading();
+    return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
+  }
 
   const payMethod = document.getElementById('salePayMethod').value;
   const notes = document.getElementById('saleNotes').value.trim();
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const remaining = Math.max(0, total - paid);
 
-  // 3) بناء الفاتورة
   const saleId = 'INV-' + new Date().getFullYear() + (new Date().getMonth()+1).toString().padStart(2,'0') + new Date().getDate().toString().padStart(2,'0') + '-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
   const saleObj = {
@@ -335,6 +314,7 @@ if (isCashCustomer && paid < total) {
     discount: discountAmount,
     pointsDiscount: pointsDiscount,
     pointsUsed: pointsUsed,
+    points_used: pointsUsed,
     total: total,
     paid: paid,
     remaining: remaining,
@@ -352,17 +332,17 @@ if (isCashCustomer && paid < total) {
     shiftId: shiftId
   };
 
-  // 4) الحفظ في Supabase
   if (navigator.onLine && supabaseClient) {
     try {
+      // ⚠️ remaining و net_total = GENERATED COLUMNS — ممنوع نبعتهم
       const { error: saleErr } = await supabaseClient.from('sales').insert({
-  id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
-  discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
-  // remaining: هيحسبها الـ trigger BEFORE INSERT
-    customer_id: saleCustomerId, 
+        id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
+        discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
+        points_used: pointsUsed,
+        customer_id: saleCustomerId,
         pay_method: saleObj.payMethod,
         notes: saleObj.notes, cashier: saleObj.cashier, shift_id: shiftId
-});
+      });
       if (saleErr) throw saleErr;
 
       if (saleObj.items.length > 0) {
@@ -379,10 +359,8 @@ if (isCashCustomer && paid < total) {
     }
   }
 
-  // 5) التحديث المحلي
   state.sales.unshift(saleObj);
 
-  // 5a) إضافة الـ sale_items للـ flat array (finance-core)
   if (!state.saleItems) state.saleItems = [];
   saleObj.items.forEach(i => {
     state.saleItems.push({
@@ -400,25 +378,20 @@ if (isCashCustomer && paid < total) {
     });
   });
 
-  // 5b) خصم المخزون محلياً (الـ trigger بيعملها في السيرفر)
   state.cart.forEach(function(item) {
     const prod = state.products.find(function(p) { return p.id === item.id; });
     if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
   });
 
-  // 5c) ⚠️ مهم: ممنوع نزوّد cust.openingDebt — الدين بيتحسب من sales.remaining
-  // (finance-core.calcCustomerBalance و get_customer_balance RPC بيعملوا ده)
-
-  // 5d) خصم النقاط المستخدمة وإضافة النقاط المكتسبة
+  // ══════════════════════════════════════════════════════════════
+  // حساب النقاط محلياً للعرض فقط — trigger handle_sale_points بيتولى السيرفر
+  // ══════════════════════════════════════════════════════════════
   if (saleObj.customerId) {
     const cust = state.customers.find(c => c.id === saleObj.customerId);
     if (cust) {
-      // خصم النقاط المستخدمة
       if (pointsUsed > 0) {
         cust.points = Math.max(0, (Number(cust.points) || 0) - pointsUsed);
       }
-
-      // إضافة النقاط المكتسبة
       const pointsRate = state.storeSettings.pointsRate || 0;
       if (pointsRate > 0) {
         const earnedPoints = Math.floor(total / pointsRate);
@@ -427,11 +400,7 @@ if (isCashCustomer && paid < total) {
           setTimeout(() => showNotification('💎 العميل كسب ' + earnedPoints + ' نقطة!', 'info'), 1500);
         }
       }
-
-      // تحديث النقاط في السيرفر
-      if (navigator.onLine && supabaseClient) {
-        supabaseClient.from('customers').update({ points: cust.points }).eq('id', cust.id).then();
-      }
+      // ⚠️ ممنوع نبعت UPDATE — trigger في السيرفر بيتولى، والـ syncDown هيجيب القيمة النهائية
     }
   }
 
@@ -544,39 +513,35 @@ function safeDeleteRecord(type, id) {
 async function executeDeleteRecord(type, id) {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
- if (type === 'sale') {
-  const idx = state.sales.findIndex(function(s) { return s.id === id; });
-  if (idx === -1) return;
-  const s = state.sales[idx];
+  if (type === 'sale') {
+    const idx = state.sales.findIndex(function(s) { return s.id === id; });
+    if (idx === -1) return;
+    const s = state.sales[idx];
 
-  // نمسح من السيرفر (الـ trigger هيرجع المخزون ويمسح sale_items)
-  if (navigator.onLine && supabaseClient) {
-    try {
-      const { error } = await supabaseClient.from('sales').delete().eq('id', id);
-      if (error) throw error;
-    } catch (e) {
-      console.error('Error deleting sale:', e);
-      showNotification('تعذر حذف الفاتورة: ' + e.message, 'error');
-      return;
+    if (navigator.onLine && supabaseClient) {
+      try {
+        const { error } = await supabaseClient.from('sales').delete().eq('id', id);
+        if (error) throw error;
+      } catch (e) {
+        console.error('Error deleting sale:', e);
+        showNotification('تعذر حذف الفاتورة: ' + e.message, 'error');
+        return;
+      }
+    } else {
+      s.items.forEach(function(item) {
+        const prod = state.products.find(function(p) { return p.id === item.id; });
+        if (prod) prod.stock += item.qty;
+      });
     }
-  } else {
-    // أوفلاين: نرجّع المخزون يدوياً
-    s.items.forEach(function(item) {
-      const prod = state.products.find(function(p) { return p.id === item.id; });
-      if (prod) prod.stock += item.qty;
-    });
-  }
 
-  // نمسح من الـ state
-  state.sales.splice(idx, 1);
-  if (state.saleItems) {
-    state.saleItems = state.saleItems.filter(si => si.sale_id !== id && si.saleId !== id);
-  }
+    state.sales.splice(idx, 1);
+    if (state.saleItems) {
+      state.saleItems = state.saleItems.filter(si => si.sale_id !== id && si.saleId !== id);
+    }
 
-  if (typeof addAuditLog === 'function') {
-    addAuditLog('delete_sale', { saleId: s.id, total: s.total }, s.id);
-  }
-
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('delete_sale', { saleId: s.id, total: s.total }, s.id);
+    }
 
   } else if (type === 'expense') {
     const exp = state.expenses.find(function(e) { return e.id === id; });
@@ -639,7 +604,7 @@ function clearTableLog(logType) {
   renderAll();
   showNotification('تم تصفير السجل محلياً بنجاح ✅');
 }
-/* ✨ [إصلاح] تحديث السلة تلقائياً لما نختار عميل */
+/* ✨ تحديث السلة تلقائياً لما نختار عميل */
 document.addEventListener('change', function(e) {
   if (e.target && e.target.id === 'saleCustomer') {
     renderCart();

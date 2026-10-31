@@ -333,7 +333,7 @@ async function saveReturn() {
 
   if (qty > item.qty - alreadyReturned) return showNotification('الكمية أكبر من المتبقي', 'error');
 
-  // 1) ضمان وردية مفتوحة (المرتجع بيتسجل في وردية)
+  // 1) ضمان وردية مفتوحة
   let shiftId;
   try {
     shiftId = await ensureOpenShift();
@@ -341,9 +341,14 @@ async function saveReturn() {
     return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
   }
 
+  // ✅ [إصلاح جذري] لو الوردية مش موجودة (فشل الحفظ في السيرفر)، نمنع المرتجع
+  if (!shiftId) {
+    return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
+  }
+
   // 2) تحديد طريقة الاسترداد (cash/credit)
   const refundMethod = askRefundMethod(sale, item, qty);
-  if (refundMethod === null) return; // إلغاء
+  if (refundMethod === null) return;
 
   // 3) حساب قيمة المرتجع
   const unitPrice = Number(item.price) || 0;
@@ -400,18 +405,19 @@ async function saveReturn() {
   }
 
   // 6) التحديث المحلي
-  // 6a) إضافة المرتجع للـ state
   state.returns.unshift(newReturn);
 
-  // 6b) تحديث returned_total و net_total في الفاتورة الأصلية (محلياً — السيرفر بيعمله trigger)
+  // ⚠️ ملاحظة: remaining = total - paid (GENERATED COLUMN) — لا يتغير بالمرتجع
+  // فقط returned_total و net_total يتحدثوا
   if (sale) {
     sale.returned_total = (Number(sale.returned_total) || 0) + returnValue;
     sale.returnedTotal = sale.returned_total;
     sale.net_total = Math.max(0, (Number(sale.total) || 0) - sale.returned_total);
     sale.netTotal = sale.net_total;
+    // remaining لا يتغير — total - paid لم يتغيرا
   }
 
-  // 6c) تحديث المخزون محلياً
+  // تحديث المخزون محلياً
   const prod = state.products.find(function(p) { return p.id === prodId; });
   if (prod) {
     const before = Number(prod.stock) || 0;
@@ -428,9 +434,6 @@ async function saveReturn() {
     });
   }
 
-  // 6d) خصم النقاط لو كانت مكتسبة (اختياري — لو حابب نعملها)
-  // (مش هنعملها دلوقتي — ممكن نضيفها بعدين)
-
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_return', {
       returnId: newReturn.id, saleId, qty,
@@ -440,11 +443,9 @@ async function saveReturn() {
 
   saveData();
 
-  // 7) إعادة تعيين الحقول
   document.getElementById('returnQty').value = 1;
   document.getElementById('returnReason').value = '';
 
-  // 8) تحديث كل الشاشات
   renderReturns();
   renderProducts();
   renderStockMoves();

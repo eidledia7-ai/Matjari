@@ -54,7 +54,6 @@ async function holdCurrentSale() {
   const custId = document.getElementById('saleCustomer').value;
   const cust = state.customers.find(c => c.id === custId);
 
-  // الحصول على shift_id الحالي (لو فيه)
   const currentShiftId = state.currentShift ? state.currentShift.id : null;
 
   const heldSale = {
@@ -72,7 +71,6 @@ async function holdCurrentSale() {
   if (!state.heldCarts) state.heldCarts = [];
   state.heldCarts.unshift(heldSale);
 
-  // الرفع للسيرفر
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('held_carts').insert({
@@ -153,7 +151,6 @@ function resumeHeldSale(id) {
 
   state.heldCarts.splice(index, 1);
 
-  // مسح من السيرفر بعد الاسترجاع
   if (navigator.onLine && supabaseClient) {
     supabaseClient.from('held_carts').delete().eq('id', id);
   }
@@ -202,7 +199,6 @@ async function quickAddStock(id) {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // تحديث المنتج في السيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id);
   }
@@ -214,7 +210,6 @@ async function quickAddStock(id) {
   };
   state.stockMoves.unshift({ id: moveObj.id, date: moveObj.date, product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name, type: 'in', qty, old_stock: oldStock, oldStock: oldStock, new_stock: prod.stock, newStock: prod.stock, reason: moveObj.reason });
 
-  // رفع حركة المخزون للسيرفر
   if (navigator.onLine && supabaseClient) {
     await supabaseClient.from('stock_moves').insert(moveObj);
   }
@@ -235,8 +230,6 @@ async function quickAddStock(id) {
 function openDrawerExpenseModal() {
   if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً', 'error');
 
-  // البحث عن وردية مفتوحة في state.shifts
-  const userId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
 
   if (!openShift && !state.currentShift) {
@@ -260,7 +253,6 @@ async function saveDrawerExpense() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // الحصول على shift_id الحالي (من state.currentShift أو من state.shifts)
   let currentShiftId = null;
   if (state.currentShift) {
     currentShiftId = state.currentShift.id;
@@ -274,13 +266,12 @@ async function saveDrawerExpense() {
     user_id: ownerId,
     name: 'مصروف وردية: ' + reason,
     amount: amount,
-    date: today(),
+    date: new Date().toISOString(),
     notes: 'تم سحبه من درج الكاشير أثناء الوردية',
     shift_id: currentShiftId,
     pay_method: 'cash'
   };
 
-  // الرفع للسيرفر
   if (navigator.onLine && supabaseClient) {
     const { error } = await supabaseClient.from('expenses').insert(newExpense);
     if (error) {
@@ -289,7 +280,6 @@ async function saveDrawerExpense() {
     }
   }
 
-  // التحديث المحلي (camel + snake للتوافقية)
   state.expenses.unshift({
     id: newExpense.id,
     name: newExpense.name,
@@ -311,7 +301,6 @@ async function saveDrawerExpense() {
     addAuditLog('drawer_expense', { expenseId: newExpense.id, amount: amount, reason: reason }, newExpense.id);
   }
 
-  // تحديث الكاش المتوقع للوردية (لو الدالة موجودة)
   if (typeof calcExpectedShiftCash === 'function') {
     calcExpectedShiftCash();
   }
@@ -328,7 +317,18 @@ function sendDebtReminder(customerId) {
   const cust = state.customers.find(c => c.id === customerId);
   if (!cust) return showNotification('العميل غير موجود', 'error');
 
-  const debt = Number(cust.opening_debt ?? cust.openingDebt) || 0;
+  // ✅ [إصلاح جذري] الدين الحقيقي من financeCore وليس openingDebt فقط
+  let debt = 0;
+  try {
+    if (typeof financeCore !== 'undefined' && typeof financeCore.calcCustomerBalance === 'function') {
+      debt = Number(financeCore.calcCustomerBalance(customerId)) || 0;
+    } else {
+      debt = Number(cust.opening_debt ?? cust.openingDebt) || 0;
+    }
+  } catch (e) {
+    debt = Number(cust.opening_debt ?? cust.openingDebt) || 0;
+  }
+
   if (debt <= 0) {
     return showNotification('هذا العميل ليس عليه أي ديون', 'info');
   }
@@ -370,7 +370,7 @@ function getStatementData(custId) {
     transactions.push({ date: p.date, desc: 'دفعة (تحصيل)', debit: 0, credit: Number(p.amount) });
   });
 
-  // مرتجعات credit (لو موجودة)
+  // مرتجعات credit
   (state.returns || []).filter(r => (r.customer_id === custId || r.customerId === custId) && r.refund_method === 'credit').forEach(r => {
     transactions.push({ date: r.date, desc: 'مرتجع رقم ' + r.id, debit: 0, credit: Number(r.total) || 0 });
   });
@@ -380,8 +380,12 @@ function getStatementData(custId) {
   let totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
   let totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
   const opening = Number(cust.opening_debt ?? cust.openingDebt) || 0;
-  let currentDebt = opening;
-  let initialBalance = opening - totalDebit + totalCredit;
+
+  // ✅ [إصلاح جذري]
+  // initialBalance = الرصيد قبل الحركات = opening
+  // currentDebt = opening + (مدين) - (دائن) = opening + totalDebit - totalCredit
+  let initialBalance = opening;
+  let currentDebt = opening + totalDebit - totalCredit;
 
   return { cust, transactions, initialBalance, currentDebt };
 }
