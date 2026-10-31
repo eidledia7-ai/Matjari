@@ -80,10 +80,22 @@ window.financeCore = (function () {
     return t >= from.getTime() && t <= to.getTime();
   }
 
-  function calcPeriodSummary(from, to) {
-  // ✅ [إصلاح] ضمان أن البداية أول اليوم والنهاية آخر اليوم حتى لو جاءت كـ نص
-  const f = (from instanceof Date) ? startOfDay(from) : startOfDay(new Date(from));
-  const t = (to instanceof Date) ? endOfDay(to) : endOfDay(new Date(to));
+function calcPeriodSummary(from, to) {
+  // ✅ [إصلاح التوقيت المحلي] قراءة التاريخ بشكل محلي 100% لتجنب مشاكل UTC
+  const parseLocal = (val, isEnd) => {
+    if (!val) return isEnd ? new Date() : new Date(0);
+    if (val instanceof Date) return isEnd ? endOfDay(val) : startOfDay(val);
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      const [y, m, d] = val.split('-');
+      const dt = new Date(y, m - 1, d);
+      return isEnd ? endOfDay(dt) : startOfDay(dt);
+    }
+    const dt = new Date(val);
+    return isEnd ? endOfDay(dt) : startOfDay(dt);
+  };
+
+  const f = parseLocal(from, false);
+  const t = parseLocal(to, true);
   
   const sales = (state.sales || []).filter(s => _inRange(s.date, f, t));
   const returns = (state.returns || []).filter(r => _inRange(r.date, f, t));

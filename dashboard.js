@@ -1,22 +1,33 @@
 /* ============ لوحة التحكم والهدف والتنبيهات ============ */
-/* [تحديث جذري] ديون العملاء/الموردين من financeCore (وليس openingDebt فقط)
-   - customerDebt و supplierDue يستخدمان financeCore.calcCustomerBalance/calcSupplierBalance
-   - بقية الحسابات من financeCore.calcPeriodSummary
-*/
 
 function _getAllTimeStart() {
   return '2000-01-01';
 }
 
 function _getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // ✅ [إصلاح] استخدام التوقيت المحلي بدلاً من UTC
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function _getCurrentMonthRange() {
+  // ✅ [إصلاح] استخدام التوقيت المحلي بدلاً من UTC
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const end = now.toISOString().slice(0, 10);
-  return { start, end };
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endDate = now;
+  
+  const sy = startDate.getFullYear();
+  const sm = String(startDate.getMonth() + 1).padStart(2, '0');
+  const sd = String(startDate.getDate()).padStart(2, '0');
+  
+  const ey = endDate.getFullYear();
+  const em = String(endDate.getMonth() + 1).padStart(2, '0');
+  const ed = String(endDate.getDate()).padStart(2, '0');
+  
+  return { start: `${sy}-${sm}-${sd}`, end: `${ey}-${em}-${ed}` };
 }
 
 /**
@@ -107,15 +118,12 @@ function renderDashboard() {
   // ✅ customerDebt / supplierDue: من financeCore (الدين الحقيقي)
   // ══════════════════════════════════════════════════════════════
   const customerDebt = state.customers.reduce(function(sum, c) {
-    // تجاهل العميل النقدي (مش بيتحسب)
     const isCash = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
     if (isCash) return sum;
     const bal = _safeCustomerBalance(c.id);
     if (bal === null) {
-      // fallback: openingDebt فقط (مش دقيق، بس احتياطي)
       return sum + (Number(c.openingDebt ?? c.opening_debt) || 0);
     }
-    // نسجل الرصيد موجب فقط (لأن ممكن يكون -credit)
     return sum + Math.max(0, bal);
   }, 0);
 
@@ -252,7 +260,11 @@ function renderSalesChart() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+    // ✅ [إصلاح] بناء التاريخ محلياً
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    days.push(`${y}-${m}-${day}`);
   }
 
   const data = days.map(function(day) {
