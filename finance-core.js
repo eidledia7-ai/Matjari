@@ -81,45 +81,47 @@ window.financeCore = (function () {
   }
 
   function calcPeriodSummary(from, to) {
-    const f = new Date(from), t = new Date(to);
-    const sales = (state.sales || []).filter(s => _inRange(s.date, f, t));
-    const returns = (state.returns || []).filter(r => _inRange(r.date, f, t));
-    const expenses = (state.expenses || []).filter(e => _inRange(e.date, f, t));
-    const collections = (state.customerPayments || []).filter(p => _inRange(p.date, f, t));
+  // ✅ [إصلاح] ضمان أن البداية أول اليوم والنهاية آخر اليوم حتى لو جاءت كـ نص
+  const f = (from instanceof Date) ? startOfDay(from) : startOfDay(new Date(from));
+  const t = (to instanceof Date) ? endOfDay(to) : endOfDay(new Date(to));
+  
+  const sales = (state.sales || []).filter(s => _inRange(s.date, f, t));
+  const returns = (state.returns || []).filter(r => _inRange(r.date, f, t));
+  const expenses = (state.expenses || []).filter(e => _inRange(e.date, f, t));
+  const collections = (state.customerPayments || []).filter(p => _inRange(p.date, f, t));
 
-    const gross = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const returnsTotal = sales.reduce((sum, s) => sum + (Number(s.returned_total) || 0), 0);
-    
-    // ✅ net_total: نستخدم العمود إن وجد كـ number صالح، وإلا نحسب
-    const net = sales.reduce((sum, s) => {
-      const n = Number(s.net_total);
-      if (Number.isFinite(n)) return sum + n;
-      return sum + ((Number(s.total) || 0) - (Number(s.returned_total) || 0));
-    }, 0);
-    
-    const cashCollected = sales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
-    const creditRemaining = sales.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0);
-    const expensesTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const collectionsTotal = collections.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const gross = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+  const returnsTotal = sales.reduce((sum, s) => sum + (Number(s.returned_total) || 0), 0);
+  
+  const net = sales.reduce((sum, s) => {
+    const n = Number(s.net_total);
+    if (Number.isFinite(n)) return sum + n;
+    return sum + ((Number(s.total) || 0) - (Number(s.returned_total) || 0));
+  }, 0);
+  
+  const cashCollected = sales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const creditRemaining = sales.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0);
+  const expensesTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const collectionsTotal = collections.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-    const saleIds = new Set(sales.map(s => s.id));
-    const cogs = (state.saleItems || [])
-      .filter(si => saleIds.has(si.sale_id))
-      .reduce((sum, si) => sum + ((Number(si.cost) || 0) * (Number(si.qty) || 0)), 0);
+  const saleIds = new Set(sales.map(s => s.id));
+  const cogs = (state.saleItems || [])
+    .filter(si => saleIds.has(si.sale_id))
+    .reduce((sum, si) => sum + ((Number(si.cost) || 0) * (Number(si.qty) || 0)), 0);
 
-    return {
-      gross_sales: gross,
-      net_sales: net,
-      returns_total: returnsTotal,
-      cash_collected: cashCollected,
-      credit_remaining: creditRemaining,
-      invoices_count: sales.length,
-      expenses_total: expensesTotal,
-      collections_total: collectionsTotal,
-      cogs: cogs,
-      net_profit: net - cogs - expensesTotal
-    };
-  }
+  return {
+    gross_sales: gross,
+    net_sales: net,
+    returns_total: returnsTotal,
+    cash_collected: cashCollected,
+    credit_remaining: creditRemaining,
+    invoices_count: sales.length,
+    expenses_total: expensesTotal,
+    collections_total: collectionsTotal,
+    cogs: cogs,
+    net_profit: net - cogs - expensesTotal
+  };
+}
 
   function calcCustomerBalance(customerId) {
     const cust = (state.customers || []).find(c => c.id === customerId);
