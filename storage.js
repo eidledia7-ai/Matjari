@@ -88,7 +88,8 @@ async function syncDown(ownerId) {
     if (error) throw error;
     state.auditLogs = (data || []).map(row => ({
       id: row.id, action: row.action, details: row.details,
-      date: row.created_at, userId: row.user_id, role: row.role
+      date: row.created_at, userId: row.user_id, role: row.role,
+      uploaded: true // ✅ v7.4 — السجلات القادمة من السيرفر مترفعة بالفعل
     }));
   } catch (err) {
     console.warn('SyncDown audit_logs failed:', err.message);
@@ -263,8 +264,9 @@ async function syncUp(ownerId) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
 
-    // ✅ [إصلاح] رفع سجلات النشاط الجديدة فقط للمدير (تجنب أخطاء 403)
+    // ✅ v7.4 — رفع سجلات النشاط الجديدة فقط (تجنب خطأ 409 والـ 403)
     for (const log of state.auditLogs) {
+      if (log.uploaded) continue; // تخطي المرفوع مسبقاً
       if (log.userId && log.userId !== state.currentUser.id) continue;
       try {
         const { error } = await supabaseClient.from('audit_logs').insert({
@@ -272,7 +274,11 @@ async function syncUp(ownerId) {
           role: 'manager', action: log.action, details: log.details,
           created_at: log.date || new Date().toISOString()
         });
-        if (error && error.code !== '23505') { 
+        if (!error) {
+          log.uploaded = true;
+        } else if (error.code === '23505') {
+          log.uploaded = true; // موجود بالفعل، نعتبره مرفوع
+        } else {
           console.warn('Audit log upload failed', error); 
         }
       } catch (e) { console.warn('Audit log upload failed', e); }
@@ -292,7 +298,6 @@ function saveData() {
       customerPayments: state.customerPayments, supplierPayments: state.supplierPayments,
       stockMoves: state.stockMoves, heldCarts: state.heldCarts,
       saleItems: state.saleItems,
-      // ✅ v7.4
       customerBalances: state.customerBalances || {},
       salesDataLimited: state.salesDataLimited || false,
       salesDataFromDate: state.salesDataFromDate || null,

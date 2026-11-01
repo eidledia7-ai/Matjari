@@ -16,10 +16,11 @@ async function addAuditLog(action, details, entityId) {
 
     // إضافة للـ State عشان تظهر في الواجهة فوراً
     state.auditLogs = state.auditLogs || [];
-    state.auditLogs.push({
-      id: entry.id, action: entry.action, details: entry.details,
-      date: entry.created_at, userId: entry.user_id, role: entry.role
-    });
+  state.auditLogs.push({
+  id: entry.id, action: entry.action, details: entry.details,
+  date: entry.created_at, userId: entry.user_id, role: entry.role,
+  uploaded: false
+});
     if (state.auditLogs.length > 5000) state.auditLogs = state.auditLogs.slice(-5000);
 
     // الرفع للسيرفر
