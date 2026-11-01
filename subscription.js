@@ -146,6 +146,9 @@ async function startSubscription(planId) {
     const oldModal = document.getElementById('paymobIframeModal');
     if (oldModal) oldModal.remove();
 
+    // ✅ [إضافة] متغير لحفظ مؤقت فحص الدفع
+    if (window._paymentCheckInterval) clearInterval(window._paymentCheckInterval);
+
     const modal = document.createElement('div');
     modal.id = 'paymobIframeModal';
     modal.className = 'modal-overlay';
@@ -154,16 +157,51 @@ async function startSubscription(planId) {
       <div class="modal-card" style="max-width: 600px; width: 100%; padding: 0; overflow: hidden; height: 85vh;">
         <div style="padding: 15px; background: #17364c; color: white; display: flex; justify-content: space-between; align-items: center;">
           <h3 style="margin: 0; color: white;">💳 ${currentLang === 'en' ? 'Secure Payment' : 'الدفع الآمن'}</h3>
-          <button onclick="document.getElementById('paymobIframeModal').remove()" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
+          <button onclick="closePaymobModal()" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
         </div>
         <iframe src="${iframeUrl}" width="100%" height="100%" style="border: none;"></iframe>
       </div>
     `;
     document.body.appendChild(modal);
 
+    // ✅ [إضافة] فحص تلقائي لحالة الدفع كل 5 ثواني
+    window._paymentCheckInterval = setInterval(async () => {
+      try {
+        const { data: subData } = await supabaseClient
+          .from('shop_subscriptions')
+          .select('*')
+          .eq('user_id', state.currentUser.id)
+          .maybeSingle();
+
+        // لو الباقة اتغيرت أو الاشتراك اتفعل
+        if (subData && (subData.plan === planId || (subData.expires_at && new Date(subData.expires_at) > new Date()))) {
+          
+          clearInterval(window._paymentCheckInterval);
+          state.subscription = subData; // تحديث الـ State
+          
+          closePaymobModal(); // إغلاق شاشة الدفع
+          
+          showNotification(currentLang === 'en' ? 'Subscription activated successfully! 🎉' : 'تم تجديد الاشتراك بنجاح! شكراً لك 🎉', 'success');
+          
+          renderSubscriptionPage(); // تحديث الشاشة
+          if (typeof enforceSubscriptionBlock === 'function') enforceSubscriptionBlock();
+        }
+      } catch (e) { /* تجاهل الأخطاء أثناء الفحص */ }
+    }, 5000);
+
   } catch (err) {
     hideLoading();
     showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + err.message, 'error');
+  }
+}
+
+// ✅ [إضافة] دالة لإغلاق المودال ومسح المؤقت
+function closePaymobModal() {
+  const modal = document.getElementById('paymobIframeModal');
+  if (modal) modal.remove();
+  if (window._paymentCheckInterval) {
+    clearInterval(window._paymentCheckInterval);
+    window._paymentCheckInterval = null;
   }
 }
 
