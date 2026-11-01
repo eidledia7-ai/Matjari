@@ -167,7 +167,7 @@ function renderDashboard() {
       '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_value + '</h3><p>' + stockValue.toFixed(2) + ' ' + cur + '</p></div>' +
       '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_customer_debt + '</h3><p style="color:#c0392b">' + customerDebt.toFixed(2) + ' ' + cur + '</p></div>' +
       '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_supplier_due + '</h3><p style="color:#198754">' + supplierDue.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_alerts + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + (currentLang === 'en' ? 'items' : 'صنف') + '</p></div>';
+      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_alerts + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + tr('items_word') + '</p></div>';
   }
 
   renderSmartAlerts();
@@ -188,11 +188,9 @@ function renderSmartAlerts() {
   if (lowStock.length > 0) {
     alerts.push({
       type: 'danger', icon: '📦',
-      title: currentLang === 'en'
-        ? '⚠️ ' + lowStock.length + ' products reached the alert level'
-        : '⚠️ ' + lowStock.length + ' منتج وصل لحد التنبيه',
-      subtitle: currentLang === 'en' ? 'Review inventory and reorder' : 'راجع المخزون وأعد الطلب',
-      actionText: currentLang === 'en' ? 'View Inventory' : 'عرض المخزون',
+      title: tr('low_stock_notif_1') + lowStock.length + tr('low_stock_notif_2'),
+      subtitle: tr('review_inventory'),
+      actionText: tr('view_inventory'),
       actionPage: 'invProducts'
     });
   }
@@ -202,7 +200,7 @@ function renderSmartAlerts() {
     return;
   }
 
-  let html = '<div class="card"><h3>' + (currentLang === 'en' ? '🔔 Smart Alerts' : '🔔 تنبيهات ذكية') + '</h3>';
+  let html = '<div class="card"><h3>' + tr('smart_alerts') + '</h3>';
   alerts.forEach(function(a) {
     html += '<div class="smart-alert ' + a.type + '">' +
       '<span class="alert-icon">' + a.icon + '</span>' +
@@ -239,14 +237,15 @@ function renderMonthlyGoal() {
   const percent   = Math.min(100, (actualSales / goal * 100));
   const remaining = Math.max(0, goal - actualSales);
   const cur       = state.storeSettings.currency;
+  const en        = currentLang === 'en';
 
   container.innerHTML =
     '<div class="goal-card">' +
-    '<h3>🎯 هدف المبيعات الشهري <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
+    '<h3>🎯 ' + (en ? 'Monthly Sales Goal' : 'هدف المبيعات الشهري') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
     '<div class="goal-header"><div class="goal-values">' +
-    '<div class="goal-value"><div class="label">المبيعات</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">الهدف</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">المتبقي</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + (en ? 'Sales' : 'المبيعات') + '</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + (en ? 'Goal' : 'الهدف') + '</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + (en ? 'Remaining' : 'المتبقي') + '</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
     '</div></div>' +
     '<div class="goal-bar-container"><div class="goal-bar" style="width: ' + percent + '%"></div></div>' +
     '</div>';
@@ -296,7 +295,7 @@ function renderSalesChart() {
     data: {
       labels: labels,
       datasets: [{
-        label: currentLang === 'en' ? 'Sales' : 'المبيعات',
+        label: tr('compare_sales'),
         data: data,
         borderColor: '#147d80',
         backgroundColor: 'rgba(20, 125, 128, 0.15)',
