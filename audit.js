@@ -35,7 +35,8 @@ async function addAuditLog(action, details, entityId) {
 }
 
 function renderAuditLogs() {
-  const container = document.getElementById('auditLogsTable');
+  // ✅ [إصلاح] البحث عن الـ ID الموجود في ملف الـ HTML (بحرف s أو بدونها)
+  const container = document.getElementById('auditLogsTable') || document.getElementById('auditLogTable');
   if (!container) return;
 
   if (!state.auditLogs || state.auditLogs.length === 0) {
@@ -73,7 +74,6 @@ function renderAuditLogs() {
   const formatDetails = (action, details) => {
     if (!details) return '-';
     
-    // تحويل التفاصيل لنص لو كانت object
     let d = details;
     if (typeof details === 'string') {
       try { d = JSON.parse(details); } catch (e) { return details; }
@@ -99,7 +99,6 @@ function renderAuditLogs() {
       case 'add_purchase':
         return `مشتريات بقيمة: ${d.total} ج.م`;
       default:
-        // لو مفيش صيغة مخصصة، نعرض الـ JSON بس بشكل مرتب
         return Object.entries(d).map(([key, val]) => `${key}: ${val}`).join(' | ');
     }
   };
@@ -107,30 +106,22 @@ function renderAuditLogs() {
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>الرتبة</th><th>الإجراء</th><th>التفاصيل</th></tr></thead><tbody>';
   
   state.auditLogs.forEach(function(log) {
-    // 3. استخراج اسم المستخدم (لو المدير الحالي، نعرض إيميله، لو موظف، نعرض ID مختصر)
     let userName = 'مستخدم غير معروف';
     if (log.userId === state.currentUser?.id || log.user_id === state.currentUser?.id) {
       userName = state.currentUser.email;
     } else {
-      // لو مش اليوزر الحالي، بنعرض اختصار للـ ID
       const uid = log.userId || log.user_id || '';
       userName = uid.substring(0, 8) + '...';
     }
 
-    // 4. ترجمة الإجراء
     const actionCode = log.action;
     const actionText = actionLabels[actionCode] || actionCode;
-
-    // 5. ترجمة التفاصيل
     const detailsText = formatDetails(actionCode, log.details);
 
-    // 6. تنسيق الوقت
     const dateObj = new Date(log.date);
     const dateStr = dateObj.toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
     const timeStr = dateObj.toLocaleTimeString(currentLang === 'en' ? 'en-US' : 'ar-EG', { hour: '2-digit', minute: '2-digit' });
 
-    // 7. لون للرتبة
-    const roleText = log.role === 'manager' ? 'مدير' : 'موظف';
     const roleBadge = log.role === 'manager' 
       ? '<span style="background:#e0f2fe; color:#0284c7; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:bold;">مدير</span>'
       : '<span style="background:#f3f4f6; color:#4b5563; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:bold;">موظف</span>';
