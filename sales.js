@@ -6,7 +6,8 @@ function populateSalesDropdowns() {
 
   prodSelect.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   state.products.forEach(function(p) {
-    prodSelect.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + (currentLang === 'en' ? ' (Stock: ' : ' (مخزن: ') + (Number(p.stock) || 0) + ') - ' + (Number(p.price) || 0) + ' ' + state.storeSettings.currency + '</option>';
+    const stockLabel = currentLang === 'en' ? 'Stock' : 'مخزن';
+    prodSelect.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (' + stockLabel + ': ' + (Number(p.stock) || 0) + ') - ' + (Number(p.price) || 0) + ' ' + state.storeSettings.currency + '</option>';
   });
 
   custSelect.innerHTML = '';
@@ -16,7 +17,8 @@ function populateSalesDropdowns() {
   state.customers.forEach(function(c) {
     const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
     const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
-    const pointsLabel = (c.points && c.points > 0) ? ' (💎 ' + c.points + ' نقطة)' : '';
+    const pointsWord = currentLang === 'en' ? 'points' : 'نقطة';
+    const pointsLabel = (c.points && c.points > 0) ? ' (💎 ' + c.points + ' ' + pointsWord + ')' : '';
     custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + pointsLabel + '</option>';
   });
 
@@ -30,11 +32,11 @@ function addToCartManual() {
 
   const product = state.products.find(function(p) { return p.id === prodId; });
   if (!product) return;
-  if (qty > product.stock) return showNotification('الكمية تتجاوز المخزون!', 'error');
+  if (qty > product.stock) return showNotification(tr('qty_exceeds_stock_1') + product.stock + tr('qty_exceeds_stock_2'), 'error');
 
   const existing = state.cart.find(function(item) { return item.id === product.id; });
   if (existing) {
-    if (existing.qty + qty > product.stock) return showNotification('الكمية تتجاوز المخزون!', 'error');
+    if (existing.qty + qty > product.stock) return showNotification(tr('qty_exceeds_stock_1') + product.stock + tr('qty_exceeds_stock_2'), 'error');
     existing.qty += qty;
   } else {
     state.cart.push({ id: product.id, name: product.name, price: Number(product.price), cost: Number(product.cost), qty: qty });
@@ -69,7 +71,7 @@ function renderCart() {
   }
 
   if (state.cart.length === 0) {
-    container.innerHTML = '<p class="text-muted">سلة المبيعات فارغة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('empty_cart_msg') + '</p>';
     const t = document.getElementById('cartTotal');
     if (t) t.innerText = tr('invoice_total') + ': 0.00 ' + state.storeSettings.currency;
     return;
@@ -85,7 +87,7 @@ function renderCart() {
       '<td>' + item.price + '</td>' +
       '<td><input type="number" min="1" value="' + item.qty + '" style="width:70px" onchange="updateCartQty(' + idx + ', this.value)"></td>' +
       '<td>' + tot.toFixed(2) + '</td>' +
-      '<td><button class="small-btn red" onclick="removeFromCart(' + idx + ')">حذف</button></td>' +
+      '<td><button class="small-btn red" onclick="removeFromCart(' + idx + ')">' + tr('delete_btn') + '</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -110,7 +112,10 @@ function renderCart() {
   const t = document.getElementById('cartTotal');
   if (t) {
     let totalText = tr('invoice_total') + ': ' + finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
-    if (pointsDiscount > 0) totalText += ' (خصم نقاط: -' + pointsDiscount.toFixed(2) + ')';
+    if (pointsDiscount > 0) {
+      const pDiscLabel = currentLang === 'en' ? 'Points Discount: -' : 'خصم نقاط: -';
+      totalText += ' (' + pDiscLabel + pointsDiscount.toFixed(2) + ')';
+    }
     t.innerText = totalText;
   }
 
@@ -127,7 +132,7 @@ function updateCartQty(idx, val) {
   if (!item) return;
   const prod = state.products.find(function(p) { return p.id === item.id; });
   if (prod && q > prod.stock) {
-    showNotification('الكمية تتجاوز المخزون!', 'error');
+    showNotification(tr('qty_exceeds_stock_1') + prod.stock + tr('qty_exceeds_stock_2'), 'error');
     renderCart();
     return;
   }
@@ -190,7 +195,7 @@ async function ensureOpenShift() {
       }, { onConflict: 'id' });
       
       if (error) {
-        throw new Error('تعذر حفظ الوردية: ' + error.message);
+        throw new Error((currentLang === 'en' ? 'Failed to save shift: ' : 'تعذر حفظ الوردية: ') + error.message);
       }
     } catch (e) {
       console.error('Shift auto-open failed:', e);
@@ -213,9 +218,9 @@ function askRefundMethod(sale, soldItem, qty) {
 
   if (wasCredit) {
     const choice = confirm(
-      `الفاتورة آجل. هل تريد خصم ${total.toFixed(2)} من دين العميل؟\n\n` +
-      `موافق = خصم من الدين (credit)\n` +
-      `إلغاء = استرداد كاش من الدرج (cash)`
+      tr('credit_return_confirm_1') + total.toFixed(2) + tr('credit_return_confirm_2') + '\n\n' +
+      tr('credit_option') + '\n' +
+      tr('cash_option')
     );
     return choice ? 'credit' : 'cash';
   }
@@ -239,10 +244,10 @@ async function deductCustomerPoints(customerId, pointsToDeduct) {
    إتمام البيع
    ============================================================ */
 async function completeSale() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لتتمكن من البيع', 'error');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
   if (state.cart.length === 0) {
     playBeep(false);
-    return showNotification('السلة فارغة!', 'error');
+    return showNotification(tr('empty_cart_err'), 'error');
   }
 
   showLoading(currentLang === 'en' ? 'Saving invoice...' : 'جارٍ حفظ الفاتورة...');
@@ -253,12 +258,12 @@ async function completeSale() {
     shiftId = await ensureOpenShift();
   } catch (e) {
     hideLoading();
-    return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
+    return showNotification((currentLang === 'en' ? 'Failed to open shift: ' : 'تعذر فتح وردية: ') + (e.message || ''), 'error');
   }
 
   if (!shiftId) {
     hideLoading();
-    return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
+    return showNotification(tr('shift_create_fail'), 'error');
   }
 
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
@@ -296,7 +301,7 @@ async function completeSale() {
 
   if (isCashCustomer && paid < total) {
     hideLoading();
-    return showNotification('العميل النقدي يجب أن يدفع كامل المبلغ.', 'error');
+    return showNotification(tr('customer_must_pay_full'), 'error');
   }
 
   const payMethod = document.getElementById('salePayMethod').value;
@@ -355,7 +360,7 @@ async function completeSale() {
       }
     } catch (err) {
       console.error('Error saving sale to server:', err);
-      showNotification('تم الحفظ محلياً، وسيتم الرفع عند عودة الإنترنت.', 'warning');
+      showNotification(tr('save_offline_warning'), 'warning');
     }
   }
 
@@ -397,7 +402,7 @@ async function completeSale() {
         const earnedPoints = Math.floor(total / pointsRate);
         if (earnedPoints > 0) {
           cust.points = (Number(cust.points) || 0) + earnedPoints;
-          setTimeout(() => showNotification('💎 العميل كسب ' + earnedPoints + ' نقطة!', 'info'), 1500);
+          setTimeout(() => showNotification(tr('points_earned_1') + earnedPoints + tr('points_earned_2'), 'info'), 1500);
         }
       }
       // ⚠️ ممنوع نبعت UPDATE — trigger في السيرفر بيتولى، والـ syncDown هيجيب القيمة النهائية
@@ -410,7 +415,7 @@ async function completeSale() {
 
   saveData();
   playBeep(true);
-  showNotification('تم حفظ الفاتورة بنجاح ✅');
+  showNotification(currentLang === 'en' ? 'Invoice saved successfully ✅' : 'تم حفظ الفاتورة بنجاح ✅');
 
   try {
     if (state.storeSettings.printType === 'a4') {
@@ -458,7 +463,7 @@ function renderSales() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد فواتير مسجلة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('empty_invoices') + '</p>';
     return;
   }
 
@@ -477,19 +482,19 @@ function renderSales() {
     html += '<tr>' +
       '<td>' + escapeHTML(s.id) + '</td>' +
       '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
-      '<td>' + (cust ? escapeHTML(cust.name) : 'نقدي') + '</td>' +
+      '<td>' + (cust ? escapeHTML(cust.name) : tr('cash_label')) + '</td>' +
       '<td>' + totalNum.toFixed(2) + '</td>' +
       '<td>' + paidNum.toFixed(2) + '</td>' +
       '<td class="' + (remainingNum > 0 ? 'red-text' : '') + '">' + remainingNum.toFixed(2) + '</td>' +
       '<td>' + escapeHTML(payText) + '</td>' +
       '<td style="white-space: nowrap;">' +
-        '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="طباعة">🧾</button>' +
+        '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="' + (currentLang === 'en' ? 'Print' : 'طباعة') + '">🧾</button>' +
         '<div class="action-dropdown">' +
-          '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="خيارات">⋮</button>' +
+          '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="' + (currentLang === 'en' ? 'Options' : 'خيارات') + '">⋮</button>' +
           '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
-            '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 إرسال واتساب</button>' +
-            '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 تسجيل مرتجع</button>' +
-            '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ حذف الفاتورة</button>' +
+            '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 ' + (currentLang === 'en' ? 'Send WhatsApp' : 'إرسال واتساب') + '</button>' +
+            '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 ' + tr('tab_returns') + '</button>' +
+            '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ ' + (currentLang === 'en' ? 'Delete Invoice' : 'حذف الفاتورة') + '</button>' +
           '</div>' +
         '</div>' +
       '</td>' +
@@ -502,10 +507,10 @@ function renderSales() {
 function safeDeleteRecord(type, id) {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
-    if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
+    if (!perms.canDelete) return showNotification(tr('manager_only'), 'warning');
   }
 
-  showCustomConfirm('تأكيد الحذف', tr('msg_delete_mistake'), () => {
+  showCustomConfirm(tr('delete_sale_confirm_title'), tr('msg_delete_mistake'), () => {
     executeDeleteRecord(type, id);
   });
 }
@@ -524,7 +529,7 @@ async function executeDeleteRecord(type, id) {
         if (error) throw error;
       } catch (e) {
         console.error('Error deleting sale:', e);
-        showNotification('تعذر حذف الفاتورة: ' + e.message, 'error');
+        showNotification(tr('delete_sale_error') + e.message, 'error');
         return;
       }
     } else {
@@ -582,13 +587,13 @@ async function executeDeleteRecord(type, id) {
 
   saveData();
   renderAll();
-  showNotification('تم حذف العملية وتعديل التأثير بنجاح ✅');
+  showNotification(tr('delete_success'));
 }
 
 function clearTableLog(logType) {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
-    if (!perms.canDelete) return showNotification('هذه العملية للمدير فقط', 'warning');
+    if (!perms.canDelete) return showNotification(tr('manager_only'), 'warning');
   }
   if (!confirm(tr('msg_clear_log'))) return;
 
@@ -602,7 +607,7 @@ function clearTableLog(logType) {
 
   saveData();
   renderAll();
-  showNotification('تم تصفير السجل محلياً بنجاح ✅');
+  showNotification(tr('log_cleared'));
 }
 /* ✨ تحديث السلة تلقائياً لما نختار عميل */
 document.addEventListener('change', function(e) {
