@@ -179,20 +179,31 @@ function calcPeriodSummary(from, to) {
   };
 }
 
-  function calcCustomerBalance(customerId) {
-    const cust = (state.customers || []).find(c => c.id === customerId);
-    const opening = Number(cust?.opening_debt) || 0;
-    const salesDebt = (state.sales || [])
-      .filter(s => s.customer_id === customerId || s.customerId === customerId)
-      .reduce((sum, s) => sum + (Number(s.remaining) || 0), 0);
-    const payments = (state.customerPayments || [])
-      .filter(p => p.customer_id === customerId || p.customerId === customerId)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const returnsCredit = (state.returns || [])
-      .filter(r => (r.customer_id === customerId || r.customerId === customerId) && r.refund_method === 'credit')
-      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
-    return opening + salesDebt - payments - returnsCredit;
+function calcCustomerBalance(customerId) {
+  // ✅ v7.4 — استخدم الأرصدة المحسوبة من السيرفر عند توفرها (دقيقة 100% بعد الـ pagination)
+  if (state.customerBalances && state.customerBalances[customerId] !== undefined) {
+    const cached = Number(state.customerBalances[customerId]);
+    if (Number.isFinite(cached)) return cached;
   }
+
+  // Fallback: حساب محلي (قد يكون غير دقيق لو salesDataLimited=true والـ RPC فشل)
+  const cust = (state.customers || []).find(c => c.id === customerId);
+  const opening = Number(cust?.opening_debt) || 0;
+
+  const salesDebt = (state.sales || [])
+    .filter(s => s.customer_id === customerId || s.customerId === customerId)
+    .reduce((sum, s) => sum + (Number(s.remaining) || 0), 0);
+
+  const payments = (state.customerPayments || [])
+    .filter(p => p.customer_id === customerId || p.customerId === customerId)
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const returnsCredit = (state.returns || [])
+    .filter(r => (r.customer_id === customerId || r.customerId === customerId) && r.refund_method === 'credit')
+    .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+
+  return opening + salesDebt - payments - returnsCredit;
+}
 
   function calcSupplierBalance(supplierId) {
     const sup = (state.suppliers || []).find(s => s.id === supplierId);

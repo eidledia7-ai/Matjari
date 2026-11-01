@@ -235,72 +235,76 @@ function renderReports() {
   // ✅ v7.2 — تقرير أرباح المنتجات (Product Profit Report)
   // الإيراد ex-VAT موزّع pro-rata، المرتجعات تُنسب لفترة الفاتورة (Option A)،
   // تكلفة المرتجع من Snapshot sale_items.cost.
-  // ══════════════════════════════════════════════════════════════
-  const profitContainer = document.getElementById('productProfitReport');
-  if (profitContainer && typeof financeCore.calcProductProfitReport === 'function') {
-    try {
-      const allRows = financeCore.calcProductProfitReport(startDate, endDate);
-      const showAllEl = document.getElementById('productProfitShowAll');
-      const showAll = showAllEl ? showAllEl.checked : false;
-      const rows = showAll ? allRows : allRows.filter(p => (Number(p.sold_qty) > 0) || (Number(p.returned_qty) > 0));
+  // ══════════════════════════════════════════════════════════════const profitContainer = document.getElementById('productProfitReport');
+if (profitContainer && typeof financeCore.calcProductProfitReport === 'function') {
+  try {
+    const allRows = financeCore.calcProductProfitReport(startDate, endDate);
+    const showAllEl = document.getElementById('productProfitShowAll');
+    const showAll = showAllEl ? showAllEl.checked : false;
+    const rows = showAll ? allRows : allRows.filter(p => (Number(p.sold_qty) > 0) || (Number(p.returned_qty) > 0));
 
-      if (rows.length === 0) {
-        profitContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
-      } else {
-        const sumRevenue = rows.reduce((s, p) => s + (Number(p.net_revenue_ex_vat) || 0), 0);
-        const sumCost = rows.reduce((s, p) => s + (Number(p.net_cogs) || 0), 0);
-        const sumProfit = rows.reduce((s, p) => s + (Number(p.gross_profit) || 0), 0);
-        const avgMargin = sumRevenue > 0 ? (sumProfit / sumRevenue) * 100 : 0;
-
-        const summaryCardsHtml =
-          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:15px;">' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_revenue') + '</h3><p style="font-size:15px;">' + fmt(sumRevenue) + ' ' + state.storeSettings.currency + '</p></div>' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_cost') + '</h3><p style="font-size:15px;">' + fmt(sumCost) + ' ' + state.storeSettings.currency + '</p></div>' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_profit') + '</h3><p style="font-size:15px;color:' + (sumProfit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(sumProfit) + ' ' + state.storeSettings.currency + '</p></div>' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_avg_margin') + '</h3><p style="font-size:15px;">' + avgMargin.toFixed(1) + '%</p></div>' +
-          '</div>';
-
-        let html = summaryCardsHtml +
-          '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-            '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
-            '<th>' + tr('profit_sold_qty') + '</th>' +
-            '<th>' + tr('profit_returned_qty') + '</th>' +
-            '<th>' + tr('profit_net_qty') + '</th>' +
-            '<th>' + tr('profit_net_revenue') + '</th>' +
-            '<th>' + tr('profit_net_cogs') + '</th>' +
-            '<th>' + tr('profit_net_profit') + '</th>' +
-            '<th>' + tr('profit_margin_pct') + '</th>' +
-          '</tr></thead><tbody>';
-
-        rows.forEach(p => {
-          const profit = Number(p.gross_profit) || 0;
-          const margin = Number(p.margin_pct) || 0;
-          const profitClass = profit < 0 ? 'red-text' : '';
-          const marginColor = margin < 10 ? '#c0392b' : (margin >= 30 ? '#17643a' : '#b8860b');
-          const rowBg = profit < 0 ? ' style="background:#fef2f2"' : '';
-          html += '<tr' + rowBg + '>' +
-            '<td>' + escapeHTML(p.product_name || '-') + '</td>' +
-            '<td>' + (Number(p.sold_qty) || 0) + '</td>' +
-            '<td>' + (Number(p.returned_qty) || 0) + '</td>' +
-            '<td><b>' + (Number(p.net_qty) || 0) + '</b></td>' +
-            '<td>' + fmt(p.net_revenue_ex_vat) + '</td>' +
-            '<td>' + fmt(p.net_cogs) + '</td>' +
-            '<td class="' + profitClass + '"><b>' + fmt(profit) + '</b></td>' +
-            '<td style="color:' + marginColor + ';font-weight:bold;">' + margin.toFixed(1) + '%</td>' +
-          '</tr>';
-        });
-        html += '</tbody></table></div>';
-
-        html += '<p style="margin-top:12px;padding:10px;background:#f1f6f8;border-left:3px solid #176b70;border-radius:6px;font-size:12px;line-height:1.7;color:#4a5f70;">' +
-          '<b>' + tr('profit_report_note_title') + ':</b> ' + tr('profit_report_note_body') +
-        '</p>';
-
-        profitContainer.innerHTML = html;
+    if (rows.length === 0) {
+      profitContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
+    } else {
+      // ✅ v7.4 — Banner عند تفعيل الـ pagination
+      let bannerHtml = '';
+      if (state.salesDataLimited) {
+        bannerHtml = '<div style="background:#fff8e1;border-left:4px solid #b8860b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#7a5c00;line-height:1.6;">⚠️ ' + tr('profit_data_limited_note') + '</div>';
       }
-    } catch (e) {
-      console.warn('Product profit report failed:', e);
-      profitContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_data') + '</p>';
+
+      const sumRevenue = rows.reduce((s, p) => s + (Number(p.net_revenue_ex_vat) || 0), 0);
+      const sumCost = rows.reduce((s, p) => s + (Number(p.net_cogs) || 0), 0);
+      const sumProfit = rows.reduce((s, p) => s + (Number(p.gross_profit) || 0), 0);
+      const avgMargin = sumRevenue > 0 ? (sumProfit / sumRevenue) * 100 : 0;
+
+      const summaryCardsHtml =
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:15px;">' +
+          '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_revenue') + '</h3><p style="font-size:15px;">' + fmt(sumRevenue) + ' ' + state.storeSettings.currency + '</p></div>' +
+          '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_cost') + '</h3><p style="font-size:15px;">' + fmt(sumCost) + ' ' + state.storeSettings.currency + '</p></div>' +
+          '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_profit') + '</h3><p style="font-size:15px;color:' + (sumProfit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(sumProfit) + ' ' + state.storeSettings.currency + '</p></div>' +
+          '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_avg_margin') + '</h3><p style="font-size:15px;">' + avgMargin.toFixed(1) + '%</p></div>' +
+        '</div>';
+
+      let html = bannerHtml + summaryCardsHtml +
+        '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
+          '<th>' + tr('profit_sold_qty') + '</th>' +
+          '<th>' + tr('profit_returned_qty') + '</th>' +
+          '<th>' + tr('profit_net_qty') + '</th>' +
+          '<th>' + tr('profit_net_revenue') + '</th>' +
+          '<th>' + tr('profit_net_cogs') + '</th>' +
+          '<th>' + tr('profit_net_profit') + '</th>' +
+          '<th>' + tr('profit_margin_pct') + '</th>' +
+        '</tr></thead><tbody>';
+
+      rows.forEach(p => {
+        const profit = Number(p.gross_profit) || 0;
+        const margin = Number(p.margin_pct) || 0;
+        const profitClass = profit < 0 ? 'red-text' : '';
+        const marginColor = margin < 10 ? '#c0392b' : (margin >= 30 ? '#17643a' : '#b8860b');
+        const rowBg = profit < 0 ? ' style="background:#fef2f2"' : '';
+        html += '<tr' + rowBg + '>' +
+          '<td>' + escapeHTML(p.product_name || '-') + '</td>' +
+          '<td>' + (Number(p.sold_qty) || 0) + '</td>' +
+          '<td>' + (Number(p.returned_qty) || 0) + '</td>' +
+          '<td><b>' + (Number(p.net_qty) || 0) + '</b></td>' +
+          '<td>' + fmt(p.net_revenue_ex_vat) + '</td>' +
+          '<td>' + fmt(p.net_cogs) + '</td>' +
+          '<td class="' + profitClass + '"><b>' + fmt(profit) + '</b></td>' +
+          '<td style="color:' + marginColor + ';font-weight:bold;">' + margin.toFixed(1) + '%</td>' +
+        '</tr>';
+      });
+      html += '</tbody></table></div>';
+
+      html += '<p style="margin-top:12px;padding:10px;background:#f1f6f8;border-left:3px solid #176b70;border-radius:6px;font-size:12px;line-height:1.7;color:#4a5f70;">' +
+        '<b>' + tr('profit_report_note_title') + ':</b> ' + tr('profit_report_note_body') +
+      '</p>';
+
+      profitContainer.innerHTML = html;
     }
+  } catch (e) {
+    console.warn('Product profit report failed:', e);
+    profitContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_data') + '</p>';
   }
 }
 

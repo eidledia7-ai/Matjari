@@ -427,7 +427,8 @@ vat_collected: "إجمالي الضريبة المحصلة",
   shift_cash_expenses:           "مصروفات الدرج",
   shift_expected_total:          "صافي الكاش المتوقع",
   shift_vat_collected:           "الضريبة المحصلة",
-  shift_reconciliation_mismatch: "تحذير: يوجد اختلاف بين الحساب اليدوي وحساب financeCore — راجع البيانات."
+  shift_reconciliation_mismatch: "تحذير: يوجد اختلاف بين الحساب اليدوي وحساب financeCore — راجع البيانات.",
+  profit_data_limited_note: "هذا التقرير يعتمد على آخر 30 يوماً فقط (بحد أقصى 500 فاتورة). التقارير الملخصة (المبيعات/المصروفات) تعرض كل الفترات عبر السيرفر."
 },
    
         en: {
@@ -1028,7 +1029,8 @@ vat_collected: "Total VAT Collected",
   shift_cash_expenses:           "Drawer Expenses",
   shift_expected_total:          "Expected Cash",
   shift_vat_collected:           "VAT Collected",
-  shift_reconciliation_mismatch: "Warning: Mismatch detected between manual breakdown and financeCore — please review data."
+  shift_reconciliation_mismatch: "Warning: Mismatch detected between manual breakdown and financeCore — please review data.",
+  profit_data_limited_note: "This report covers only the last 30 days (max 500 invoices). Summary reports (sales/expenses) cover all periods via the server.",
 }
 };
 /* ============ خطط الاشتراك (مركزية) ============ */
