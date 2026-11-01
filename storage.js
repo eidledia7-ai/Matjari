@@ -1,4 +1,4 @@
-/* ============ محرك المزامنة (Sync Engine) - v7.4 ============ */
+/* ============ محرك المزامنة (Sync Engine) - v7.6 ============ */
 
 // ✅ v7.4 — ثوابت الـ pagination
 const SYNC_SALES_LIMIT   = 500;
@@ -48,7 +48,7 @@ async function syncDown(ownerId) {
   const loadedSaleIds = (state.sales || []).map(s => s.id);
 
   // ═══════════════════════════════════════════════════════
-  // B) returns — آخر 30 يوماً، بحد أقصى 500 (فلترة بـ date)
+  // B) returns — آخر 30 يوماً، بحد أقصى 500
   // ═══════════════════════════════════════════════════════
   try {
     const { data, error } = await supabaseClient
@@ -89,14 +89,14 @@ async function syncDown(ownerId) {
     state.auditLogs = (data || []).map(row => ({
       id: row.id, action: row.action, details: row.details,
       date: row.created_at, userId: row.user_id, role: row.role,
-      uploaded: true // ✅ v7.4 — السجلات القادمة من السيرفر مترفعة بالفعل
+      uploaded: true 
     }));
   } catch (err) {
     console.warn('SyncDown audit_logs failed:', err.message);
   }
 
   // ═══════════════════════════════════════════════════════
-  // D) stock_moves — آخر 500 (فلترة بـ date)
+  // D) stock_moves — آخر 500
   // ═══════════════════════════════════════════════════════
   try {
     const { data, error } = await supabaseClient
@@ -117,7 +117,7 @@ async function syncDown(ownerId) {
   }
 
   // ═══════════════════════════════════════════════════════
-  // E) الجداول الكاملة (بدون pagination — صغيرة نسبياً)
+  // E) الجداول الكاملة
   // ═══════════════════════════════════════════════════════
   const fullTables = [
     { name: 'products', key: 'products' },
@@ -147,7 +147,12 @@ async function syncDown(ownerId) {
             permissions: data.permissions || {},
             vatEnabled: data.vat_enabled === true,
             vatRate: Number(data.vat_rate) || 0,
-            vatMode: data.vat_mode || 'inclusive'
+            vatMode: data.vat_mode || 'inclusive',
+            // ✅ v7.6 — Auto Backup
+            autoBackupEnabled:   data.auto_backup_enabled === true,
+            autoBackupInterval:  data.auto_backup_interval || 'daily',
+            autoBackupRetention: Number(data.auto_backup_retention) || 7,
+            lastAutoBackupAt:    data.last_auto_backup_at || null
           };
         }
       } else {
@@ -188,7 +193,7 @@ async function syncDown(ownerId) {
   }
 
   // ═══════════════════════════════════════════════════════
-  // G) sale_items — فقط للفواتير المحمّلة، على دفعات (chunks)
+  // G) sale_items
   // ═══════════════════════════════════════════════════════
   try {
     if (loadedSaleIds.length === 0) {
@@ -233,7 +238,7 @@ async function syncDown(ownerId) {
   }
 
   // ═══════════════════════════════════════════════════════
-  // H) ✅ v7.4 — أرصدة العملاء عبر RPC (دقيقة بعد الـ pagination)
+  // H) أرصدة العملاء
   // ═══════════════════════════════════════════════════════
   try {
     const { data, error } = await supabaseClient.rpc('get_all_customer_balances', {
@@ -261,12 +266,14 @@ async function syncUp(ownerId) {
       vat_enabled: !!state.storeSettings.vatEnabled,
       vat_rate: Number(state.storeSettings.vatRate) || 0,
       vat_mode: state.storeSettings.vatMode || 'inclusive',
+      auto_backup_enabled: !!state.storeSettings.autoBackupEnabled,
+      auto_backup_interval: state.storeSettings.autoBackupInterval || 'daily',
+      auto_backup_retention: Number(state.storeSettings.autoBackupRetention) || 7,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
 
-    // ✅ v7.4 — رفع سجلات النشاط الجديدة فقط (تجنب خطأ 409 والـ 403)
     for (const log of state.auditLogs) {
-      if (log.uploaded) continue; // تخطي المرفوع مسبقاً
+      if (log.uploaded) continue; 
       if (log.userId && log.userId !== state.currentUser.id) continue;
       try {
         const { error } = await supabaseClient.from('audit_logs').insert({
@@ -277,7 +284,7 @@ async function syncUp(ownerId) {
         if (!error) {
           log.uploaded = true;
         } else if (error.code === '23505') {
-          log.uploaded = true; // موجود بالفعل، نعتبره مرفوع
+          log.uploaded = true; 
         } else {
           console.warn('Audit log upload failed', error); 
         }
@@ -301,7 +308,8 @@ function saveData() {
       customerBalances: state.customerBalances || {},
       salesDataLimited: state.salesDataLimited || false,
       salesDataFromDate: state.salesDataFromDate || null,
-      returnsDataLimited: state.returnsDataLimited || false
+      returnsDataLimited: state.returnsDataLimited || false,
+      lastAutoBackupAt: state.storeSettings?.lastAutoBackupAt || null
     };
     localStorage.setItem(key, JSON.stringify(cache));
   } catch (e) {}

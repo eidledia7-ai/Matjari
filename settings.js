@@ -25,7 +25,7 @@ function loadStoreSettings() {
   const printTypeEl = document.getElementById('storePrintType');
   if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
 
-  // ✅ [VAT] تحميل إعدادات الضريبة (يدعم camelCase و snake_case)
+  // ✅ [VAT] تحميل إعدادات الضريبة
   const vatEnabledVal = (s.vatEnabled ?? s.vat_enabled ?? false) === true;
   const vatRateVal = Number(s.vatRate ?? s.vat_rate ?? 0) || 0;
   const vatModeVal = s.vatMode || s.vat_mode || 'inclusive';
@@ -33,16 +33,34 @@ function loadStoreSettings() {
   const vatEnabledEl = document.getElementById('storeVatEnabled');
   if (vatEnabledEl) vatEnabledEl.checked = vatEnabledVal;
   
-  // استخدام String() بدل || '' عشان القيمة 0 تظهر صح
   const vatRateEl = document.getElementById('storeVatRate');
   if (vatRateEl) vatRateEl.value = String(vatRateVal);
   
   const vatModeEl = document.getElementById('storeVatMode');
   if (vatModeEl) vatModeEl.value = vatModeVal;
   
-  // إظهار/إخفاء الحقول الفرعية بناءً على التفعيل
   const vatFieldsEl = document.getElementById('storeVatFields');
   if (vatFieldsEl) vatFieldsEl.style.display = vatEnabledVal ? 'block' : 'none';
+  
+  // ✅ v7.6 — Auto Backup
+  const abEnabledEl = document.getElementById('autoBackupEnabled');
+  if (abEnabledEl) abEnabledEl.checked = !!s.autoBackupEnabled;
+
+  const abIntervalEl = document.getElementById('autoBackupInterval');
+  if (abIntervalEl) abIntervalEl.value = s.autoBackupInterval || 'daily';
+
+  const abRetentionEl = document.getElementById('autoBackupRetention');
+  if (abRetentionEl) abRetentionEl.value = String(Number(s.autoBackupRetention) || 7);
+
+  const abStatusEl = document.getElementById('autoBackupStatus');
+  if (abStatusEl) {
+    if (s.lastAutoBackupAt) {
+      const d = new Date(s.lastAutoBackupAt);
+      abStatusEl.textContent = tr('last_auto_backup') + ': ' + d.toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG');
+    } else {
+      abStatusEl.textContent = tr('no_auto_backup_yet');
+    }
+  }
   
   const preview = document.getElementById('storeLogoPreview');
   if (preview && s.logo) { preview.src = s.logo; preview.style.display = 'block'; }
@@ -52,7 +70,6 @@ function loadStoreSettings() {
   if (dz) dz.style.display = (state.role === 'manager') ? 'block' : 'none';
 }
 
-// ✅ [VAT] إظهار/إخفاء حقول الضريبة بناءً على التفعيل
 function toggleVatFields() {
   const vatEnabledEl = document.getElementById('storeVatEnabled');
   const vatFieldsEl = document.getElementById('storeVatFields');
@@ -68,10 +85,13 @@ async function saveStoreSettings() {
   const permEditEl = document.getElementById('perm_canEditPrice');
   const permReturnEl = document.getElementById('perm_canReturn');
 
-  // ✅ [VAT] قراءة حقول الضريبة
   const vatEnabledEl = document.getElementById('storeVatEnabled');
   const vatRateEl = document.getElementById('storeVatRate');
   const vatModeEl = document.getElementById('storeVatMode');
+
+  const abEnabledEl = document.getElementById('autoBackupEnabled');
+  const abIntervalEl = document.getElementById('autoBackupInterval');
+  const abRetentionEl = document.getElementById('autoBackupRetention');
 
   const newSettings = {
     name: (document.getElementById('storeName').value || '').trim() || 'متجري',
@@ -83,10 +103,12 @@ async function saveStoreSettings() {
     pointsRate: parseFloat(document.getElementById('storePointsRate').value) || 0,
     pointValue: parseFloat(document.getElementById('storePointValue').value) || 0,
     printType: document.getElementById('storePrintType') ? document.getElementById('storePrintType').value : 'thermal',
-    // ✅ [VAT] إعدادات الضريبة (camelCase محلياً → snake_case في upsert)
     vatEnabled: vatEnabledEl ? !!vatEnabledEl.checked : false,
     vatRate: vatRateEl ? (parseFloat(vatRateEl.value) || 0) : 0,
     vatMode: vatModeEl ? (vatModeEl.value || 'inclusive') : 'inclusive',
+    autoBackupEnabled:   abEnabledEl ? !!abEnabledEl.checked : false,
+    autoBackupInterval:  abIntervalEl ? (abIntervalEl.value || 'daily') : 'daily',
+    autoBackupRetention: abRetentionEl ? Math.min(30, Math.max(3, parseInt(abRetentionEl.value) || 7)) : 7,
     permissions: {
       canDiscount: permDiscountEl ? permDiscountEl.checked : false,
       canDelete: permDeleteEl ? permDeleteEl.checked : false,
@@ -115,10 +137,12 @@ async function saveStoreSettings() {
       point_value: newSettings.pointValue,
       print_type: newSettings.printType,
       permissions: newSettings.permissions,
-      // ✅ [VAT] إعدادات الضريبة (snake_case للـ DB)
       vat_enabled: newSettings.vatEnabled,
       vat_rate: newSettings.vatRate,
       vat_mode: newSettings.vatMode,
+      auto_backup_enabled:   newSettings.autoBackupEnabled,
+      auto_backup_interval:  newSettings.autoBackupInterval,
+      auto_backup_retention: newSettings.autoBackupRetention,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
     
@@ -134,6 +158,11 @@ async function saveStoreSettings() {
 
   saveData();
   showNotification('تم حفظ بيانات المحل ✅');
+
+  // ✅ v7.6 — تشغيل فوري لو فُعّل للتو
+  if (newSettings.autoBackupEnabled && typeof checkAndRunAutoBackup === 'function') {
+    setTimeout(() => checkAndRunAutoBackup('load').catch(() => {}), 500);
+  }
 }
 
 function handleLogoUpload(event) {
@@ -170,7 +199,6 @@ async function verifyCurrentUserPassword(password) {
   } catch (e) { return false; }
 }
 
-/* ============ حماية منطقة الخطر ============ */
 async function safeClearAllDataPrompt() {
   if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
   const pass = prompt(tr('dlg_wipe_password'));
@@ -189,7 +217,6 @@ async function safeClearAllDataPrompt() {
 
   const ownerId = state.currentUser.id;
 
-  // ✅ [إصلاح جذري] مسح البيانات من السيرفر (شملنا كل الجداول)
   if (navigator.onLine && supabaseClient) {
     showLoading('جارٍ مسح البيانات...');
     const tablesToClear = [
@@ -208,7 +235,6 @@ async function safeClearAllDataPrompt() {
     hideLoading();
   }
 
-  // مسح البيانات المحلية
   state.products = [];
   state.sales = [];
   state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
@@ -238,7 +264,6 @@ async function safeClearAllDataPrompt() {
   showNotification('تم مسح كافة بيانات التطبيق بنجاح ✅');
 }
 
-/* ✅ [VAT] ربط حدث تغيير تفعيل الضريبة (يُضاف مرة واحدة عند تحميل الملف) */
 document.addEventListener('change', function(e) {
   if (e.target && e.target.id === 'storeVatEnabled') {
     toggleVatFields();

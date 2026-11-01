@@ -91,6 +91,8 @@ let state = {
     permissions: { canDiscount: false, canDelete: false, canEditPrice: false, canReturn: false }
   },
   subscription: { plan: 'trial', status: 'active', expires_at: null }
+  lastAutoBackupAt: null,
+_lastAutoBackupAttempt: 0,
 };
 
 let syncTimer = null;

@@ -632,6 +632,10 @@ async function closeShift() {
   renderShifts();
   renderDashboard();
   showNotification(tr('shift_closed'));
+  // ✅ v7.6 — نسخة تلقائية عند إغلاق الوردية
+if (typeof triggerAutoBackup === 'function') {
+  setTimeout(() => triggerAutoBackup('shift_close').catch(e => console.warn('shift auto-backup:', e)), 800);
+}
 }
 
 function renderShifts() {

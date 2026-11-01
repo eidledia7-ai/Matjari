@@ -248,8 +248,15 @@ async function openUserSession(user) {
 
     // التحميل من السيرفر (لو أونلاين)
     if (navigator.onLine && supabaseClient) {
-      await syncDown(ownerId);
-    }
+  await syncDown(ownerId);
+}
+
+// ✅ v7.6 — فحص النسخة التلقائية بعد المزامنة
+setTimeout(() => {
+  if (typeof checkAndRunAutoBackup === 'function') {
+    checkAndRunAutoBackup('load').catch(e => console.warn('auto-backup:', e));
+  }
+}, 2000);
 
     // لو saleItems مش موجود (كاش قديم)، ابنيه من sales[].items
     if (!state.saleItems || state.saleItems.length === 0) {
