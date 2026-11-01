@@ -404,7 +404,8 @@ vat_mode: "طريقة الاحتساب",
 vat_inclusive: "شاملة (داخل السعر)",
 vat_exclusive: "حصرية (تضاف فوق السعر)",
 vat_collected: "إجمالي الضريبة المحصلة",
-      en: {
+  },
+        en: {
     app_title: "Matjari - Integrated POS & Inventory System",
     login_title: "🔐 Login",
     login_hint: "Sign in to access your shop data",
