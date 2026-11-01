@@ -1,14 +1,14 @@
 /* ============ المصروفات ============ */
 async function saveExpense() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const name = document.getElementById('expenseName').value.trim();
   const amount = parseFloat(document.getElementById('expenseAmount').value);
   const date = document.getElementById('expenseDate').value || today();
   const notes = document.getElementById('expenseNotes').value.trim();
 
-  if (!name || isNaN(amount) || amount <= 0) return showNotification('أدخل البند والمبلغ بشكل صحيح', 'error');
+  if (!name || isNaN(amount) || amount <= 0) return showNotification(tr('invalid_expense'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
@@ -29,7 +29,7 @@ async function saveExpense() {
     const { error } = await supabaseClient.from('expenses').insert(newExpense);
     if (error) {
       console.warn('Expense upload failed:', error);
-      return showNotification('تعذر حفظ المصروف: ' + error.message, 'error');
+      return showNotification(tr('expense_save_fail') + error.message, 'error');
     }
   }
 
@@ -51,16 +51,17 @@ async function saveExpense() {
 
   if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
 
-  showNotification('تم حفظ المصروف ✅');
+  showNotification(tr('expense_saved'));
 }
 
 function renderExpenses() {
   const container = document.getElementById('expensesTable');
   if (!container) return;
   if (state.expenses.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد مصروفات.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_expenses') + '</p>';
     return;
   }
+  const delErrBtn = tr('delete_err_btn');
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_item_name">البند</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.expenses.forEach(function(e) {
     html += '<tr>' +
@@ -68,7 +69,7 @@ function renderExpenses() {
       '<td>' + escapeHTML(e.name) + '</td>' +
       '<td><b>' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
       '<td>' + escapeHTML(e.notes || '-') + '</td>' +
-      '<td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">حذف خطأ</button></td>' +
+      '<td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -121,12 +122,14 @@ function renderReports() {
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
   const avgInvoice = summary.invoices_count > 0 ? summary.gross_sales / summary.invoices_count : 0;
 
+  const en = currentLang === 'en';
+
   const cardsContainer = document.getElementById('reportCards');
   if (cardsContainer) {
     cardsContainer.innerHTML =
       '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_total_sales + '</h3><p>' + fmt(summary.gross_sales) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>عدد الفواتير</h3><p>' + summary.invoices_count + '</p></div>' +
-      '<div class="stat-card"><h3>متوسط الفاتورة</h3><p>' + fmt(avgInvoice) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + (en ? 'Invoices Count' : 'عدد الفواتير') + '</h3><p>' + summary.invoices_count + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + fmt(summary.expenses_total) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
@@ -138,13 +141,13 @@ function renderReports() {
   const daily = document.getElementById('dailyReport');
   if (daily) {
     daily.innerHTML =
-      '<p>عدد الفواتير: <b>' + summary.invoices_count + '</b></p>' +
+      '<p>' + (en ? 'Invoices Count:' : 'عدد الفواتير:') + ' <b>' + summary.invoices_count + '</b></p>' +
       '<p>' + tr('total_discounts') + ': <b>' + fmt(totalDiscount) + ' ' + state.storeSettings.currency + '</b></p>' +
-      '<p>صافي المبيعات (بعد المرتجعات): <b>' + fmt(summary.net_sales) + ' ' + state.storeSettings.currency + '</b></p>' +
-      '<p>إجمالي المرتجعات: <b>' + fmt(summary.returns_total) + ' ' + state.storeSettings.currency + '</b></p>' +
-      '<p>عدد المرتجعات: <b>' + filteredReturns.length + '</b></p>' +
-      '<p>عدد المصروفات: <b>' + (state.expenses.filter(e => { const d = (e.date||'').split('T')[0]; return (!from || d >= from) && (!to || d <= to); })).length + '</b></p>' +
-      '<p>التحصيلات: <b>' + fmt(summary.collections_total) + ' ' + state.storeSettings.currency + '</b></p>';
+      '<p>' + tr('net_sales_after_returns') + ' <b>' + fmt(summary.net_sales) + ' ' + state.storeSettings.currency + '</b></p>' +
+      '<p>' + tr('total_returns') + ' <b>' + fmt(summary.returns_total) + ' ' + state.storeSettings.currency + '</b></p>' +
+      '<p>' + tr('returns_count') + ' <b>' + filteredReturns.length + '</b></p>' +
+      '<p>' + tr('expenses_count') + ' <b>' + (state.expenses.filter(e => { const d = (e.date||'').split('T')[0]; return (!from || d >= from) && (!to || d <= to); })).length + '</b></p>' +
+      '<p>' + tr('collections_label') + ' <b>' + fmt(summary.collections_total) + ' ' + state.storeSettings.currency + '</b></p>';
   }
 
   const cashSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
@@ -156,7 +159,7 @@ function renderReports() {
   filteredSales.forEach(s => {
     const custId = s.customer_id || s.customerId;
     if (custId) {
-      const custName = state.customers.find(c => c.id === custId)?.name || 'نقدي';
+      const custName = state.customers.find(c => c.id === custId)?.name || tr('cash_label');
       if (custName !== 'عميل نقدي عام' && custName !== 'Cash Customer') {
         customerTotals[custName] = (customerTotals[custName] || 0) + Number(s.total || 0);
       }
@@ -167,19 +170,19 @@ function renderReports() {
   let detailsHtml = `
     <div class="grid-2 mt-20">
       <div class="card">
-        <h3>💵 تفاصيل طرق الدفع</h3>
+        <h3>${tr('payment_methods_details')}</h3>
         <table class="data-table">
           <tbody>
-            <tr><td>💵 مبيعات كاش</td><td><b>${fmt(cashSales)}</b></td></tr>
-            <tr><td>💳 مبيعات فيزا</td><td><b>${fmt(cardSales)}</b></td></tr>
-            <tr><td>📲 تحويلات بنكية</td><td><b>${fmt(transferSales)}</b></td></tr>
-            <tr style="background:#fef2f2"><td>⚠️ ديون (متبقي في الفواتير)</td><td><b class="red-text">${fmt(debtSales)}</b></td></tr>
+            <tr><td>${tr('cash_sales_label')}</td><td><b>${fmt(cashSales)}</b></td></tr>
+            <tr><td>${tr('visa_sales_label')}</td><td><b>${fmt(cardSales)}</b></td></tr>
+            <tr><td>${tr('bank_transfers_label')}</td><td><b>${fmt(transferSales)}</b></td></tr>
+            <tr style="background:#fef2f2"><td>${tr('debts_remaining_label')}</td><td><b class="red-text">${fmt(debtSales)}</b></td></tr>
           </tbody>
         </table>
       </div>
       
       <div class="card">
-        <h3>🏆 أفضل العملاء في الفترة</h3>
+        <h3>${tr('top_customers')}</h3>
         ${topCustomers.length > 0 ? `
         <table class="data-table">
           <tbody>
@@ -191,7 +194,7 @@ function renderReports() {
             `).join('')}
           </tbody>
         </table>
-        ` : '<p class="text-muted text-center" style="padding: 20px;">لا توجد مبيعات لعملاء مسجلين في هذه الفترة.</p>'}
+        ` : '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_cust_sales') + '</p>'}
       </div>
     </div>
   `;
@@ -217,7 +220,7 @@ function renderReports() {
     const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
 
     if (top.length === 0) {
-      topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">لا توجد مبيعات مسجلة في هذه الفترة.</p>';
+      topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
     } else {
       let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>#</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_value">القيمة</th></tr></thead><tbody>';
       top.forEach(function(t, i) {
@@ -306,22 +309,22 @@ function calculateShiftDiff() {
   const diff = actual - expected;
 
   if (diff < 0) {
-    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + ' (عجز ⚠️)';
+    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('shortage');
     diffEl.style.color = '#c62828';
   } else if (diff > 0) {
-    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + ' (زيادة 🟢)';
+    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('surplus');
     diffEl.style.color = '#2e7d32';
   } else {
-    diffEl.value = '0.00 ' + state.storeSettings.currency + ' (مطابق ✅)';
+    diffEl.value = '0.00 ' + state.storeSettings.currency + tr('matched');
     diffEl.style.color = '#17643a';
   }
 }
 
 async function closeShift() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const cashierName = (document.getElementById('shiftCashierName').value || '').trim();
-  if (!cashierName) return showNotification('اكتب اسم الكاشير', 'error');
+  if (!cashierName) return showNotification(tr('enter_cashier_name'), 'error');
 
   const actualCash = parseFloat(document.getElementById('shiftActualCash').value) || 0;
   const notes = (document.getElementById('shiftNotes').value || '').trim();
@@ -331,7 +334,7 @@ async function closeShift() {
     if (openShift) {
       state.currentShift = openShift;
     } else {
-      return showNotification('لا توجد وردية مفتوحة حالياً. ابدأ بيع أولاً.', 'warning');
+      return showNotification(tr('no_open_shift_sell'), 'warning');
     }
   }
 
@@ -399,7 +402,7 @@ async function closeShift() {
 
       if (error) {
         console.warn('Shift close upload failed:', error);
-        showNotification('تم الحفظ محلياً، وسيتم الرفع عند عودة الإنترنت.', 'warning');
+        showNotification(tr('save_offline_warning'), 'warning');
       }
     } catch (e) {
       console.warn('Shift close failed:', e);
@@ -432,14 +435,14 @@ async function closeShift() {
   calcExpectedShiftCash();
   renderShifts();
   renderDashboard();
-  showNotification('تم إغلاق الوردية وحفظها ✅');
+  showNotification(tr('shift_closed'));
 }
 
 function renderShifts() {
   const container = document.getElementById('shiftsTable');
   if (!container) return;
   if (state.shifts.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد ورديات مغلقة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_closed_shifts') + '</p>';
     return;
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_cashier">الكاشير</th><th data-i18n="th_invoice_count">عدد الفواتير</th><th data-i18n="th_expected_cash">الكاش المتوقع</th><th data-i18n="th_actual_cash">الكاش الفعلي</th><th data-i18n="th_difference">الفرق</th></tr></thead><tbody>';
@@ -502,19 +505,19 @@ function printShiftReport() {
 
   const en = currentLang === 'en';
   const labels = en ? {title:'Shift Report',shift:'Shift',cashier:'Cashier',start:'Start',end:'End',invoice:'Invoice',date:'Date',customer:'Customer',payment:'Payment',total:'Total',paid:'Paid',summary:'Summary',count:'Invoice Count',sales:'Total Sales',cash:'Cash Sales',visa:'Visa Sales',transfer:'Transfer Sales',drawerExpenses:'Drawer Expenses',expected:'Expected Cash',actual:'Actual Cash',difference:'Difference',thanks:'Generated by Matjari'} : {title:'تقرير الوردية',shift:'الوردية',cashier:'الكاشير',start:'بداية الوردية',end:'نهاية الوردية',invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',payment:'طريقة الدفع',total:'الإجمالي',paid:'المدفوع',summary:'الملخص',count:'عدد الفواتير',sales:'مجموع المبيعات',cash:'مبيعات كاش',visa:'مبيعات فيزا',transfer:'مبيعات تحويل',drawerExpenses:'مصروفات الدرج',expected:'الكاش المتوقع',actual:'النقدية الفعلية',difference:'الفرق',thanks:'صادر من متجري'};
-  const currency = escapeHTML(state.storeSettings.currency || 'ج.م');
+  const currency = escapeHTML(state.storeSettings.currency || (en ? 'EGP' : 'ج.م'));
   const shop = escapeHTML(state.storeSettings.name || (en ? 'My Store' : 'متجري'));
   const rows = sales.map(function(sale) {
     const custId = sale.customer_id || sale.customerId;
     const customer = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = sale.pay_method || sale.payMethod;
-    return '<tr><td>' + escapeHTML(sale.id) + '</td><td>' + escapeHTML(new Date(sale.date).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</td><td>' + escapeHTML(customer ? customer.name : (en ? 'Cash Customer' : 'عميل نقدي')) + '</td><td>' + escapeHTML(payMethod || '-') + '</td><td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + currency + '</td><td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + currency + '</td></tr>';
+    return '<tr><td>' + escapeHTML(sale.id) + '</td><td>' + escapeHTML(new Date(sale.date).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</td><td>' + escapeHTML(customer ? customer.name : tr('cash_customer')) + '</td><td>' + escapeHTML(payMethod || '-') + '</td><td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + currency + '</td><td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + currency + '</td></tr>';
   }).join('');
 
   const win = window.open('', '_blank', 'width=900,height=700');
-  if (!win) return showNotification(en ? 'Allow pop-ups to print the report.' : 'اسمح بالنوافذ المنبثقة لطباعة التقرير.', 'warning');
+  if (!win) return showNotification(tr('allow_popups_print'), 'warning');
 
-  win.document.write('<!doctype html><html lang="' + (en?'en':'ar') + '" dir="' + (en?'ltr':'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title><style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70}table{width:100%;border-collapse:collapse;margin:18px 0}th{background:#17364c;color:white}th,td{padding:9px;border:1px solid #ccd7df;text-align:' + (en?'left':'right') + '} .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary div{padding:12px;background:#f0f6f7;border-radius:8px} @media print{button{display:none}}</style></head><body><h1>' + shop + ' — ' + labels.title + '</h1><p>' + labels.shift + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || shift.id : (en?'Current shift':'الوردية الحالية')) + '</p><p>' + labels.cashier + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || '-' : '-') + '</p><p>' + labels.start + ': ' + (shift ? escapeHTML(new Date(shift.start_time || shift.startTime).toLocaleString(en?'en-US':'ar-EG')) : '-') + ' &nbsp; ' + labels.end + ': ' + escapeHTML(new Date(endTime).toLocaleString(en?'en-US':'ar-EG')) + '</p><h2>' + labels.summary + '</h2><section class="summary"><div>' + labels.count + ': <b>' + sales.length + '</b></div><div>' + labels.sales + ': <b>' + totalSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.cash + ': <b>' + cashSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.visa + ': <b>' + visaSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.transfer + ': <b>' + transferSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.drawerExpenses + ': <b>' + drawerExpensesTotal.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.expected + ': <b>' + expectedCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.actual + ': <b>' + actualCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.difference + ': <b>' + difference.toFixed(2) + ' ' + currency + '</b></div></section><table><thead><tr><th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + labels.thanks + '</p><button onclick="window.print()">' + (en?'Print':'طباعة') + '</button><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');
+  win.document.write('<!doctype html><html lang="' + (en?'en':'ar') + '" dir="' + (en?'ltr':'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title><style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70}table{width:100%;border-collapse:collapse;margin:18px 0}th{background:#17364c;color:white}th,td{padding:9px;border:1px solid #ccd7df;text-align:' + (en?'left':'right') + '} .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary div{padding:12px;background:#f0f6f7;border-radius:8px} @media print{button{display:none}}</style></head><body><h1>' + shop + ' — ' + labels.title + '</h1><p>' + labels.shift + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || shift.id : tr('current_shift_label')) + '</p><p>' + labels.cashier + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || '-' : '-') + '</p><p>' + labels.start + ': ' + (shift ? escapeHTML(new Date(shift.start_time || shift.startTime).toLocaleString(en?'en-US':'ar-EG')) : '-') + ' &nbsp; ' + labels.end + ': ' + escapeHTML(new Date(endTime).toLocaleString(en?'en-US':'ar-EG')) + '</p><h2>' + labels.summary + '</h2><section class="summary"><div>' + labels.count + ': <b>' + sales.length + '</b></div><div>' + labels.sales + ': <b>' + totalSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.cash + ': <b>' + cashSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.visa + ': <b>' + visaSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.transfer + ': <b>' + transferSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.drawerExpenses + ': <b>' + drawerExpensesTotal.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.expected + ': <b>' + expectedCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.actual + ': <b>' + actualCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.difference + ': <b>' + difference.toFixed(2) + ' ' + currency + '</b></div></section><table><thead><tr><th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + labels.thanks + '</p><button onclick="window.print()">' + tr('print_btn_text') + '</button><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');
   win.document.close();
 }
 
@@ -537,7 +540,7 @@ function toggleExportDateRange(show) {
 function executeExportAction(action) {
   const type = activeExportContext.type;
   const scopeEl = document.querySelector('input[name="exportScope"]:checked');
-  if (!scopeEl) return showNotification('اختر نطاق التصدير أولاً', 'warning');
+  if (!scopeEl) return showNotification(tr('select_export_scope'), 'warning');
   const scope = scopeEl.value;
   let from = '';
   let to = '';
@@ -559,81 +562,82 @@ function executeExportAction(action) {
 }
 
 function getFilteredDataForExport(tableType, from, to) {
+  const en = currentLang === 'en';
   let rawData = [];
   let title = '';
   let headers = [];
 
   switch (tableType) {
     case 'sales':
-      title = 'سجل المبيعات';
-      headers = ['رقم', 'التاريخ', 'العميل', 'الإجمالي', 'المدفوع', 'المتبقي'];
+      title = tr('sales_log');
+      headers = [tr('th_invoice_number'), tr('th_date'), tr('th_customer'), tr('th_total'), tr('th_paid'), tr('th_remaining')];
       rawData = filterByPeriod(state.sales, 'date', from, to).map(s => {
         const custId = s.customer_id || s.customerId;
         const cust = state.customers.find(c => c.id === custId);
         const isCash = cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer');
-        return [s.id, new Date(s.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), cust ? (isCash ? (translations[currentLang] || translations.ar).cash_customer : cust.name) : ((translations[currentLang] || translations.ar).cash_customer), (Number(s.total) || 0).toFixed(2), (Number(s.paid) || 0).toFixed(2), (Number(s.remaining) || 0).toFixed(2)];
+        return [s.id, new Date(s.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), cust ? (isCash ? (translations[currentLang] || translations.ar).cash_customer : cust.name) : ((translations[currentLang] || translations.ar).cash_customer), (Number(s.total) || 0).toFixed(2), (Number(s.paid) || 0).toFixed(2), (Number(s.remaining) || 0).toFixed(2)];
       });
       break;
     case 'products':
-      title = 'قائمة المنتجات';
-      headers = ['الاسم', 'الباركود', 'التصنيف', 'السعر', 'التكلفة', 'المخزون'];
+      title = tr('products_list');
+      headers = [tr('th_name'), tr('th_barcode'), tr('th_category'), tr('th_price'), tr('th_cost'), tr('th_stock')];
       rawData = state.products.map(p => [p.name, p.barcode || '-', p.category || '-', p.price, p.cost, p.stock]);
       break;
     case 'stockMoves':
-      title = 'حركات المخزون';
-      headers = ['التاريخ', 'المنتج', 'النوع', 'الكمية', 'قبل', 'بعد', 'السبب'];
-      rawData = filterByPeriod(state.stockMoves, 'date', from, to).map(m => [new Date(m.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), m.productName || m.product_name, m.type, m.qty, m.oldStock ?? m.old_stock, m.newStock ?? m.new_stock, m.reason]);
+      title = tr('moves_log');
+      headers = [tr('th_date'), tr('th_product'), (en ? 'Type' : 'النوع'), tr('th_quantity'), (en ? 'Before' : 'قبل'), (en ? 'After' : 'بعد'), tr('th_reason')];
+      rawData = filterByPeriod(state.stockMoves, 'date', from, to).map(m => [new Date(m.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), m.productName || m.product_name, m.type, m.qty, m.oldStock ?? m.old_stock, m.newStock ?? m.new_stock, m.reason]);
       break;
     case 'returns':
-      title = 'المرتجعات';
-      headers = ['التاريخ', 'الفاتورة', 'الصنف', 'الكمية', 'القيمة', 'طريقة الاسترداد', 'السبب'];
+      title = tr('returns_log');
+      headers = [tr('th_date'), tr('th_invoice_number'), tr('th_item'), tr('th_quantity'), tr('th_value'), tr('return_method'), tr('th_reason')];
       rawData = filterByPeriod(state.returns, 'date', from, to).map(r => [
-        new Date(r.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'),
+        new Date(r.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'),
         r.saleId || r.sale_id, r.productName || r.product_name, r.qty,
         (Number(r.total) || 0).toFixed(2), r.refundMethod || r.refund_method || '-', r.reason
       ]);
       break;
     case 'customers':
-      title = 'قائمة العملاء';
-      headers = ['الاسم', 'الهاتف', 'الديون'];
+      title = tr('customers_list');
+      headers = [tr('th_name'), tr('th_phone'), tr('th_debts')];
       rawData = state.customers.map(c => [c.name, c.phone || '-', financeCore.calcCustomerBalance(c.id).toFixed(2)]);
       break;
     case 'customerPayments':
-      title = 'تحصيلات العملاء';
-      headers = ['التاريخ', 'العميل', 'المبلغ', 'ملاحظات'];
+      title = tr('collections_log');
+      headers = [tr('th_date'), tr('th_customer'), tr('th_amount'), tr('th_notes')];
       rawData = filterByPeriod(state.customerPayments, 'date', from, to).map(p => [p.date, p.customerName || p.customer_name, (Number(p.amount) || 0).toFixed(2), p.notes || '-']);
       break;
     case 'suppliers':
-      title = 'قائمة الموردين';
-      headers = ['الاسم', 'الهاتف', 'المستحقات'];
+      title = tr('suppliers_list');
+      headers = [tr('th_name'), tr('th_phone'), tr('th_payables')];
       rawData = state.suppliers.map(s => [s.name, s.phone || '-', financeCore.calcSupplierBalance(s.id).toFixed(2)]);
       break;
     case 'purchases':
-      title = 'المشتريات';
-      headers = ['التاريخ', 'المورد', 'المنتج', 'الكمية', 'التكلفة', 'الإجمالي'];
+      title = tr('purchases_log');
+      headers = [tr('th_date'), tr('th_supplier'), tr('th_product'), tr('th_quantity'), tr('th_cost'), tr('th_total')];
       rawData = filterByPeriod(state.purchases, 'date', from, to).map(p => {
         const supId = p.supplier_id || p.supplierId;
         const sup = state.suppliers.find(s => s.id === supId);
-        return [new Date(p.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG'), sup ? sup.name : '-', p.productName || p.product_name, p.qty, p.cost, (Number(p.total) || 0).toFixed(2)];
+        return [new Date(p.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), sup ? sup.name : '-', p.productName || p.product_name, p.qty, p.cost, (Number(p.total) || 0).toFixed(2)];
       });
       break;
     case 'supplierPayments':
       title = tr('supplier_payments_title');
-      headers = ['التاريخ', 'المورد', 'المبلغ', 'ملاحظات'];
+      headers = [tr('th_date'), tr('th_supplier'), tr('th_amount'), tr('th_notes')];
       rawData = filterByPeriod(state.supplierPayments, 'date', from, to).map(p => [p.date, p.supplierName || p.supplier_name, (Number(p.amount) || 0).toFixed(2), p.notes || '-']);
       break;
     case 'expenses':
-      title = 'المصروفات';
-      headers = ['التاريخ', 'البند', 'المبلغ', 'ملاحظات'];
+      title = tr('expenses_log');
+      headers = [tr('th_date'), tr('th_item_name'), tr('th_amount'), tr('th_notes')];
       rawData = filterByPeriod(state.expenses, 'date', from, to).map(e => [e.date, e.name, (Number(e.amount) || 0).toFixed(2), e.notes || '-']);
       break;
     case 'shifts':
-      title = 'سجل الورديات';
-      headers = ['التاريخ', 'الكاشير', 'عدد الفواتير', 'الكاش المتوقع', 'الفعلي', 'الفرق'];
+      title = tr('shifts_log');
+      headers = [tr('th_date'), tr('th_cashier'), tr('th_invoice_count'), tr('th_expected_cash'), tr('th_actual_cash'), tr('th_difference')];
       rawData = filterByPeriod(state.shifts, ['endTime', 'end_time'], from, to).map(s => {
         const endT = s.end_time || s.endTime;
         const expected = Number(s.expected_cash ?? s.expectedCash ?? s.cash_sales ?? s.cashSales ?? 0);
-        return [new Date(endT).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG'), s.cashier_name || s.cashierName, s.saleCount || s.sale_count || 0, expected.toFixed(2), (Number(s.actual_cash ?? s.actualCash) || 0).toFixed(2), (Number(s.difference) || 0).toFixed(2)];
+        return [new Date(endT).toLocaleString(en ? 'en-US' : 'ar-EG'), s.cashier_name || s.cashierName, s.saleCount || s.sale_count || 0, expected.toFixed(2), (Number(s.actual_cash ?? s.actualCash) || 0).toFixed(2), (Number(s.difference) || 0).toFixed(2)];
       });
       break;
   }
@@ -651,7 +655,7 @@ function exportTableCSVFiltered(tableType, from, to) {
 
   let csv = '\uFEFF';
   csv += '"' + settings.name + ' - ' + data.title + '"\r\n';
-  csv += '"تاريخ التصدير: ' + new Date().toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '"\r\n\r\n';
+  csv += '"' + tr('print_date') + ': ' + new Date().toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '"\r\n\r\n';
   csv += data.headers.map(h => '"' + h + '"').join(',') + '\r\n';
   data.rows.forEach(r => {
     csv += r.map(c => '"' + String(c || '').replace(/"/g, '""') + '"').join(',') + '\r\n';
@@ -665,7 +669,7 @@ function exportTableCSVFiltered(tableType, from, to) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 100);
-  showNotification('تم تصدير ملف Excel ✅');
+  showNotification(tr('exported_excel'));
 }
 
 function sendTableWhatsAppFiltered(tableType, from, to) {
@@ -673,7 +677,7 @@ function sendTableWhatsAppFiltered(tableType, from, to) {
   const settings = state.storeSettings || { name: 'Matjari' };
   const esc = value => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
   let csv = '\uFEFF' + esc(settings.name + ' - ' + data.title) + '\r\n';
-  csv += esc((currentLang === 'en' ? 'Export date: ' : 'تاريخ التصدير: ') + new Date().toLocaleString()) + '\r\n';
+  csv += esc(tr('print_date') + ': ' + new Date().toLocaleString()) + '\r\n';
   csv += data.headers.map(esc).join(',') + '\r\n';
   data.rows.forEach(row => { csv += row.map(esc).join(',') + '\r\n'; });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -683,10 +687,11 @@ function sendTableWhatsAppFiltered(tableType, from, to) {
   a.download = (data.title || 'report').replace(/[\\/:*?"<>|]/g, '-') + '-' + today() + '.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showNotification(currentLang === 'en' ? 'File downloaded. You can now share it on WhatsApp.' : 'تم تنزيل الملف، يمكنك الآن مشاركته على واتساب', 'success');
+  showNotification(tr('file_downloaded_wa'), 'success');
 }
 
 function openPrintWindow(title, headers, rows, settings) {
+  const en = currentLang === 'en';
   const logoHTML = settings.logo
     ? '<img src="' + escapeHTML(settings.logo) + '" style="max-height:60px;max-width:150px">'
     : '';
@@ -700,19 +705,19 @@ function openPrintWindow(title, headers, rows, settings) {
   });
 
   if (rows.length === 0) {
-    bodyHTML = '<tr><td colspan="' + headers.length + '" style="text-align:center;padding:20px;color:#687b8b">لا توجد بيانات</td></tr>';
+    bodyHTML = '<tr><td colspan="' + headers.length + '" style="text-align:center;padding:20px;color:#687b8b">' + tr('no_data') + '</td></tr>';
   }
 
   const w = window.open('', '_blank');
-  if (!w) return showNotification('اسمح بالنوافذ المنبثقة', 'warning');
+  if (!w) return showNotification(tr('allow_popups'), 'warning');
 
   w.document.write(
-    '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>' + escapeHTML(title) + '</title>' +
+    '<!DOCTYPE html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + (en ? 'ltr' : 'rtl') + '"><head><meta charset="UTF-8"><title>' + escapeHTML(title) + '</title>' +
     '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Tahoma;background:#fff;padding:20px;color:#203447}' +
     '.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #17364c;padding-bottom:15px;margin-bottom:20px}' +
     '.header-info h1{margin:0 0 6px;font-size:20px;color:#17364c}.header-info p{margin:2px 0;font-size:12px;color:#687b8b}' +
     '.report-title{text-align:center;font-size:18px;font-weight:800;color:#17364c;margin:15px 0;padding:10px;background:#edf3f9;border-radius:8px}' +
-    'table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#17364c;color:#fff;padding:10px;text-align:right;font-size:12px}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#17364c;color:#fff;padding:10px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}' +
     'td{padding:8px 10px;border-bottom:1px solid #e9eef2;font-size:12px}tbody tr:nth-child(even){background:#f8fafb}' +
     '.meta{margin-top:20px;text-align:center;font-size:11px;color:#687b8b;padding-top:15px;border-top:1px dashed #dce3ec}' +
     '.actions{margin-top:20px;text-align:center}.actions button{padding:10px 20px;border:0;border-radius:8px;font-weight:700;cursor:pointer;background:#176b70;color:#fff}' +
@@ -723,8 +728,8 @@ function openPrintWindow(title, headers, rows, settings) {
     '</div><div>' + logoHTML + '</div></div>' +
     '<div class="report-title">' + escapeHTML(title) + '</div>' +
     '<table><thead><tr>' + headerHTML + '</tr></thead><tbody>' + bodyHTML + '</tbody></table>' +
-    '<div class="meta">عدد السجلات: ' + rows.length + ' | تاريخ الطباعة: ' + new Date().toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</div>' +
-    '<div class="actions"><button onclick="window.print()">🖨️ طباعة</button></div>' +
+    '<div class="meta">' + tr('records_count') + rows.length + ' | ' + tr('print_date') + ' ' + new Date().toLocaleString(en ? 'en-US' : 'ar-EG') + '</div>' +
+    '<div class="actions"><button onclick="window.print()">' + tr('print_btn_text') + '</button></div>' +
     '</body></html>'
   );
   w.document.close();
@@ -769,14 +774,15 @@ function printExpensesDetail() {
 
   const filtered = filterByPeriod(state.expenses, 'date', from, to);
   const total = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
+  const en = currentLang === 'en';
 
   let html = `
-    <html dir="rtl"><head><title>تقرير المصروفات</title>
-    <style>body{font-family:Tahoma;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:right;}</style>
+    <html dir="${en ? 'ltr' : 'rtl'}" lang="${en ? 'en' : 'ar'}"><head><title>${tr('expense_report')}</title>
+    <style>body{font-family:Tahoma;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:${en ? 'left' : 'right'};}</style>
     </head><body>
-    <h2>تقرير المصروفات (${from || 'البداية'} - ${to || 'النهاية'})</h2>
-    <h3>الإجمالي: ${total.toFixed(2)} ${state.storeSettings.currency}</h3>
-    <table><tr><th>التاريخ</th><th>البند</th><th>المبلغ</th><th>ملاحظات</th></tr>
+    <h2>${tr('expense_report')} (${from || (en ? 'Start' : 'البداية')} - ${to || (en ? 'End' : 'النهاية')})</h2>
+    <h3>${tr('total_label')} ${total.toFixed(2)} ${state.storeSettings.currency}</h3>
+    <table><tr><th>${tr('th_date')}</th><th>${tr('th_item_name')}</th><th>${tr('th_amount')}</th><th>${tr('th_notes')}</th></tr>
   `;
 
   filtered.forEach(e => {
@@ -800,12 +806,14 @@ function printReportSummary() {
 
   const detailsContainer = document.getElementById('activityDetailsReport');
   const detailsHtml = detailsContainer ? detailsContainer.innerHTML : '';
+  const en = currentLang === 'en';
 
   const w = window.open('', '_blank');
+  if (!w) return showNotification(tr('allow_popups'), 'warning');
 
   const printStyles = `
     <style>
-      body { font-family: Tahoma, Arial, sans-serif; padding: 20px; direction: rtl; }
+      body { font-family: Tahoma, Arial, sans-serif; padding: 20px; direction: ${en ? 'ltr' : 'rtl'}; }
       h2 { text-align: center; margin-bottom: 30px; }
       .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
       .stat-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; text-align: center; background: #fff; page-break-inside: avoid; }
@@ -813,7 +821,7 @@ function printReportSummary() {
       .stat-card p { margin: 0; font-size: 20px; font-weight: bold; color: #000; }
       table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
       tr { page-break-inside: avoid; page-break-after: auto; }
-      th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+      th, td { border: 1px solid #ddd; padding: 8px; text-align: ${en ? 'left' : 'right'}; }
       th { background: #f5f5f5; }
       .card h3 { font-size: 16px; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 20px;}
       .no-print, button, input, select { display: none !important; }
@@ -821,16 +829,16 @@ function printReportSummary() {
   `;
 
   w.document.write(`
-    <html dir="rtl">
-    <head><title>تقرير مالي - ${escapeHTML(state.storeSettings.name)}</title>${printStyles}</head>
+    <html dir="${en ? 'ltr' : 'rtl'}" lang="${en ? 'en' : 'ar'}">
+    <head><title>${tr('financial_report')} ${escapeHTML(state.storeSettings.name)}</title>${printStyles}</head>
     <body>
-      <h2>التقرير المالي - ${escapeHTML(state.storeSettings.name)}</h2>
+      <h2>${tr('financial_report')} ${escapeHTML(state.storeSettings.name)}</h2>
       
       <div>${container.innerHTML}</div>
       
       ${detailsHtml ? `<div>${detailsHtml}</div>` : ''}
       
-      ${topHtml ? `<div style="margin-top: 20px;"><h3>الأكثر مبيعاً</h3>${topHtml}</div>` : ''}
+      ${topHtml ? `<div style="margin-top: 20px;"><h3>${tr('top_selling')}</h3>${topHtml}</div>` : ''}
       
       <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
     </body>
