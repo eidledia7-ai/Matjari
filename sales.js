@@ -107,7 +107,6 @@ function renderCart() {
   if (pointsUsed > availablePoints) { pointsUsed = availablePoints; pointsInput.value = pointsUsed; }
   const pointsDiscount = Math.max(0, Math.min(pointsUsed * pointValue, subtotal - discountAmount));
 
-  // ✅ [VAT] المبلغ الأساسي (قبل الضريبة في وضع Exclusive، شاملاً في Inclusive)
   const base = Math.max(0, subtotal - discountAmount - pointsDiscount);
   const vat = financeCore.calcVatForSale(base);
   const finalTotal = vat.total;
@@ -119,7 +118,6 @@ function renderCart() {
       const pDiscLabel = currentLang === 'en' ? 'Points Discount: -' : 'خصم نقاط: -';
       totalText += ' (' + pDiscLabel + pointsDiscount.toFixed(2) + ')';
     }
-    // ✅ [VAT] إظهار قيمة الضريبة ضمن الإجمالي (توضيحي فقط)
     if (vat.vat_amount > 0) {
       const vatLabel = currentLang === 'en' ? 'VAT' : 'ضريبة';
       totalText += ' [' + vatLabel + ': ' + vat.vat_amount.toFixed(2) + ']';
@@ -221,7 +219,6 @@ async function ensureOpenShift() {
    دالة مساعدة: سؤال المستخدم عن طريقة الاسترداد للمرتجع
    ============================================================ */
 function askRefundMethod(sale, soldItem, qty) {
-  // ✅ [VAT] حساب قيمة المرتجع شاملة الضريبة باستخدام Snapshot الفاتورة الأصلية
   const baseReturn = (Number(soldItem.price) || 0) * qty;
   const saleVatRate = Number(sale.vat_rate) || 0;
   const saleVatMode = sale.vat_mode || 'inclusive';
@@ -253,6 +250,7 @@ async function deductCustomerPoints(customerId, pointsToDeduct) {
   cust.points = Math.max(0, (Number(cust.points) || 0) - pointsToDeduct);
   // ⚠️ ممنوع UPDATE للسيرفر — trigger handle_sale_points بيتولى الحساب
 }
+
 /* ============================================================
    إتمام البيع
    ============================================================ */
@@ -295,12 +293,10 @@ async function completeSale() {
   const pointValue = state.storeSettings.pointValue || 0;
   const pointsDiscount = Math.max(0, Math.min(pointsUsed * pointValue, subtotal - discountAmount));
 
-  // ✅ [VAT] المبلغ الأساسي قبل الضريبة (في وضع Exclusive)
   const base = Math.max(0, subtotal - discountAmount - pointsDiscount);
   const vat = financeCore.calcVatForSale(base);
   const total = vat.total;
 
-  // vat_mode للـ Snapshot (نحفظه دائماً — نفس القيمة اللي طُبِّقت فعلياً)
   const vatMode = state.storeSettings.vatMode || state.storeSettings.vat_mode || 'inclusive';
 
   const paidInput = document.getElementById('salePaid');
@@ -355,7 +351,6 @@ async function completeSale() {
     cashier: state.currentUser.email,
     shift_id: shiftId,
     shiftId: shiftId,
-    // ✅ [VAT] Snapshot
     vat_rate: vat.vat_rate,
     vat_amount: vat.vat_amount,
     vat_mode: vatMode
@@ -363,7 +358,6 @@ async function completeSale() {
 
   if (navigator.onLine && supabaseClient) {
     try {
-      // ⚠️ remaining و net_total = GENERATED COLUMNS — ممنوع نبعتهم
       const { error: saleErr } = await supabaseClient.from('sales').insert({
         id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
         discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
@@ -371,7 +365,6 @@ async function completeSale() {
         customer_id: saleCustomerId,
         pay_method: saleObj.payMethod,
         notes: saleObj.notes, cashier: saleObj.cashier, shift_id: shiftId,
-        // ✅ [VAT] Snapshot
         vat_rate: vat.vat_rate,
         vat_amount: vat.vat_amount,
         vat_mode: vatMode
@@ -416,10 +409,6 @@ async function completeSale() {
     if (prod) prod.stock = Math.max(0, Number(prod.stock) - item.qty);
   });
 
-  // ══════════════════════════════════════════════════════════════
-  // حساب النقاط محلياً للعرض فقط — trigger handle_sale_points بيتولى السيرفر
-  // ✅ النقاط تُحسب على total (شامل الضريبة) — كما هو معتمد
-  // ══════════════════════════════════════════════════════════════
   if (saleObj.customerId) {
     const cust = state.customers.find(c => c.id === saleObj.customerId);
     if (cust) {
@@ -434,8 +423,14 @@ async function completeSale() {
           setTimeout(() => showNotification(tr('points_earned_1') + earnedPoints + tr('points_earned_2'), 'info'), 1500);
         }
       }
-      // ⚠️ ممنوع نبعت UPDATE — trigger في السيرفر بيتولى، والـ syncDown هيجيب القيمة النهائية
     }
+  }
+
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مطابق لـ get_all_customer_balances)
+  // remaining = total - paid (يُضاف للدين الحقيقي)
+  if (saleObj.customerId && saleObj.remaining > 0) {
+    state.customerBalances = state.customerBalances || {};
+    state.customerBalances[saleObj.customerId] = (Number(state.customerBalances[saleObj.customerId]) || 0) + saleObj.remaining;
   }
 
   if (discountAmount > 0 && typeof addAuditLog === 'function') {

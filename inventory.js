@@ -344,7 +344,6 @@ async function saveReturn() {
 
   if (qty > item.qty - alreadyReturned) return showNotification(tr('qty_exceeds_remaining'), 'error');
 
-  // 1) ضمان وردية مفتوحة
   let shiftId;
   try {
     shiftId = await ensureOpenShift();
@@ -352,28 +351,24 @@ async function saveReturn() {
     return showNotification((currentLang === 'en' ? 'Failed to open shift: ' : 'تعذر فتح وردية: ') + (e.message || ''), 'error');
   }
 
-  // ✅ [إصلاح جذري] لو الوردية مش موجودة (فشل الحفظ في السيرفر)، نمنع المرتجع
   if (!shiftId) {
     return showNotification(tr('shift_create_fail'), 'error');
   }
 
-  // 2) تحديد طريقة الاسترداد (cash/credit)
   const refundMethod = askRefundMethod(sale, item, qty);
   if (refundMethod === null) return;
 
-  // 3) ✅ [VAT] حساب قيمة المرتجع شاملة الضريبة باستخدام Snapshot الفاتورة الأصلية
   const unitPrice = Number(item.price) || 0;
   const baseReturn = unitPrice * qty;
   const saleVatRate = Number(sale.vat_rate) || 0;
   const saleVatMode = sale.vat_mode || 'inclusive';
   const vatSnap = financeCore.calcVatFromSnapshot(baseReturn, saleVatRate, saleVatMode);
-  const returnValue = vatSnap.total;         // ✅ شامل الضريبة — يدخل في returned_total
-  const returnVat   = vatSnap.vat_amount;    // ✅ Snapshot للضريبة في المرتجع
+  const returnValue = vatSnap.total;
+  const returnVat   = vatSnap.vat_amount;
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = sale.customer_id || sale.customerId || null;
 
-  // 4) بناء كائن المرتجع
   const newReturn = {
     id: uid('RET'),
     user_id: ownerId,
@@ -385,8 +380,8 @@ async function saveReturn() {
     productName: item.name,
     qty: qty,
     price: unitPrice,
-    total: returnValue,           // ✅ شامل الضريبة
-    vat_amount: returnVat,        // ✅ Snapshot جديد
+    total: returnValue,
+    vat_amount: returnVat,
     refund_method: refundMethod,
     refundMethod: refundMethod,
     shift_id: shiftId,
@@ -397,7 +392,6 @@ async function saveReturn() {
     date: new Date().toISOString()
   };
 
-  // 5) الحفظ في Supabase (الـ trigger handle_return_full هيعمل الباقي بدون تعديل)
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: retErr } = await supabaseClient.from('returns').insert({
@@ -409,7 +403,7 @@ async function saveReturn() {
         qty: newReturn.qty,
         price: newReturn.price,
         total: newReturn.total,
-        vat_amount: newReturn.vat_amount,   // ✅ جديد
+        vat_amount: newReturn.vat_amount,
         refund_method: newReturn.refund_method,
         shift_id: newReturn.shift_id,
         customer_id: newReturn.customer_id,
@@ -423,21 +417,21 @@ async function saveReturn() {
     }
   }
 
-  // 6) التحديث المحلي
   state.returns.unshift(newReturn);
 
-  // ⚠️ ملاحظة: remaining = total - paid (GENERATED COLUMN) — لا يتغير بالمرتجع
-  // فقط returned_total و net_total يتحدثوا
   if (sale) {
-    // ✅ returnValue صار شامل الضريبة → returned_total يُجمَع صحيحاً
     sale.returned_total = (Number(sale.returned_total) || 0) + returnValue;
     sale.returnedTotal = sale.returned_total;
     sale.net_total = Math.max(0, (Number(sale.total) || 0) - sale.returned_total);
     sale.netTotal = sale.net_total;
-    // remaining لا يتغير — total - paid لم يتغيرا
   }
 
-  // تحديث المخزون محلياً
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مرتجع credit فقط)
+  if (refundMethod === 'credit' && customerId) {
+    state.customerBalances = state.customerBalances || {};
+    state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - returnValue;
+  }
+
   const prod = state.products.find(function(p) { return p.id === prodId; });
   if (prod) {
     const before = Number(prod.stock) || 0;

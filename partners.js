@@ -15,27 +15,16 @@ async function saveCustomer() {
   const customerId = id || uid('CUST');
 
   const newCustomer = {
-    id: customerId,
-    user_id: ownerId,
-    name: name,
-    phone: phone,
+    id: customerId, user_id: ownerId, name: name, phone: phone,
     opening_debt: openingDebt,
     points: id ? (state.customers.find(c => c.id === id)?.points || 0) : 0
   };
 
   if (id) {
     const c = state.customers.find(function(item) { return item.id === id; });
-    if (c) {
-      c.name = name;
-      c.phone = phone;
-      c.openingDebt = openingDebt;
-      c.opening_debt = openingDebt;
-    }
+    if (c) { c.name = name; c.phone = phone; c.openingDebt = openingDebt; c.opening_debt = openingDebt; }
   } else {
-    state.customers.push({
-      id: customerId, name: name, phone: phone,
-      openingDebt: openingDebt, opening_debt: openingDebt, points: 0
-    });
+    state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt, points: 0 });
   }
 
   if (navigator.onLine && supabaseClient) {
@@ -73,7 +62,6 @@ function renderCustomers() {
       (c.phone || '').indexOf(search) !== -1;
   });
 
-  // قائمة اختيار العميل في التحصيل (بتعرض الدين الحقيقي)
   const paySel = document.getElementById('customerPaymentCustomer');
   if (paySel) {
     const currentVal = paySel.value;
@@ -82,7 +70,6 @@ function renderCustomers() {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
       const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
       const debtLabel = tr('debt_prefix');
-      // الدين الحقيقي من financeCore (openingDebt + sales.remaining - payments - returns.credit)
       const realDebt = financeCore.calcCustomerBalance(c.id);
       paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + realDebt.toFixed(2) + ')</option>';
     });
@@ -96,7 +83,6 @@ function renderCustomers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_debts">الديون</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(c) {
-    // الدين الحقيقي من financeCore
     const debtVal = financeCore.calcCustomerBalance(c.id);
     const debtClass = debtVal > 0 ? 'red-text' : '';
     const stmtBtn = tr('statement_btn');
@@ -125,10 +111,8 @@ async function deleteCustomer(id) {
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
     return showNotification(tr('cannot_delete_cash_cust'), 'warning');
   }
-
   if (state.customers.length <= 1) return showNotification(tr('cannot_delete_last_cust'), 'warning');
 
-  // استخدام الدين الحقيقي في تحذير الحذف
   const realDebt = financeCore.calcCustomerBalance(id);
   if (realDebt > 0) {
     const confirmMsg = tr('cust_has_debt_1') + realDebt.toFixed(2) + tr('cust_has_debt_2');
@@ -165,17 +149,14 @@ async function recordCustomerPayment() {
   const cust = state.customers.find(function(c) { return c.id === customerId; });
   if (!cust) return showNotification(tr('cust_not_found'), 'error');
 
-  // الدين الحقيقي من financeCore
   const currentDebt = financeCore.calcCustomerBalance(customerId);
 
   if (amount > currentDebt) {
     if (!confirm(tr('amount_exceeds_debt'))) return;
   }
 
-  // ملاحظة: لا نعدل openingDebt — الدين بيتحسب من sales.remaining - payments - returns.credit
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // ربط الدفعة بالوردية الحالية (لو فيه)
   let currentShiftId = null;
   if (state.currentShift) {
     currentShiftId = state.currentShift.id;
@@ -185,31 +166,14 @@ async function recordCustomerPayment() {
   }
 
   const newPayment = {
-    id: uid('CP'),
-    user_id: ownerId,
-    customer_id: customerId,
-    customer_name: cust.name,
-    amount: amount,
-    date: date,
-    notes: notes,
-    shift_id: currentShiftId,
-    pay_method: 'cash'
+    id: uid('CP'), user_id: ownerId, customer_id: customerId, customer_name: cust.name,
+    amount: amount, date: date, notes: notes, shift_id: currentShiftId, pay_method: 'cash'
   };
 
-  // التحديث المحلي (camel + snake للتوافقية)
   state.customerPayments.unshift({
-    id: newPayment.id,
-    customer_id: customerId,
-    customerId: customerId,
-    customer_name: cust.name,
-    customerName: cust.name,
-    amount: amount,
-    date: date,
-    notes: notes,
-    shift_id: currentShiftId,
-    shiftId: currentShiftId,
-    pay_method: 'cash',
-    payMethod: 'cash'
+    id: newPayment.id, customer_id: customerId, customerId: customerId,
+    customer_name: cust.name, customerName: cust.name, amount: amount, date: date, notes: notes,
+    shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
   });
 
   if (navigator.onLine && supabaseClient) {
@@ -222,6 +186,12 @@ async function recordCustomerPayment() {
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('record_customer_payment', { paymentId: newPayment.id, amount, customerId }, newPayment.id);
+  }
+
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مطابق لـ get_all_customer_balances)
+  if (customerId) {
+    state.customerBalances = state.customerBalances || {};
+    state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - amount;
   }
 
   saveData();
@@ -256,7 +226,6 @@ function renderCustomerPayments() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-
 /* ============ الموردون والمشتريات ============ */
 async function saveSupplier() {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
@@ -278,12 +247,7 @@ async function saveSupplier() {
 
   if (id) {
     const s = state.suppliers.find(function(item) { return item.id === id; });
-    if (s) {
-      s.name = name;
-      s.phone = phone;
-      s.openingDebt = openingDebt;
-      s.opening_debt = openingDebt;
-    }
+    if (s) { s.name = name; s.phone = phone; s.openingDebt = openingDebt; s.opening_debt = openingDebt; }
   } else {
     state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt });
   }
@@ -332,7 +296,6 @@ function renderSuppliers() {
   const container = document.getElementById('suppliersTable');
   if (!container) return;
 
-  // قائمة اختيار المورد في المشتريات
   const purSupSel = document.getElementById('purchaseSupplier');
   if (purSupSel) {
     const curVal = purSupSel.value;
@@ -343,20 +306,17 @@ function renderSuppliers() {
     if (curVal) purSupSel.value = curVal;
   }
 
-  // قائمة اختيار المورد في السداد (بتعرض المستحقات الحقيقية)
   const suppPaySel = document.getElementById('supplierPaymentSupplier');
   if (suppPaySel) {
     const curVal = suppPaySel.value;
     suppPaySel.innerHTML = '<option value="">' + tr('opt_select_supplier') + '</option>';
     state.suppliers.forEach(function(s) {
-      // المستحقات الحقيقية من financeCore
       const realBalance = financeCore.calcSupplierBalance(s.id);
       suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + tr('payables_prefix') + realBalance.toFixed(2) + tr('payables_prefix_end') + '</option>';
     });
     if (curVal) suppPaySel.value = curVal;
   }
 
-  // قائمة اختيار المنتج في المشتريات
   const purProdSel = document.getElementById('purchaseProduct');
   if (purProdSel) {
     const curVal = purProdSel.value;
@@ -377,7 +337,6 @@ function renderSuppliers() {
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_payables">المستحقات (له فلوس)</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.suppliers.forEach(function(s) {
-    // المستحقات الحقيقية من financeCore
     const debtVal = financeCore.calcSupplierBalance(s.id);
     const debtClass = debtVal > 0 ? 'green-text' : '';
     html += '<tr>' +
@@ -399,7 +358,6 @@ async function deleteSupplier(id) {
 
   const sup = state.suppliers.find(function(s) { return s.id === id; });
 
-  // استخدام الرصيد الحقيقي في تحذير الحذف
   const realBalance = financeCore.calcSupplierBalance(id);
   if (realBalance > 0) {
     const confirmMsg = tr('owe_supplier_1') + realBalance.toFixed(2) + tr('owe_supplier_2');
@@ -452,14 +410,6 @@ async function savePurchase() {
   let targetProdName = '';
   let newProductData = null;
 
-  // ⚠️ ملاحظة مهمة: الـ trigger handle_purchase بيعمل:
-  // 1) زيادة products.stock
-  // 2) حساب weighted average cost
-  // 3) إضافة stock_moves entry
-  // عشان منعملش double-counting، إحنا هنرفع المنتج للسيرفر بالبيانات الأصلية
-  // (من غير ما نضيف qty في stock) والـ trigger هيضيفها.
-  // لكن في الـ state المحلي، إحنا بنضيف qty عشان الأوفلاين.
-
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
     if (p) {
@@ -469,19 +419,14 @@ async function savePurchase() {
       if ((oldStock + qty) > 0) {
         newCost = ((oldStock * oldCost) + (qty * cost)) / (oldStock + qty);
       }
-
-      // التحديث المحلي (للأوفلاين والسرعة)
       p.stock = oldStock + qty;
       p.cost = newCost;
       targetProdName = p.name;
 
-      // ملاحظة: بنعمل update للمنتج في السيرفر بالـ cost الجديد بس (مش stock)
-      // الـ trigger handle_purchase هيزود stock تلقائياً
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('products').update({ cost: newCost }).eq('id', p.id);
       }
 
-      // إضافة حركة مخزون محلياً (الـ trigger بيضيفها في السيرفر تلقائياً)
       state.stockMoves.unshift({
         id: uid('SM'), date: new Date().toISOString(),
         product_id: p.id, productId: p.id,
@@ -493,7 +438,6 @@ async function savePurchase() {
       });
     }
   } else if (newName) {
-    // منتج جديد — بنعمله الأول عشان الـ trigger يقدر يعمل عليه update
     targetProdId = uid('PRD');
     newProductData = {
       id: targetProdId, user_id: ownerId, name: newName, barcode: '',
@@ -501,19 +445,16 @@ async function savePurchase() {
       stock: 0, min_stock: 5
     };
 
-    // التحديث المحلي
     state.products.push({
       id: targetProdId, name: newName, barcode: '', category: tr('general_cat'),
       price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5
     });
     targetProdName = newName;
 
-    // بنرفع المنتج للسيرفر بـ stock=0، والـ trigger هيضيف qty
     if (navigator.onLine && supabaseClient) {
       await supabaseClient.from('products').insert(newProductData);
     }
 
-    // إضافة حركة مخزون محلياً
     state.stockMoves.unshift({
       id: uid('SM'), date: new Date().toISOString(),
       product_id: targetProdId, productId: targetProdId,
@@ -530,37 +471,19 @@ async function savePurchase() {
   const total = qty * cost;
   const remaining = Math.max(0, total - paid);
 
-  // ملاحظة: لا نعدل sup.openingDebt — الرصيد بيتحسب من purchases.remaining - supplier_payments
-  // (financeCore.calcSupplierBalance و get_supplier_balance RPC بيعملوا ده)
-
   const newPurchase = {
-    id: uid('PUR'),
-    user_id: ownerId,
-    supplier_id: supplierId,
-    product_id: targetProdId,
-    product_name: targetProdName,
-    qty: qty,
-    cost: cost,
-    total: total,
-    paid: paid,
-    remaining: remaining,
+    id: uid('PUR'), user_id: ownerId, supplier_id: supplierId,
+    product_id: targetProdId, product_name: targetProdName,
+    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining,
     date: new Date().toISOString()
   };
 
   state.purchases.unshift({
-    id: newPurchase.id,
-    date: newPurchase.date,
-    supplier_id: supplierId,
-    supplierId: supplierId,
-    product_id: targetProdId,
-    productId: targetProdId,
-    product_name: targetProdName,
-    productName: targetProdName,
-    qty: qty,
-    cost: cost,
-    total: total,
-    paid: paid,
-    remaining: remaining
+    id: newPurchase.id, date: newPurchase.date,
+    supplier_id: supplierId, supplierId: supplierId,
+    product_id: targetProdId, productId: targetProdId,
+    product_name: targetProdName, productName: targetProdName,
+    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining
   });
 
   if (navigator.onLine && supabaseClient) {
@@ -635,28 +558,17 @@ async function recordSupplierPayment() {
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
   if (!sup) return showNotification(currentLang === 'en' ? 'Supplier not found' : 'المورد غير موجود', 'error');
 
-  // ملاحظة: لا نعدل openingDebt — الرصيد بيتحسب من purchases.remaining - supplier_payments
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
   const newPayment = {
-    id: uid('SUPP'),
-    user_id: ownerId,
-    supplier_id: supplierId,
-    supplier_name: sup.name,
-    amount: amount,
-    date: date,
-    notes: notes
+    id: uid('SUPP'), user_id: ownerId, supplier_id: supplierId,
+    supplier_name: sup.name, amount: amount, date: date, notes: notes
   };
 
   state.supplierPayments.unshift({
-    id: newPayment.id,
-    supplier_id: supplierId,
-    supplierId: supplierId,
-    supplier_name: sup.name,
-    supplierName: sup.name,
-    amount: amount,
-    date: date,
-    notes: notes
+    id: newPayment.id, supplier_id: supplierId, supplierId: supplierId,
+    supplier_name: sup.name, supplierName: sup.name,
+    amount: amount, date: date, notes: notes
   });
 
   if (navigator.onLine && supabaseClient) {
