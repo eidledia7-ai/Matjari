@@ -263,16 +263,19 @@ async function syncUp(ownerId) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
 
-    for (const log of state.auditLogs) {
-      try {
-        await supabaseClient.from('audit_logs').upsert({
-          id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
-          role: 'manager', action: log.action, details: log.details,
-          created_at: log.date || new Date().toISOString()
-        }, { onConflict: 'id' });
-      } catch (e) { console.warn('Audit log upload failed', e); }
+   // ✅ [إصلاح] رفع سجلات النشاط الجديدة فقط للمدير (تجنب أخطاء 403)
+for (const log of state.auditLogs) {
+  if (log.userId && log.userId !== state.currentUser.id) continue;
+  try {
+    const { error } = await supabaseClient.from('audit_logs').insert({
+      id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
+      role: 'manager', action: log.action, details: log.details,
+      created_at: log.date || new Date().toISOString()
+    });
+    if (error && error.code !== '23505') { 
+      console.warn('Audit log upload failed', error); 
     }
-  } catch (e) { console.warn('Settings sync failed', e); }
+  } catch (e) { console.warn('Audit log upload failed', e); }
 }
 
 function saveData() {
