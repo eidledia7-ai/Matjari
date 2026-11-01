@@ -59,13 +59,11 @@ async function saveStoreSettings() {
     }
   };
 
-  // تحديث الـ state
   state.storeSettings = Object.assign({}, state.storeSettings, newSettings);
 
   const titleEl = document.querySelector('.logo-title');
   if (titleEl) titleEl.textContent = state.storeSettings.name;
 
-  // الحفظ في السيرفر (الجدول الجديد store_settings)
   if (navigator.onLine && supabaseClient) {
     const ownerId = state.currentUser.id;
     const { error } = await supabaseClient.from('store_settings').upsert({
@@ -151,17 +149,19 @@ async function safeClearAllDataPrompt() {
 
   const ownerId = state.currentUser.id;
 
-  // مسح البيانات من السيرفر
+  // ✅ [إصلاح جذري] مسح البيانات من السيرفر (شملنا كل الجداول)
   if (navigator.onLine && supabaseClient) {
     showLoading('جارٍ مسح البيانات...');
+    const tablesToClear = [
+      'sale_items', 'sales', 'returns', 'expenses', 'products', 
+      'customers', 'shifts', 'suppliers', 'purchases', 
+      'customer_payments', 'supplier_payments', 'stock_moves', 'held_carts'
+    ];
+    
     try {
-      await supabaseClient.from('sale_items').delete().eq('user_id', ownerId);
-      await supabaseClient.from('sales').delete().eq('user_id', ownerId);
-      await supabaseClient.from('returns').delete().eq('user_id', ownerId);
-      await supabaseClient.from('expenses').delete().eq('user_id', ownerId);
-      await supabaseClient.from('products').delete().eq('user_id', ownerId);
-      await supabaseClient.from('customers').delete().eq('user_id', ownerId);
-      await supabaseClient.from('shifts').delete().eq('user_id', ownerId);
+      for (const table of tablesToClear) {
+        await supabaseClient.from(table).delete().eq('user_id', ownerId);
+      }
     } catch (err) {
       console.warn('Failed to clear server data:', err);
     }
@@ -171,7 +171,7 @@ async function safeClearAllDataPrompt() {
   // مسح البيانات المحلية
   state.products = [];
   state.sales = [];
-  state.customers = [{ id: uid('CUST'), name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
+  state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
   state.suppliers = [];
   state.expenses = [];
   state.stockMoves = [];
@@ -182,6 +182,9 @@ async function safeClearAllDataPrompt() {
   state.shifts = [];
   state.currentShift = null;
   state.cart = [];
+  state.auditLogs = [];
+  state.saleItems = [];
+  state.heldCarts = [];
 
   localStorage.removeItem('matjari_cache_' + ownerId);
 
