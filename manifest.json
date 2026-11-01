@@ -1,6 +1,8 @@
 {
-  "name": "متجري",
-  "short_name": "متجري",
+  "name": "Matjari POS",
+  "short_name": "Matjari",
+  "description": "Integrated POS & Inventory System",
+  "lang": "en",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#142f46",
