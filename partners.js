@@ -1,7 +1,7 @@
 /* ============ العملاء ============ */
 async function saveCustomer() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة عملاء', 'error');
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const id = document.getElementById('customerId').value;
   const name = document.getElementById('customerName').value.trim();
@@ -9,7 +9,7 @@ async function saveCustomer() {
   const rawDebt = parseFloat(document.getElementById('customerOpeningDebt').value);
   const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
-  if (!name) return showNotification('اسم العميل مطلوب', 'error');
+  if (!name) return showNotification(tr('customer_name_req'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = id || uid('CUST');
@@ -42,7 +42,7 @@ async function saveCustomer() {
     const { error } = await supabaseClient.from('customers').upsert(newCustomer, { onConflict: 'id' });
     if (error) {
       console.warn('Customer upload failed:', error);
-      return showNotification('تعذر حفظ العميل: ' + error.message, 'error');
+      return showNotification(tr('customer_save_fail') + error.message, 'error');
     }
   }
 
@@ -58,7 +58,7 @@ async function saveCustomer() {
   const d = document.getElementById('customerOpeningDebt');
   if (d) d.value = 0;
   renderCustomers();
-  showNotification('تم حفظ العميل ✅');
+  showNotification(tr('customer_saved'));
 }
 
 function renderCustomers() {
@@ -81,7 +81,7 @@ function renderCustomers() {
     state.customers.forEach(function(c) {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
       const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
-      const debtLabel = currentLang === 'en' ? ' (Debt: ' : ' (دين: ';
+      const debtLabel = tr('debt_prefix');
       // الدين الحقيقي من financeCore (openingDebt + sales.remaining - payments - returns.credit)
       const realDebt = financeCore.calcCustomerBalance(c.id);
       paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + realDebt.toFixed(2) + ')</option>';
@@ -90,7 +90,7 @@ function renderCustomers() {
   }
 
   if (filtered.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا يوجد عملاء.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_customers') + '</p>';
     return;
   }
 
@@ -99,13 +99,18 @@ function renderCustomers() {
     // الدين الحقيقي من financeCore
     const debtVal = financeCore.calcCustomerBalance(c.id);
     const debtClass = debtVal > 0 ? 'red-text' : '';
+    const stmtBtn = tr('statement_btn');
+    const delBtn = currentLang === 'en' ? 'Delete' : 'حذف';
+    const stmtTitle = currentLang === 'en' ? 'Statement' : 'كشف حساب';
+    const delTitle = currentLang === 'en' ? 'Delete' : 'حذف';
+
     html += '<tr>' +
       '<td>' + escapeHTML(c.name) + '</td>' +
       '<td>' + escapeHTML(c.phone || '-') + '</td>' +
       '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
       '<td style="white-space:nowrap;">' +
-        '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="كشف حساب">📄 كشف</button>' +
-        '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="حذف">🗑️</button>' +
+        '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="' + stmtTitle + '">📄 ' + stmtBtn + '</button>' +
+        '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="' + delTitle + '">🗑️ ' + delBtn + '</button>' +
       '</td>' +
       '</tr>';
   });
@@ -114,21 +119,19 @@ function renderCustomers() {
 }
 
 async function deleteCustomer(id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const cust = state.customers.find(c => c.id === id);
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
-    return showNotification('لا يمكن حذف العميل النقدي العام', 'warning');
+    return showNotification(tr('cannot_delete_cash_cust'), 'warning');
   }
 
-  if (state.customers.length <= 1) return showNotification('لا يمكن حذف آخر عميل', 'warning');
+  if (state.customers.length <= 1) return showNotification(tr('cannot_delete_last_cust'), 'warning');
 
   // استخدام الدين الحقيقي في تحذير الحذف
   const realDebt = financeCore.calcCustomerBalance(id);
   if (realDebt > 0) {
-    const confirmMsg = currentLang === 'en'
-      ? 'This customer has an outstanding debt of ' + realDebt.toFixed(2) + '. Delete anyway?'
-      : 'هذا العميل عليه ديون ' + realDebt.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة الدين نهائياً.';
+    const confirmMsg = tr('cust_has_debt_1') + realDebt.toFixed(2) + tr('cust_has_debt_2');
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_customer'))) return;
@@ -145,28 +148,28 @@ async function deleteCustomer(id) {
   state.customers = state.customers.filter(function(c) { return c.id !== id; });
   saveData();
   renderCustomers();
-  showNotification('تم الحذف');
+  showNotification(tr('deleted'));
 }
 
 async function recordCustomerPayment() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const customerId = document.getElementById('customerPaymentCustomer').value;
   const amount = parseFloat(document.getElementById('customerPaymentAmount').value);
   const date = document.getElementById('customerPaymentDate').value || today();
   const notes = document.getElementById('customerPaymentNotes').value.trim();
 
-  if (!customerId || !Number.isFinite(amount) || amount <= 0) return showNotification('أدخل مبلغاً صحيحاً', 'error');
+  if (!customerId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('invalid_amount'), 'error');
 
   const cust = state.customers.find(function(c) { return c.id === customerId; });
-  if (!cust) return showNotification('العميل غير موجود', 'error');
+  if (!cust) return showNotification(tr('cust_not_found'), 'error');
 
   // الدين الحقيقي من financeCore
   const currentDebt = financeCore.calcCustomerBalance(customerId);
 
   if (amount > currentDebt) {
-    if (!confirm('المبلغ أكبر من الدين. تسجيل الفرق كرصيد دائن؟')) return;
+    if (!confirm(tr('amount_exceeds_debt'))) return;
   }
 
   // ملاحظة: لا نعدل openingDebt — الدين بيتحسب من sales.remaining - payments - returns.credit
@@ -213,7 +216,7 @@ async function recordCustomerPayment() {
     const { error } = await supabaseClient.from('customer_payments').insert(newPayment);
     if (error) {
       console.warn('Payment upload failed:', error);
-      return showNotification('تعذر حفظ التحصيل: ' + error.message, 'error');
+      return showNotification(tr('payment_save_fail') + error.message, 'error');
     }
   }
 
@@ -230,14 +233,14 @@ async function recordCustomerPayment() {
 
   if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
 
-  showNotification('تم تسجيل التحصيل ✅');
+  showNotification(tr('payment_success'));
 }
 
 function renderCustomerPayments() {
   const container = document.getElementById('customerPaymentsTable');
   if (!container) return;
   if (state.customerPayments.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد تحصيلات مسجلة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_collections') + '</p>';
     return;
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
@@ -253,9 +256,10 @@ function renderCustomerPayments() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+
 /* ============ الموردون والمشتريات ============ */
 async function saveSupplier() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const id = document.getElementById('supplierId').value;
   const name = document.getElementById('supplierName').value.trim();
@@ -263,7 +267,7 @@ async function saveSupplier() {
   const rawDebt = parseFloat(document.getElementById('supplierOpeningDebt').value);
   const openingDebt = Number.isFinite(rawDebt) && rawDebt >= 0 ? rawDebt : 0;
 
-  if (!name) return showNotification('اسم المورد مطلوب', 'error');
+  if (!name) return showNotification(tr('supplier_name_req'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const supplierId = id || uid('SUP');
@@ -288,7 +292,7 @@ async function saveSupplier() {
     const { error } = await supabaseClient.from('suppliers').upsert(newSupplier, { onConflict: 'id' });
     if (error) {
       console.warn('Supplier upload failed:', error);
-      return showNotification('تعذر حفظ المورد: ' + error.message, 'error');
+      return showNotification(tr('supplier_save_fail') + error.message, 'error');
     }
   }
 
@@ -299,11 +303,11 @@ async function saveSupplier() {
   saveData();
   clearSupplierForm();
   renderSuppliers();
-  showNotification('تم حفظ المورد ✅');
+  showNotification(tr('supplier_saved'));
 }
 
 function editSupplier(id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const s = state.suppliers.find(function(item) { return item.id === id; });
   if (!s) return;
   document.getElementById('supplierId').value = s.id;
@@ -311,7 +315,7 @@ function editSupplier(id) {
   document.getElementById('supplierPhone').value = s.phone || '';
   document.getElementById('supplierOpeningDebt').value = Number(s.openingDebt ?? s.opening_debt) || 0;
   const title = document.getElementById('supplierFormTitle');
-  if (title) title.innerText = 'تعديل مورد: ' + s.name;
+  if (title) title.innerText = tr('edit_supplier_prefix') + s.name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -321,7 +325,7 @@ function clearSupplierForm() {
     if (el) el.value = (id === 'supplierOpeningDebt') ? 0 : '';
   });
   const title = document.getElementById('supplierFormTitle');
-  if (title) title.innerText = 'إضافة مورد';
+  if (title) title.innerText = tr('add_supplier');
 }
 
 function renderSuppliers() {
@@ -347,7 +351,7 @@ function renderSuppliers() {
     state.suppliers.forEach(function(s) {
       // المستحقات الحقيقية من financeCore
       const realBalance = financeCore.calcSupplierBalance(s.id);
-      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + (currentLang === 'en' ? ' (Payables: ' : ' (له مستحقات: ') + realBalance.toFixed(2) + ')</option>';
+      suppPaySel.innerHTML += '<option value="' + s.id + '">' + escapeHTML(s.name) + tr('payables_prefix') + realBalance.toFixed(2) + tr('payables_prefix_end') + '</option>';
     });
     if (curVal) suppPaySel.value = curVal;
   }
@@ -364,9 +368,12 @@ function renderSuppliers() {
   }
 
   if (state.suppliers.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا يوجد موردون.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_suppliers') + '</p>';
     return;
   }
+
+  const editBtn = currentLang === 'en' ? 'Edit' : 'تعديل';
+  const deleteBtn = currentLang === 'en' ? 'Delete' : 'حذف';
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_payables">المستحقات (له فلوس)</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.suppliers.forEach(function(s) {
@@ -378,8 +385,8 @@ function renderSuppliers() {
       '<td>' + escapeHTML(s.phone || '-') + '</td>' +
       '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
       '<td>' +
-        '<button class="small-btn primary" onclick="editSupplier(\'' + s.id + '\')">تعديل</button>' +
-        '<button class="small-btn red" onclick="deleteSupplier(\'' + s.id + '\')">حذف</button>' +
+        '<button class="small-btn primary" onclick="editSupplier(\'' + s.id + '\')">' + editBtn + '</button>' +
+        '<button class="small-btn red" onclick="deleteSupplier(\'' + s.id + '\')">' + deleteBtn + '</button>' +
       '</td>' +
       '</tr>';
   });
@@ -388,16 +395,14 @@ function renderSuppliers() {
 }
 
 async function deleteSupplier(id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const sup = state.suppliers.find(function(s) { return s.id === id; });
 
   // استخدام الرصيد الحقيقي في تحذير الحذف
   const realBalance = financeCore.calcSupplierBalance(id);
   if (realBalance > 0) {
-    const confirmMsg = currentLang === 'en'
-      ? 'You owe this supplier ' + realBalance.toFixed(2) + '. Delete anyway?'
-      : 'عليك مستحقات لهذا المورد ' + realBalance.toFixed(2) + '. هل تريد الحذف؟ ستفقد قيمة المستحقات نهائياً.';
+    const confirmMsg = tr('owe_supplier_1') + realBalance.toFixed(2) + tr('owe_supplier_2');
     if (!confirm(confirmMsg)) return;
   } else {
     if (!confirm(tr('msg_delete_supplier'))) return;
@@ -414,7 +419,7 @@ async function deleteSupplier(id) {
   state.suppliers = state.suppliers.filter(function(s) { return s.id !== id; });
   saveData();
   renderSuppliers();
-  showNotification('تم الحذف');
+  showNotification(tr('deleted'));
 }
 
 function calcPurchaseTotal() {
@@ -426,8 +431,8 @@ function calcPurchaseTotal() {
 }
 
 async function savePurchase() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإتمام العملية', 'error');
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const supplierId = document.getElementById('purchaseSupplier').value;
   const prodId = document.getElementById('purchaseProduct').value;
@@ -440,7 +445,7 @@ async function savePurchase() {
   const paid = parseFloat(document.getElementById('purchasePaid').value) || 0;
 
   if (!supplierId) return showNotification(tr('notify_select_supplier'), 'error');
-  if (qty < 1 || cost < 0) return showNotification('الكمية أو التكلفة غير صحيحة', 'error');
+  if (qty < 1 || cost < 0) return showNotification(tr('invalid_qty_cost'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   let targetProdId = prodId;
@@ -484,7 +489,7 @@ async function savePurchase() {
         type: 'purchase', qty: qty,
         old_stock: oldStock, oldStock: oldStock,
         new_stock: p.stock, newStock: p.stock,
-        reason: 'مشتريات'
+        reason: tr('purchases_type')
       });
     }
   } else if (newName) {
@@ -492,13 +497,13 @@ async function savePurchase() {
     targetProdId = uid('PRD');
     newProductData = {
       id: targetProdId, user_id: ownerId, name: newName, barcode: '',
-      category: 'عام', price: purchaseSalePrice, cost: cost,
+      category: tr('general_cat'), price: purchaseSalePrice, cost: cost,
       stock: 0, min_stock: 5
     };
 
     // التحديث المحلي
     state.products.push({
-      id: targetProdId, name: newName, barcode: '', category: 'عام',
+      id: targetProdId, name: newName, barcode: '', category: tr('general_cat'),
       price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5
     });
     targetProdName = newName;
@@ -516,7 +521,7 @@ async function savePurchase() {
       type: 'purchase', qty: qty,
       old_stock: 0, oldStock: 0,
       new_stock: qty, newStock: qty,
-      reason: 'منتج جديد - مشتريات'
+      reason: tr('new_prod_purchase_reason')
     });
   } else {
     return showNotification(tr('notify_select_product_name'), 'error');
@@ -562,7 +567,7 @@ async function savePurchase() {
     const { error } = await supabaseClient.from('purchases').insert(newPurchase);
     if (error) {
       console.warn('Purchase upload failed:', error);
-      return showNotification('تعذر حفظ المشتريات: ' + error.message, 'error');
+      return showNotification(tr('purchase_save_fail') + error.message, 'error');
     }
   }
 
@@ -583,16 +588,18 @@ async function savePurchase() {
   renderStockMoves();
   renderDashboard();
   updateStockBadge();
-  showNotification('تم تسجيل المشتريات ✅');
+  showNotification(tr('purchase_success'));
 }
 
 function renderPurchases() {
   const container = document.getElementById('purchasesTable');
   if (!container) return;
   if (state.purchases.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد مشتريات.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_purchases') + '</p>';
     return;
   }
+  const delErrBtn = tr('delete_err_btn');
+
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   state.purchases.forEach(function(p) {
     const supId = p.supplier_id || p.supplierId;
@@ -608,7 +615,7 @@ function renderPurchases() {
       '<td>' + p.cost + '</td>' +
       '<td>' + totalNum.toFixed(2) + '</td>' +
       '<td class="' + (remainingNum > 0 ? 'red-text' : '') + '">' + remainingNum.toFixed(2) + '</td>' +
-      '<td><button class="small-btn red" onclick="safeDeleteRecord(\'purchase\', \'' + p.id + '\')">حذف خطأ</button></td>' +
+      '<td><button class="small-btn red" onclick="safeDeleteRecord(\'purchase\', \'' + p.id + '\')">' + delErrBtn + '</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -616,7 +623,7 @@ function renderPurchases() {
 }
 
 async function recordSupplierPayment() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const supplierId = document.getElementById('supplierPaymentSupplier').value;
   const amount = parseFloat(document.getElementById('supplierPaymentAmount').value);
@@ -626,7 +633,7 @@ async function recordSupplierPayment() {
   if (!supplierId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
 
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-  if (!sup) return showNotification('المورد غير موجود', 'error');
+  if (!sup) return showNotification(currentLang === 'en' ? 'Supplier not found' : 'المورد غير موجود', 'error');
 
   // ملاحظة: لا نعدل openingDebt — الرصيد بيتحسب من purchases.remaining - supplier_payments
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
@@ -656,7 +663,7 @@ async function recordSupplierPayment() {
     const { error } = await supabaseClient.from('supplier_payments').insert(newPayment);
     if (error) {
       console.warn('Supplier payment upload failed:', error);
-      return showNotification('تعذر حفظ السداد: ' + error.message, 'error');
+      return showNotification((currentLang === 'en' ? 'Failed to save payment: ' : 'تعذر حفظ السداد: ') + error.message, 'error');
     }
   }
 
@@ -669,14 +676,14 @@ async function recordSupplierPayment() {
   document.getElementById('supplierPaymentNotes').value = '';
   renderSuppliers();
   renderSupplierPayments();
-  showNotification('تم تسجيل السداد للمورد بنجاح ✅');
+  showNotification(tr('supplier_payment_success'));
 }
 
 function renderSupplierPayments() {
   const container = document.getElementById('supplierPaymentsTable');
   if (!container) return;
   if (state.supplierPayments.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد مدفوعات للموردين مسجلة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_supplier_payments') + '</p>';
     return;
   }
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_amount_paid">المبلغ المدفوع</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
