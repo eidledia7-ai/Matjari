@@ -91,6 +91,7 @@ let state = {
     permissions: { canDiscount: false, canDelete: false, canEditPrice: false, canReturn: false }
   },
   subscription: { plan: 'trial', status: 'active', expires_at: null }
+  selectedCartIndex: -1,
   lastAutoBackupAt: null,
 _lastAutoBackupAttempt: 0,
 };
@@ -291,4 +292,38 @@ function showPage(pageId) {
   if (pageId === 'settSubscription') renderSubscriptionPage();
   if (pageId === 'settStore') loadStoreSettings();
   if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
+}
+/* ✅ v7.7 — إعادة التركيز لحقل الباركود */
+function refocusCashierInput() {
+  const target = document.getElementById('saleBarcode') || document.getElementById('saleProduct');
+  if (target && typeof target.focus === 'function') {
+    try { target.focus(); } catch (e) {}
+  }
+}
+
+/* ✅ v7.7 — أصوات الكاشير */
+let _audioCtx = null;
+function playSound(type) {
+  try {
+    if (!window.AudioContext && !window.webkitAudioContext) return;
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    let freq = 880, dur = 0.08, vol = 0.06;
+
+    if (type === 'success' || type === 'add') { freq = 1046; dur = 0.10; vol = 0.08; }
+    else if (type === 'error')               { freq = 220;  dur = 0.18; vol = 0.10; }
+    else if (type === 'remove')              { freq = 440;  dur = 0.10; vol = 0.07; }
+    else if (type === 'tick')                { freq = 660;  dur = 0.05; vol = 0.05; }
+
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    osc.start(now);
+    osc.stop(now + dur);
+  } catch (e) { }
 }

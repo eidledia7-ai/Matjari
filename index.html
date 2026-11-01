@@ -39,8 +39,10 @@
   <script src="landing.js" defer></script>
   <script src="storage.js" defer></script>
   <script src="auth.js" defer></script>
-  <script src="auto-backup.js" defer></script>
-  <script src="main.js" defer></script>
+  
+ <script src="auto-backup.js" defer></script>
+<script src="cashier-hotkeys.js" defer></script>
+    <script src="main.js" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -1320,6 +1322,67 @@
   <div class="skeleton" style="height:40px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
   <div class="skeleton" style="height:100px; margin-bottom:10px; border-radius:8px; background:#fff;"></div>
   <div class="skeleton" style="height:200px; border-radius:8px; background:#fff;"></div>
+</div>
+<!-- ✅ v7.7 — Hotkeys Help Modal -->
+<div id="hotkeysHelpModal" role="dialog" aria-modal="true">
+  <div class="hotkeys-modal-box">
+    <h2 data-i18n="hotkeys_help_title">⌨️ اختصارات لوحة المفاتيح</h2>
+
+    <table class="hotkeys-table">
+      <tbody>
+        <tr>
+          <td><span class="hotkeys-key">F1</span></td>
+          <td data-i18n="hotkey_help">إظهار قائمة الاختصارات</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">F2</span></td>
+          <td data-i18n="hotkey_f2_existing">(اختصار موجود مسبقاً)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">F4</span></td>
+          <td data-i18n="hotkey_f4_existing">(اختصار موجود مسبقاً)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">F6</span></td>
+          <td data-i18n="hotkey_f6_discount">الانتقال لخانة الخصم</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">F8</span></td>
+          <td data-i18n="hotkey_f8_existing">(اختصار موجود مسبقاً)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">F9</span></td>
+          <td data-i18n="hotkey_f9_existing">(اختصار موجود مسبقاً)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">+</span> <span class="hotkeys-key">=</span></td>
+          <td data-i18n="hotkey_plus">زيادة كمية الصنف المحدد</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">−</span> <span class="hotkeys-key">_</span></td>
+          <td data-i18n="hotkey_minus">تقليل كمية الصنف المحدد</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">Delete</span></td>
+          <td data-i18n="hotkey_delete">حذف الصنف المحدد</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">Ctrl</span>+<span class="hotkeys-key">Z</span></td>
+          <td data-i18n="hotkey_undo">تراجع (حذف آخر صنف)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">Enter</span></td>
+          <td data-i18n="hotkey_enter_paid">إتمام البيع (في خانة المدفوع)</td>
+        </tr>
+        <tr>
+          <td><span class="hotkeys-key">Esc</span></td>
+          <td data-i18n="hotkey_escape">إغلاق النافذة / إلغاء التركيز</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <button class="hotkeys-close" onclick="closeHotkeysHelp()" data-i18n="hotkeys_close">إغلاق (Esc)</button>
+  </div>
 </div>
 </body>
 </html>

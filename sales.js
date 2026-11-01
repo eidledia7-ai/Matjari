@@ -42,8 +42,12 @@ function addToCartManual() {
     state.cart.push({ id: product.id, name: product.name, price: Number(product.price), cost: Number(product.cost), qty: qty });
   }
   document.getElementById('saleQty').value = 1;
-  playBeep(true);
+    playBeep(true);
   renderCart();
+  state.selectedCartIndex = state.cart.length - 1;
+  _flashCart('add');
+  playSound('add');
+  refocusCashierInput();
 }
 
 function renderCart() {
@@ -82,7 +86,8 @@ function renderCart() {
   state.cart.forEach(function(item, idx) {
     const tot = item.price * item.qty;
     subtotal += tot;
-    html += '<tr>' +
+  const isSelected = (state.selectedCartIndex === idx);
+html += '<tr class="cart-row' + (isSelected ? ' cart-row-selected' : '') + '" data-cart-idx="' + idx + '" onclick="selectCartRow(' + idx + ')" style="cursor:pointer;">' +
       '<td>' + escapeHTML(item.name) + '</td>' +
       '<td>' + item.price + '</td>' +
       '<td><input type="number" min="1" value="' + item.qty + '" style="width:70px" onchange="updateCartQty(' + idx + ', this.value)"></td>' +
@@ -92,7 +97,12 @@ function renderCart() {
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
-
+// ✅ v7.7 — ضمان وجود selectedCartIndex صالح
+if (state.cart.length === 0) {
+  state.selectedCartIndex = -1;
+} else if (state.selectedCartIndex < 0 || state.selectedCartIndex >= state.cart.length) {
+  state.selectedCartIndex = state.cart.length - 1;
+}
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
   let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
@@ -139,16 +149,25 @@ function updateCartQty(idx, val) {
   const prod = state.products.find(function(p) { return p.id === item.id; });
   if (prod && q > prod.stock) {
     showNotification(tr('qty_exceeds_stock_1') + prod.stock + tr('qty_exceeds_stock_2'), 'error');
+    playSound('error');
+    _flashCart('error');
     renderCart();
+    refocusCashierInput();
     return;
   }
   state.cart[idx].qty = q;
+  state.selectedCartIndex = idx;
   renderCart();
+  refocusCashierInput();
 }
 
 function removeFromCart(idx) {
+  if (idx < 0 || idx >= state.cart.length) return;
   state.cart.splice(idx, 1);
+  state.selectedCartIndex = state.cart.length > 0 ? Math.min(idx, state.cart.length - 1) : -1;
+  playSound('remove');
   renderCart();
+  refocusCashierInput();
 }
 
 function clearCart() {
@@ -158,6 +177,8 @@ function clearCart() {
   const n = document.getElementById('saleNotes'); if (n) n.value = '';
   renderCart();
   const pts = document.getElementById('salePointsUsed'); if (pts) pts.value = 0;
+  state.selectedCartIndex = -1;
+refocusCashierInput();
 }
 
 /* ============================================================
@@ -459,6 +480,8 @@ async function completeSale() {
     renderShifts();
     renderCustomers();
     populateSalesDropdowns();
+    state.selectedCartIndex = -1;
+refocusCashierInput();
     hideLoading();
   }
 }
