@@ -22,7 +22,13 @@ async function syncDown(ownerId) {
 
   for (const t of tables) {
     try {
-      let query = supabaseClient.from(t.name).select('*').eq('user_id', ownerId);
+      let query;
+      // ✅ [إصلاح جذري] سجل النشاط بيتجاب بالـ owner_id عشان المدير يشوف سجلات الموظفين
+      if (t.name === 'audit_logs') {
+        query = supabaseClient.from(t.name).select('*').eq('owner_id', ownerId);
+      } else {
+        query = supabaseClient.from(t.name).select('*').eq('user_id', ownerId);
+      }
 
       if (t.single) {
         const { data } = await query.maybeSingle();
@@ -41,6 +47,8 @@ async function syncDown(ownerId) {
           finalQuery = query.order('date', { ascending: false });
         } else if (t.name === 'shifts') {
           finalQuery = query.order('start_time', { ascending: false });
+        } else if (t.name === 'audit_logs') {
+          finalQuery = query.order('created_at', { ascending: false });
         } else {
           finalQuery = query.order('created_at', { ascending: false });
         }
@@ -143,6 +151,16 @@ async function syncUp(ownerId) {
       permissions: state.storeSettings.permissions,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
+
+    // ✅ [إصلاح جذري] رفع سجلات النشاط الخاصة بالمدير
+    for (const log of state.auditLogs) {
+      try {
+        await supabaseClient.from('audit_logs').upsert({
+          id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
+          role: 'manager', action: log.action, details: log.details, created_at: log.date || new Date().toISOString()
+        }, { onConflict: 'id' });
+      } catch (e) { console.warn('Audit log upload failed', e); }
+    }
   } catch (e) { console.warn('Settings sync failed', e); }
 }
 
@@ -171,7 +189,6 @@ async function syncEmployeeChanges() {
 
   for (const sale of state.sales) {
     try {
-      // ⚠️ remaining و net_total = GENERATED COLUMNS — ممنوع نبعتهم
       await supabaseClient.from('sales').upsert({
         id: sale.id, user_id: ownerId, date: sale.date, subtotal: sale.subtotal,
         discount: sale.discount, total: sale.total, paid: sale.paid,
@@ -186,7 +203,6 @@ async function syncEmployeeChanges() {
           sale_id: sale.id, user_id: ownerId, product_id: i.id, product_name: i.name,
           qty: i.qty, price: i.price, cost: i.cost
         }));
-        // ✅ UNIQUE constraint موجود دلوقتي على (sale_id, product_id)
         await supabaseClient.from('sale_items').upsert(itemsToInsert, { onConflict: 'sale_id,product_id' });
       }
     } catch (e) { console.warn('Sale upload failed', e); }
