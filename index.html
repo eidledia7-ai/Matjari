@@ -758,8 +758,26 @@
     <div id="dailyReport"></div>
   </div>
   <div class="card mt-20">
-  <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3>
+  <h3 data-i18n="top_selling_period">🏆 الأكثر مبيعاً في الفترة</h3> 
   <div id="topProductsReportFinance"></div>
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- ✅ v7.2 — قسم تقرير أرباح المنتجات                                -->
+<!-- يُضاف بعد <div id="topProductsReportFinance"> مباشرة               -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<section class="card mt-20" id="productProfitSection">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <h3 style="margin:0;color:#17364c;">
+      <span data-i18n="profit_section_title">📊 تقرير أرباح المنتجات</span>
+    </h3>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#4a5f70;background:#f1f6f8;padding:6px 12px;border-radius:8px;user-select:none;">
+      <input type="checkbox" id="productProfitShowAll" onchange="renderReports()" style="cursor:pointer;margin:0;" />
+      <span data-i18n="profit_show_all">إظهار كل المنتجات</span>
+    </label>
+  </div>
+  <div id="productProfitReport">
+    <p class="text-muted text-center" style="padding:20px;" data-i18n="no_period_sales">لا توجد مبيعات في الفترة المحددة</p>
+  </div>
+</section>
 </div>
   </div>
 </div>

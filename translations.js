@@ -404,7 +404,23 @@ vat_mode: "طريقة الاحتساب",
 vat_inclusive: "شاملة (داخل السعر)",
 vat_exclusive: "حصرية (تضاف فوق السعر)",
 vat_collected: "إجمالي الضريبة المحصلة",
-  },
+ profit_section_title:    "تقرير أرباح المنتجات",
+  profit_show_all:         "إظهار كل المنتجات",
+  profit_total_revenue:    "إجمالي الإيراد (بدون ضريبة)",
+  profit_total_cost:       "إجمالي التكلفة",
+  profit_total_profit:     "إجمالي الربح",
+  profit_avg_margin:       "متوسط الهامش",
+  profit_sold_qty:         "مباع",
+  profit_returned_qty:     "مرتجع",
+  profit_net_qty:          "صافي الكمية",
+  profit_net_revenue:      "صافي الإيراد",
+  profit_net_cogs:         "صافي التكلفة",
+  profit_net_profit:       "صافي الربح",
+  profit_margin_pct:       "الهامش %",
+  profit_report_note_title:"ملاحظة",
+  profit_report_note_body: "هذا التقرير يحسب الإيراد بدون ضريبة القيمة المضافة، ويخصم تكلفة المرتجعات بناءً على تكلفة البيع الأصلية وقت إتمام الفاتورة. قد تختلف الأرقام قليلاً عن ملخص الفترة في اللوحة الرئيسية بسبب اختلاف طريقة الحساب."
+},
+   
         en: {
     app_title: "Matjari - Integrated POS & Inventory System",
     login_title: "🔐 Login",
@@ -980,7 +996,22 @@ vat_mode: "Calculation Mode",
 vat_inclusive: "Inclusive (price includes VAT)",
 vat_exclusive: "Exclusive (added on top)",
 vat_collected: "Total VAT Collected",
-  }
+  profit_section_title:    "Product Profit Report",
+  profit_show_all:         "Show all products",
+  profit_total_revenue:    "Total Revenue (ex-VAT)",
+  profit_total_cost:       "Total Cost",
+  profit_total_profit:     "Total Profit",
+  profit_avg_margin:       "Average Margin",
+  profit_sold_qty:         "Sold",
+  profit_returned_qty:     "Returned",
+  profit_net_qty:          "Net Qty",
+  profit_net_revenue:      "Net Revenue",
+  profit_net_cogs:         "Net COGS",
+  profit_net_profit:       "Net Profit",
+  profit_margin_pct:       "Margin %",
+  profit_report_note_title:"Note",
+  profit_report_note_body: "This report calculates revenue excluding VAT and deducts the cost of returns based on the original sale cost at the time the invoice was completed. Figures may differ slightly from the period summary on the main dashboard due to different calculation methods."
+}
 };
 /* ============ خطط الاشتراك (مركزية) ============ */
 const PLANS = [
