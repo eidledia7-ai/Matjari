@@ -63,12 +63,13 @@ let state = {
   ownerId: null,
   ownerPlan: null,
   cart: [],
+  selectedCartIndex: -1,
   heldCarts: [],
   auditLogs: [],
   products: [],
   sales: [],
   customers: [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }],
-  suppliers: [], // سيتم إدارتها محلياً حالياً
+  suppliers: [], 
   expenses: [],
   stockMoves: [],
   returns: [],
@@ -90,10 +91,9 @@ let state = {
     printType: 'thermal',
     permissions: { canDiscount: false, canDelete: false, canEditPrice: false, canReturn: false }
   },
-  subscription: { plan: 'trial', status: 'active', expires_at: null }
-  selectedCartIndex: -1,
+  subscription: { plan: 'trial', status: 'active', expires_at: null },
   lastAutoBackupAt: null,
-_lastAutoBackupAttempt: 0,
+  _lastAutoBackupAttempt: 0
 };
 
 let syncTimer = null;
@@ -114,7 +114,6 @@ function uid(prefix) {
 }
 
 function today() {
-  // ✅ [إصلاح] التوقيت المحلي بدلاً من UTC 
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -243,7 +242,6 @@ function toggleSidebar(show) {
 }
 
 function showPage(pageId) {
-  // [تعديل] السماح للموظف بفتح صفحة المرتجعات
   if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'invReturns' && pageId !== 'home') {
     showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
     pageId = 'sales';
@@ -293,7 +291,8 @@ function showPage(pageId) {
   if (pageId === 'settStore') loadStoreSettings();
   if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
 }
-/* ✅ v7.7 — إعادة التركيز لحقل الباركود */
+
+/* ============ دوال الكاشير الجديدة (v7.7) ============ */
 function refocusCashierInput() {
   const target = document.getElementById('saleBarcode') || document.getElementById('saleProduct');
   if (target && typeof target.focus === 'function') {
@@ -301,7 +300,6 @@ function refocusCashierInput() {
   }
 }
 
-/* ✅ v7.7 — أصوات الكاشير */
 let _audioCtx = null;
 function playSound(type) {
   try {
