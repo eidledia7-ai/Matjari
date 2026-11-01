@@ -1,13 +1,13 @@
 /* ============ المخزون والمنتجات ============ */
 async function saveProduct() {
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً لإضافة منتجات', 'error');
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const id = document.getElementById('productId').value;
   if (!id) {
     const lim = checkLimit('products', state.products.length);
     if (!lim.allowed) {
-      return showNotification(currentLang === 'en' ? 'Product limit reached.' : 'وصلت لحد المنتجات. رقّي باقتك.', 'warning');
+      return showNotification(currentLang === 'en' ? 'Product limit reached. Upgrade your plan.' : 'وصلت لحد المنتجات. رقّي باقتك.', 'warning');
     }
   }
 
@@ -19,10 +19,10 @@ async function saveProduct() {
   const stock = parseInt(document.getElementById('productStock').value) || 0;
   const minStock = parseInt(document.getElementById('productMin').value) || 5;
 
-  if (!name) return showNotification('اسم المنتج مطلوب', 'error');
+  if (!name) return showNotification(tr('product_name_req'), 'error');
 
   const dup = state.products.find(p => p.id !== id && barcode && normalizeBarcode(p.barcode) === normalizeBarcode(barcode));
-  if (dup) return showNotification('الباركود مستخدم للمنتج: ' + dup.name, 'error');
+  if (dup) return showNotification(tr('barcode_used') + dup.name, 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const productData = {
@@ -44,7 +44,7 @@ async function saveProduct() {
     const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
     if (error) {
       console.warn('Product upload failed:', error);
-      return showNotification('تعذر حفظ المنتج: ' + error.message, 'error');
+      return showNotification(tr('product_save_fail') + error.message, 'error');
     }
   }
 
@@ -57,7 +57,7 @@ async function saveProduct() {
   renderProducts();
   renderDashboard();
   updateStockBadge();
-  showNotification('تم حفظ المنتج ✅');
+  showNotification(tr('product_saved'));
 }
 
 function clearProductForm() {
@@ -68,7 +68,7 @@ function clearProductForm() {
   const min = document.getElementById('productMin');
   if (min) min.value = 5;
   const title = document.getElementById('productFormTitle');
-  if (title) title.innerText = 'إضافة منتج جديد';
+  if (title) title.innerText = tr('add_product_title');
 }
 
 function renderProducts() {
@@ -85,9 +85,13 @@ function renderProducts() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد منتجات.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('empty_products') + '</p>';
     return;
   }
+
+  const editBtn = currentLang === 'en' ? 'Edit' : 'تعديل';
+  const deleteBtn = currentLang === 'en' ? 'Delete' : 'حذف';
+  const quickAddTitle = currentLang === 'en' ? 'Quick Add' : 'إضافة كمية سريعة';
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_barcode">الباركود</th><th data-i18n="th_category">التصنيف</th><th data-i18n="th_price">السعر</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_stock">المخزن</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
   filtered.forEach(function(p) {
@@ -100,9 +104,9 @@ function renderProducts() {
       '<td>' + (Number(p.cost) || 0) + '</td>' +
       '<td><b>' + (Number(p.stock) || 0) + '</b></td>' +
       '<td>' +
-       '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="إضافة كمية سريعة">+</button>' +
-'<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">تعديل</button>' +
-'<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">حذف</button>' +
+       '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
+'<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">' + editBtn + '</button>' +
+'<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">' + deleteBtn + '</button>' +
       '</td>' +
       '</tr>';
   });
@@ -111,7 +115,7 @@ function renderProducts() {
 }
 
 function editProduct(id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const p = state.products.find(function(item) { return item.id === id; });
   if (!p) return;
   document.getElementById('productId').value = p.id;
@@ -123,12 +127,12 @@ function editProduct(id) {
   document.getElementById('productStock').value = p.stock || 0;
   document.getElementById('productMin').value = p.minStock || p.min_stock || 5;
   const title = document.getElementById('productFormTitle');
-  if (title) title.innerText = 'تعديل: ' + p.name;
+  if (title) title.innerText = (currentLang === 'en' ? 'Edit: ' : 'تعديل: ') + p.name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function deleteProduct(id) {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const prod = state.products.find(function(p) { return p.id === id; });
   if (!prod) return;
 
@@ -138,7 +142,7 @@ async function deleteProduct(id) {
   }, 0);
 
   if (salesCount > 0) {
-    const msg = currentLang === 'en' ? 'Product in ' + salesCount + ' invoices. Continue?' : 'هذا المنتج موجود في ' + salesCount + ' فاتورة. هل تريد المتابعة؟';
+    const msg = tr('product_in_invoices_1') + salesCount + tr('product_in_invoices_2');
     if (!confirm(msg)) return;
   } else {
     if (!confirm(tr('msg_delete_product'))) return;
@@ -157,32 +161,33 @@ async function deleteProduct(id) {
   renderProducts();
   renderDashboard();
   updateStockBadge();
-  showNotification('تم حذف المنتج');
+  showNotification(tr('product_deleted'));
 }
 
 function populateAdjustDropdown() {
   const sel = document.getElementById('adjustProduct');
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
+  const availableLabel = currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ';
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (المتوفر: ' + (Number(p.stock) || 0) + ')</option>';
+    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + availableLabel + (Number(p.stock) || 0) + ')</option>';
   });
 }
 
 async function saveStockAdjustment() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const prodId = document.getElementById('adjustProduct').value;
   const type = document.getElementById('adjustType').value;
   const qty = parseInt(document.getElementById('adjustQty').value);
   const reason = document.getElementById('adjustReason').value.trim();
 
-  if (!prodId || isNaN(qty) || qty < 0 || !reason) return showNotification('أكمل بيانات الحركة والسبب', 'error');
+  if (!prodId || isNaN(qty) || qty < 0 || !reason) return showNotification(tr('complete_move_data'), 'error');
 
   const prod = state.products.find(function(p) { return p.id === prodId; });
   if (!prod) return;
 
-  if (type === 'out' && qty > prod.stock) return showNotification('الكمية أكبر من المخزون المتاح (' + prod.stock + ')', 'error');
+  if (type === 'out' && qty > prod.stock) return showNotification(tr('qty_exceeds_stock_1') + prod.stock + tr('qty_exceeds_stock_2'), 'error');
 
   const oldStock = Number(prod.stock) || 0;
   let newStock = oldStock;
@@ -190,7 +195,7 @@ async function saveStockAdjustment() {
   if (type === 'out') newStock = Math.max(0, oldStock - qty);
   if (type === 'set') newStock = qty;
 
-  if (newStock === oldStock) return showNotification('الكمية مطابقة للحالية', 'info');
+  if (newStock === oldStock) return showNotification(tr('qty_same'), 'info');
 
   prod.stock = newStock;
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
@@ -226,7 +231,7 @@ async function saveStockAdjustment() {
   renderProducts();
   renderDashboard();
   updateStockBadge();
-  showNotification('تم تسجيل الحركة ✅');
+  showNotification(tr('move_saved'));
 }
 
 function renderStockMoves() {
@@ -242,14 +247,19 @@ function renderStockMoves() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد حركات مسجلة.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('empty_stock_moves') + '</p>';
     return;
   }
 
+  const en = currentLang === 'en';
   const typeLabels = {
-    'in': 'إضافة (+)', 'out': 'خصم (-)', 'set': 'ضبط (=)',
-    'sale': 'بيع (-)', 'sale_cancel': 'إلغاء بيع (+)',
-    'return': 'مرتجع (+)', 'purchase': 'مشتريات (+)'
+    'in': en ? 'Add (+)' : 'إضافة (+)', 
+    'out': en ? 'Deduct (-)' : 'خصم (-)', 
+    'set': en ? 'Set (=)' : 'ضبط (=)',
+    'sale': en ? 'Sale (-)' : 'بيع (-)', 
+    'sale_cancel': en ? 'Sale Cancel (+)' : 'إلغاء بيع (+)',
+    'return': en ? 'Return (+)' : 'مرتجع (+)', 
+    'purchase': en ? 'Purchase (+)' : 'مشتريات (+)'
   };
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_movement">الحركة</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_before_after">قبل ➔ بعد</th><th data-i18n="th_reason">السبب</th></tr></thead><tbody>';
@@ -259,7 +269,7 @@ function renderStockMoves() {
     const oldS = m.oldStock ?? m.old_stock ?? 0;
     const newS = m.newStock ?? m.new_stock ?? 0;
     html += '<tr>' +
-      '<td>' + new Date(m.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
+      '<td>' + new Date(m.date).toLocaleString(en ? 'en-US' : 'ar-EG') + '</td>' +
       '<td>' + escapeHTML(productName) + '</td>' +
       '<td>' + label + '</td>' +
       '<td>' + m.qty + '</td>' +
@@ -276,8 +286,9 @@ function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
+  const invLabel = currentLang === 'en' ? 'Invoice: ' : 'فاتورة: ';
   state.sales.forEach(function(s) {
-    saleSel.innerHTML += '<option value="' + s.id + '">فاتورة: ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
+    saleSel.innerHTML += '<option value="' + s.id + '">' + invLabel + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
   });
 }
 
@@ -299,7 +310,8 @@ function updateReturnProducts() {
       .reduce(function(sum, r) { return sum + (Number(r.qty) || 0); }, 0);
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
-      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + ' (متبقي: ' + remaining + ')</option>';
+      const remLabel = currentLang === 'en' ? ' (Remaining: ' : ' (متبقي: ';
+      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + remLabel + remaining + ')</option>';
     }
   });
 }
@@ -307,9 +319,9 @@ function updateReturnProducts() {
 async function saveReturn() {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};
-    if (!perms.canReturn) return showNotification('هذه العملية للمدير فقط', 'warning');
+    if (!perms.canReturn) return showNotification(tr('manager_only'), 'warning');
   }
-  if (window.isReadOnlyMode) return showNotification('جدد اشتراكك أولاً', 'error');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
 
   const saleId = document.getElementById('returnSale').value;
   const prodId = document.getElementById('returnProduct').value;
@@ -317,11 +329,11 @@ async function saveReturn() {
   const reason = document.getElementById('returnReason').value.trim();
 
   if (!saleId || !prodId) return showNotification(tr('notify_select_sale_item'), 'error');
-  if (qty < 1) return showNotification('كمية غير صحيحة', 'error');
+  if (qty < 1) return showNotification(tr('invalid_qty'), 'error');
 
   const sale = state.sales.find(function(s) { return s.id === saleId; });
   const item = sale ? sale.items.find(function(i) { return i.id === prodId; }) : null;
-  if (!item) return showNotification('الصنف غير موجود', 'error');
+  if (!item) return showNotification(tr('item_not_found'), 'error');
 
   const alreadyReturned = state.returns
     .filter(function(r) {
@@ -331,19 +343,19 @@ async function saveReturn() {
     })
     .reduce(function(sum, r) { return sum + (Number(r.qty) || 0); }, 0);
 
-  if (qty > item.qty - alreadyReturned) return showNotification('الكمية أكبر من المتبقي', 'error');
+  if (qty > item.qty - alreadyReturned) return showNotification(tr('qty_exceeds_remaining'), 'error');
 
   // 1) ضمان وردية مفتوحة
   let shiftId;
   try {
     shiftId = await ensureOpenShift();
   } catch (e) {
-    return showNotification('تعذر فتح وردية: ' + (e.message || ''), 'error');
+    return showNotification((currentLang === 'en' ? 'Failed to open shift: ' : 'تعذر فتح وردية: ') + (e.message || ''), 'error');
   }
 
   // ✅ [إصلاح جذري] لو الوردية مش موجودة (فشل الحفظ في السيرفر)، نمنع المرتجع
   if (!shiftId) {
-    return showNotification('تعذر إنشاء وردية. تأكد من الاتصال بالسيرفر.', 'error');
+    return showNotification(tr('shift_create_fail'), 'error');
   }
 
   // 2) تحديد طريقة الاسترداد (cash/credit)
@@ -375,7 +387,7 @@ async function saveReturn() {
     shiftId: shiftId,
     customer_id: customerId,
     customerId: customerId,
-    reason: reason || 'غير محدد',
+    reason: reason || tr('return_reason_default'),
     date: new Date().toISOString()
   };
 
@@ -400,7 +412,7 @@ async function saveReturn() {
       if (retErr) throw retErr;
     } catch (err) {
       console.error('Return upload failed:', err);
-      return showNotification('تعذر حفظ المرتجع: ' + err.message, 'error');
+      return showNotification(tr('return_save_fail') + err.message, 'error');
     }
   }
 
@@ -430,7 +442,7 @@ async function saveReturn() {
       type: 'return', qty: qty,
       old_stock: before, oldStock: before,
       new_stock: prod.stock, newStock: prod.stock,
-      reason: 'مرتجع فاتورة ' + saleId
+      reason: (currentLang === 'en' ? 'Return for Invoice ' : 'مرتجع فاتورة ') + saleId
     });
   }
 
@@ -454,25 +466,25 @@ async function saveReturn() {
   renderCustomers();
   updateStockBadge();
 
-  const methodText = refundMethod === 'credit' ? 'خصم من دين العميل' : 'استرداد كاش من الدرج';
-  showNotification('تم تسجيل المرتجع (' + methodText + ') ✅', 'success');
+  const methodText = refundMethod === 'credit' ? tr('refund_credit') : tr('refund_cash');
+  showNotification(tr('return_success_1') + methodText + tr('return_success_2'), 'success');
 }
 
 function renderReturns() {
   const container = document.getElementById('returnsTable');
   if (!container) return;
   if (state.returns.length === 0) {
-    container.innerHTML = '<p class="text-muted">لا توجد مرتجعات.</p>';
+    container.innerHTML = '<p class="text-muted">' + tr('no_returns') + '</p>';
     return;
   }
 
   const methodLabels = {
-    'cash': '💵 كاش',
-    'credit': '📝 خصم دين',
-    'none': '—'
+    'cash': tr('cash_method'),
+    'credit': tr('credit_method'),
+    'none': tr('none_method')
   };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_item">الصنف</th><th data-i18n="th_quantity">الكمية</th><th>القيمة</th><th>طريقة الاسترداد</th><th data-i18n="th_reason">السبب</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_item">الصنف</th><th data-i18n="th_quantity">الكمية</th><th>' + tr('th_value') + '</th><th>' + tr('return_method') + '</th><th data-i18n="th_reason">السبب</th></tr></thead><tbody>';
   state.returns.forEach(function(r) {
     const saleId = r.saleId || r.sale_id;
     const productName = r.productName || r.product_name;
