@@ -3,7 +3,15 @@
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register('service-worker.js', { scope: './' });
+    // ✅ التعديل الجذري: إجبار المتصفح على تجاهل الكاش لملف الـ SW نفسه
+    const reg = await navigator.serviceWorker.register('service-worker.js', { 
+      scope: './',
+      updateViaCache: 'none' 
+    });
+    
+    // فحص التحديثات كل دقيقة أثناء فتح التطبيق
+    setInterval(() => { reg.update(); }, 60000);
+
     navigator.serviceWorker.addEventListener('controllerchange', function() {
       if (!window.__swReloaded) { window.__swReloaded = true; location.reload(); }
     });
