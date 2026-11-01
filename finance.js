@@ -335,6 +335,100 @@ function clearReportPeriod() {
 /* ============================================================
    الوردية — الكاش المتوقع من financeCore
    ============================================================ */
+   /* ============================================================
+   ✅ v7.3 — كشف حساب الدرج التفصيلي (Additive)
+   تُحسب البنود مباشرة من state، ويُقارن المجموع مع financeCore
+   لضمان المطابقة الرياضية 100%.
+   ============================================================ */
+function renderShiftCashBreakdown(shiftId, expectedTotalFromCore) {
+  const container = document.getElementById('shiftCashBreakdown');
+  if (!container) return;
+
+  if (!shiftId) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+
+  const shift = (state.shifts || []).find(s => s.id === shiftId);
+  const openingCash = Number(shift?.opening_cash ?? shift?.openingCash) || 0;
+
+  // مبيعات كاش — مع فلتر paid > 0
+  const shiftCashSales = (state.sales || []).filter(s =>
+    (s.shift_id === shiftId || s.shiftId === shiftId) &&
+    (s.pay_method === 'cash' || s.payMethod === 'cash') &&
+    (Number(s.paid) || 0) > 0
+  );
+  const cashSales = shiftCashSales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const cashVat = shiftCashSales.reduce((sum, s) => sum + (Number(s.vat_amount ?? s.vatAmount ?? 0) || 0), 0);
+  const cashInvoicesCount = shiftCashSales.length;
+
+  // تحصيلات عملاء كاش
+  const cashCollections = (state.customerPayments || [])
+    .filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash'))
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  // مرتجعات كاش
+  const cashReturns = (state.returns || [])
+    .filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash'))
+    .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+
+  // مصروفات الدرج
+  const cashExpenses = (state.expenses || [])
+    .filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash'))
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  // التحقق الرياضي
+  const manualExpected = openingCash + cashSales + cashCollections - cashReturns - cashExpenses;
+  const finalExpected = Number(expectedTotalFromCore);
+  const resolvedExpected = Number.isFinite(finalExpected) ? finalExpected : manualExpected;
+  const matches = Math.abs(manualExpected - resolvedExpected) < 0.01;
+
+  if (!matches) {
+    console.warn('[Shift Breakdown] Mismatch with financeCore:', {
+      shiftId,
+      manual: manualExpected.toFixed(2),
+      core: resolvedExpected.toFixed(2)
+    });
+  }
+
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const row = (label, value, opts) => {
+    const o = opts || {};
+    const sign = o.sign || '';
+    const color = o.color || '#203447';
+    const weight = o.weight || '500';
+    const icon = o.icon || '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px dashed #e1e8ed;">' +
+      '<span style="color:#4a5f70;font-size:13px;">' + icon + ' ' + label + '</span>' +
+      '<span style="color:' + color + ';font-weight:600;font-size:14px;direction:ltr;white-space:nowrap;">' + sign + fmt(value) + ' ' + cur + '</span>' +
+    '</div>';
+  };
+
+  container.style.display = 'block';
+  container.innerHTML =
+    '<h4 style="margin:0 0 12px 0;color:#17364c;font-size:15px;">💼 ' + tr('shift_cash_breakdown_title') + '</h4>' +
+    row(tr('shift_opening_cash'), openingCash, { sign: '', icon: '💵', color: '#176b70' }) +
+    row(tr('shift_cash_sales') + ' (' + cashInvoicesCount + ' ' + (en ? 'invoices' : 'فاتورة') + ')', cashSales, { sign: '+ ', icon: '🛒', color: '#176b70' }) +
+    row(tr('shift_cash_collections'), cashCollections, { sign: '+ ', icon: '💰', color: '#176b70' }) +
+    row(tr('shift_cash_returns'), cashReturns, { sign: '− ', icon: '↩️', color: '#c0392b' }) +
+    row(tr('shift_cash_expenses'), cashExpenses, { sign: '− ', icon: '📤', color: '#c0392b' }) +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px;margin-top:6px;border-top:2px solid #176b70;">' +
+      '<span style="color:#17364c;font-weight:800;font-size:14px;">= ' + tr('shift_expected_total') + '</span>' +
+      '<span style="color:' + (resolvedExpected >= 0 ? '#176b70' : '#c0392b') + ';font-weight:900;font-size:18px;direction:ltr;">' + fmt(resolvedExpected) + ' ' + cur + '</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-top:8px;background:#f1f6f8;border-radius:6px;">' +
+      '<span style="color:#4a5f70;font-size:12px;">ℹ️ ' + tr('shift_vat_collected') + '</span>' +
+      '<span style="color:#17364c;font-weight:600;font-size:13px;direction:ltr;">' + fmt(cashVat) + ' ' + cur + '</span>' +
+    '</div>' +
+    (!matches
+      ? '<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border-left:3px solid #c0392b;border-radius:6px;color:#c0392b;font-size:12px;">⚠️ ' + tr('shift_reconciliation_mismatch') + '</div>'
+      : '');
+}
 async function calcExpectedShiftCash() {
   const shift = state.currentShift;
 
@@ -343,6 +437,9 @@ async function calcExpectedShiftCash() {
     if (!openShift) {
       const el = document.getElementById('shiftExpectedCash');
       if (el) el.value = '0.00 ' + state.storeSettings.currency;
+      // ✅ v7.3 — إخفاء الكشف عند عدم وجود وردية
+      const bd = document.getElementById('shiftCashBreakdown');
+      if (bd) { bd.style.display = 'none'; bd.innerHTML = ''; }
       calculateShiftDiff();
       return;
     }
@@ -368,6 +465,13 @@ async function calcExpectedShiftCash() {
   if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
 
   calculateShiftDiff();
+
+  // ✅ v7.3 — كشف حساب الدرج التفصيلي
+  try {
+    renderShiftCashBreakdown(currentShift.id, expectedCash);
+  } catch (e) {
+    console.warn('Shift breakdown render failed:', e);
+  }
 }
 
 function calculateShiftDiff() {
@@ -540,56 +644,192 @@ function renderShifts() {
 function printShiftReport() {
   const current = state.currentShift;
   const shift = current || state.shifts[0] || null;
-  const startTime = shift ? new Date(shift.start_time || shift.startTime).getTime() : 0;
-  const endTime = shift && (shift.end_time || shift.endTime) ? new Date(shift.end_time || shift.endTime).getTime() : Date.now();
-  const sales = state.sales.filter(function(s) {
-    const time = new Date(s.date).getTime();
-    return time >= startTime && time <= endTime;
-  });
+  if (!shift) return showNotification(tr('no_closed_shifts'), 'warning');
 
-  const totalSales = sales.reduce(function(sum, sale) { return sum + (Number(sale.total) || 0); }, 0);
-  const cashSales = sales.filter(function(sale) { return (sale.pay_method || sale.payMethod) === 'cash'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
-  const visaSales = sales.filter(function(sale) { return (sale.pay_method || sale.payMethod) === 'visa'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
-  const transferSales = sales.filter(function(sale) { return (sale.pay_method || sale.payMethod) === 'transfer'; }).reduce(function(sum, sale) { return sum + (Number(sale.paid) || 0); }, 0);
+  const shiftId = shift.id;
 
-  const actualCash = current ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift && (shift.actual_cash ?? shift.actualCash)) || 0);
+  // ✅ v7.3 — فلترة بـ shift_id (بدلاً من النطاق الزمني)
+  const sales = (state.sales || []).filter(s => (s.shift_id === shiftId || s.shiftId === shiftId));
 
-  let drawerExpensesTotal = 0;
-  let cashCollections = 0;
-  let cashReturnsTotal = 0;
-  let expectedCash = 0;
+  const shiftStart = new Date(shift.start_time || shift.startTime).getTime();
+  const shiftEnd = (shift.end_time || shift.endTime)
+    ? new Date(shift.end_time || shift.endTime).getTime()
+    : Date.now();
 
-  if (shift) {
-    const shiftId = shift.id;
-    drawerExpensesTotal = Number(shift.cash_expenses ?? shift.cashExpenses ?? 0) || (state.expenses || [])
-      .filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method || e.payMethod) === 'cash')
-      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    cashCollections = Number(shift.cash_collections ?? shift.cashCollections ?? 0) || (state.customerPayments || [])
-      .filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method || p.payMethod) === 'cash')
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    cashReturnsTotal = Number(shift.cash_returns ?? shift.cashReturns ?? 0) || (state.returns || [])
-      .filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method || r.refundMethod) === 'cash')
-      .reduce((sum, r) => sum + Number(r.total || 0), 0);
-    expectedCash = Number(shift.expected_cash ?? shift.expectedCash ?? 0) || financeCore.calcShiftExpectedCash(shiftId);
-  }
+  // ✅ v7.3 — كشف حساب الدرج
+  const openingCash = Number(shift.opening_cash ?? shift.openingCash) || 0;
+
+  const shiftCashSales = sales.filter(s =>
+    (s.pay_method === 'cash' || s.payMethod === 'cash') && (Number(s.paid) || 0) > 0
+  );
+  const cashSales = shiftCashSales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const cashVat = shiftCashSales.reduce((sum, s) => sum + (Number(s.vat_amount ?? s.vatAmount ?? 0) || 0), 0);
+  const cashInvoicesCount = shiftCashSales.length;
+
+  const cashCollections = (state.customerPayments || [])
+    .filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash'))
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const cashReturnsTotal = (state.returns || [])
+    .filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash'))
+    .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+
+  const drawerExpensesTotal = (state.expenses || [])
+    .filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash'))
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  const expectedCash = financeCore.calcShiftExpectedCash(shiftId);
+  const manualExpected = openingCash + cashSales + cashCollections - cashReturnsTotal - drawerExpensesTotal;
+  const matches = Math.abs(manualExpected - expectedCash) < 0.01;
+
+  // قيم إضافية للسياق
+  const totalSales = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+  const visaSales = sales.filter(s => (s.pay_method === 'visa' || s.payMethod === 'visa')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const transferSales = sales.filter(s => (s.pay_method === 'transfer' || s.payMethod === 'transfer')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+
+  const actualCash = current
+    ? (parseFloat(document.getElementById('shiftActualCash').value) || 0)
+    : (Number(shift.actual_cash ?? shift.actualCash) || 0);
 
   const difference = actualCash - expectedCash;
 
   const en = currentLang === 'en';
-  const labels = en ? {title:'Shift Report',shift:'Shift',cashier:'Cashier',start:'Start',end:'End',invoice:'Invoice',date:'Date',customer:'Customer',payment:'Payment',total:'Total',paid:'Paid',summary:'Summary',count:'Invoice Count',sales:'Total Sales',cash:'Cash Sales',visa:'Visa Sales',transfer:'Transfer Sales',drawerExpenses:'Drawer Expenses',expected:'Expected Cash',actual:'Actual Cash',difference:'Difference',thanks:'Generated by Matjari'} : {title:'تقرير الوردية',shift:'الوردية',cashier:'الكاشير',start:'بداية الوردية',end:'نهاية الوردية',invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',payment:'طريقة الدفع',total:'الإجمالي',paid:'المدفوع',summary:'الملخص',count:'عدد الفواتير',sales:'مجموع المبيعات',cash:'مبيعات كاش',visa:'مبيعات فيزا',transfer:'مبيعات تحويل',drawerExpenses:'مصروفات الدرج',expected:'الكاش المتوقع',actual:'النقدية الفعلية',difference:'الفرق',thanks:'صادر من متجري'};
+  const labels = en ? {
+    title: 'Shift Report',
+    shift: 'Shift', cashier: 'Cashier',
+    start: 'Start', end: 'End',
+    invoice: 'Invoice', date: 'Date', customer: 'Customer', payment: 'Payment', total: 'Total', paid: 'Paid',
+    breakdown: 'Drawer Cash Breakdown',
+    opening: 'Opening Cash',
+    cashSales: 'Cash Sales',
+    cashCollections: 'Cash Collections',
+    cashReturns: 'Cash Returns',
+    cashExpenses: 'Drawer Expenses',
+    expectedTotal: 'Expected Cash',
+    vatCollected: 'VAT Collected',
+    reconciliation: 'Reconciliation',
+    expectedCashLabel: 'Expected Cash',
+    actualCashLabel: 'Actual Cash',
+    differenceLabel: 'Difference',
+    otherPayments: 'Other Payment Methods',
+    invoicesTable: 'Invoices',
+    noteTitle: 'Note',
+    noteBody: 'Cash Sales excludes invoices with paid = 0. VAT Collected is part of Total and is not added separately to the drawer.',
+    thanks: 'Generated by Matjari'
+  } : {
+    title: 'تقرير الوردية',
+    shift: 'الوردية', cashier: 'الكاشير',
+    start: 'بداية الوردية', end: 'نهاية الوردية',
+    invoice: 'رقم الفاتورة', date: 'التاريخ', customer: 'العميل', payment: 'طريقة الدفع', total: 'الإجمالي', paid: 'المدفوع',
+    breakdown: 'كشف حساب الدرج',
+    opening: 'رصيد بداية الوردية',
+    cashSales: 'مبيعات كاش',
+    cashCollections: 'تحصيلات عملاء كاش',
+    cashReturns: 'مرتجعات كاش',
+    cashExpenses: 'مصروفات الدرج',
+    expectedTotal: 'صافي الكاش المتوقع',
+    vatCollected: 'الضريبة المحصلة',
+    reconciliation: 'المطابقة',
+    expectedCashLabel: 'الكاش المتوقع',
+    actualCashLabel: 'الكاش الفعلي',
+    differenceLabel: 'الفرق',
+    otherPayments: 'طرق دفع أخرى',
+    invoicesTable: 'الفواتير',
+    noteTitle: 'ملاحظة',
+    noteBody: 'مبيعات الكاش تستثني الفواتير التي paid = 0. الضريبة المحصلة جزء من الإجمالي ولا تُضاف منفصلة للدرج.',
+    thanks: 'صادر من متجري'
+  };
+
   const currency = escapeHTML(state.storeSettings.currency || (en ? 'EGP' : 'ج.م'));
   const shop = escapeHTML(state.storeSettings.name || (en ? 'My Store' : 'متجري'));
+
   const rows = sales.map(function(sale) {
     const custId = sale.customer_id || sale.customerId;
     const customer = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = sale.pay_method || sale.payMethod;
-    return '<tr><td>' + escapeHTML(sale.id) + '</td><td>' + escapeHTML(new Date(sale.date).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</td><td>' + escapeHTML(customer ? customer.name : tr('cash_customer')) + '</td><td>' + escapeHTML(payMethod || '-') + '</td><td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + currency + '</td><td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + currency + '</td></tr>';
+    return '<tr>' +
+      '<td>' + escapeHTML(sale.id) + '</td>' +
+      '<td>' + escapeHTML(new Date(sale.date).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</td>' +
+      '<td>' + escapeHTML(customer ? customer.name : tr('cash_customer')) + '</td>' +
+      '<td>' + escapeHTML(payMethod || '-') + '</td>' +
+      '<td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + currency + '</td>' +
+      '<td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + currency + '</td>' +
+    '</tr>';
   }).join('');
+
+  const fmt = (n) => Number(n || 0).toFixed(2);
+  const bdRow = (label, value, sign, cls) =>
+    '<tr class="' + (cls || '') + '"><td>' + sign + ' ' + label + '</td><td style="text-align:left;direction:ltr;">' + fmt(value) + ' ' + currency + '</td></tr>';
 
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) return showNotification(tr('allow_popups_print'), 'warning');
 
-  win.document.write('<!doctype html><html lang="' + (en?'en':'ar') + '" dir="' + (en?'ltr':'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title><style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70}table{width:100%;border-collapse:collapse;margin:18px 0}th{background:#17364c;color:white}th,td{padding:9px;border:1px solid #ccd7df;text-align:' + (en?'left':'right') + '} .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary div{padding:12px;background:#f0f6f7;border-radius:8px} @media print{button{display:none}}</style></head><body><h1>' + shop + ' — ' + labels.title + '</h1><p>' + labels.shift + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || shift.id : tr('current_shift_label')) + '</p><p>' + labels.cashier + ': ' + escapeHTML(shift ? shift.cashier_name || shift.cashierName || '-' : '-') + '</p><p>' + labels.start + ': ' + (shift ? escapeHTML(new Date(shift.start_time || shift.startTime).toLocaleString(en?'en-US':'ar-EG')) : '-') + ' &nbsp; ' + labels.end + ': ' + escapeHTML(new Date(endTime).toLocaleString(en?'en-US':'ar-EG')) + '</p><h2>' + labels.summary + '</h2><section class="summary"><div>' + labels.count + ': <b>' + sales.length + '</b></div><div>' + labels.sales + ': <b>' + totalSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.cash + ': <b>' + cashSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.visa + ': <b>' + visaSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.transfer + ': <b>' + transferSales.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.drawerExpenses + ': <b>' + drawerExpensesTotal.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.expected + ': <b>' + expectedCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.actual + ': <b>' + actualCash.toFixed(2) + ' ' + currency + '</b></div><div>' + labels.difference + ': <b>' + difference.toFixed(2) + ' ' + currency + '</b></div></section><table><thead><tr><th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + labels.thanks + '</p><button onclick="window.print()">' + tr('print_btn_text') + '</button><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');
+  win.document.write(
+    '<!doctype html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + (en ? 'ltr' : 'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title>' +
+    '<style>' +
+      'body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}' +
+      'h1{color:#176b70;margin:0 0 6px}' +
+      'h2{color:#17364c;font-size:16px;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}' +
+      'table{width:100%;border-collapse:collapse;margin:8px 0}' +
+      'th{background:#17364c;color:white;padding:9px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}' +
+      'td{padding:8px 10px;border:1px solid #ccd7df;font-size:12px;text-align:' + (en ? 'left' : 'right') + '}' +
+      '.breakdown td{border:1px solid #e1e8ed}' +
+      '.breakdown tr.total td{background:#e8f4f4;font-weight:900;color:#176b70;border-top:2px solid #176b70;font-size:13px}' +
+      '.breakdown tr.vat td{background:#f1f6f8;color:#4a5f70;font-size:11px}' +
+      '.breakdown tr.minus td{color:#c0392b}' +
+      '.recon-box{padding:14px;background:#f8fafb;border:1px solid #dce5ec;border-radius:8px;margin:12px 0}' +
+      '.recon-box table td{border:none;padding:6px 0}' +
+      '.recon-box .diff-row td{border-top:2px solid #dce5ec;padding-top:10px;font-weight:900;font-size:15px;color:' + (difference < 0 ? '#c0392b' : (difference > 0 ? '#176b70' : '#4a5f70')) + '}' +
+      '.note{padding:10px 14px;background:#fff8e1;border-left:3px solid #b8860b;border-radius:6px;font-size:11px;color:#7a5c00;line-height:1.6;margin-top:14px}' +
+      '@media print{button{display:none}body{padding:10px}}' +
+    '</style></head><body>' +
+    '<h1>' + shop + ' — ' + labels.title + '</h1>' +
+    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + labels.cashier + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + '</p>' +
+    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + labels.start + ':</b> ' + new Date(shiftStart).toLocaleString(en ? 'en-US' : 'ar-EG') +
+    ' &nbsp;&nbsp; <b>' + labels.end + ':</b> ' + new Date(shiftEnd).toLocaleString(en ? 'en-US' : 'ar-EG') + '</p>' +
+
+    // ─── كشف حساب الدرج ───
+    '<h2>' + labels.breakdown + '</h2>' +
+    '<table class="breakdown"><tbody>' +
+      bdRow(labels.opening, openingCash, '💵', '') +
+      bdRow(labels.cashSales + ' (' + cashInvoicesCount + ' ' + (en ? 'invoices' : 'فاتورة') + ')', cashSales, '+', '') +
+      bdRow(labels.cashCollections, cashCollections, '+', '') +
+      bdRow(labels.cashReturns, cashReturnsTotal, '−', 'minus') +
+      bdRow(labels.cashExpenses, drawerExpensesTotal, '−', 'minus') +
+      '<tr class="total"><td>= ' + labels.expectedTotal + '</td><td style="text-align:left;direction:ltr;">' + fmt(expectedCash) + ' ' + currency + '</td></tr>' +
+      '<tr class="vat"><td>ℹ️ ' + labels.vatCollected + '</td><td style="text-align:left;direction:ltr;">' + fmt(cashVat) + ' ' + currency + '</td></tr>' +
+    '</tbody></table>' +
+
+    // ─── المطابقة ───
+    '<h2>' + labels.reconciliation + '</h2>' +
+    '<div class="recon-box"><table>' +
+      '<tr><td>' + labels.expectedCashLabel + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(expectedCash) + ' ' + currency + '</b></td></tr>' +
+      '<tr><td>' + labels.actualCashLabel + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(actualCash) + ' ' + currency + '</b></td></tr>' +
+      '<tr class="diff-row"><td>' + labels.differenceLabel + '</td><td style="text-align:left;direction:ltr;">' + (difference < 0 ? '−' : (difference > 0 ? '+' : '')) + fmt(Math.abs(difference)) + ' ' + currency + '</td></tr>' +
+    '</table></div>' +
+    (matches ? '' : '<p style="color:#c0392b;font-size:12px;">⚠️ ' + tr('shift_reconciliation_mismatch') + '</p>') +
+
+    // ─── طرق دفع أخرى ───
+    '<h2>' + labels.otherPayments + '</h2>' +
+    '<table><tbody>' +
+      '<tr><td>' + (en ? 'Visa / Card' : 'فيزا / بطاقة') + '</td><td style="text-align:left;direction:ltr;">' + fmt(visaSales) + ' ' + currency + '</td></tr>' +
+      '<tr><td>' + (en ? 'Bank Transfer' : 'تحويل بنكي') + '</td><td style="text-align:left;direction:ltr;">' + fmt(transferSales) + ' ' + currency + '</td></tr>' +
+      '<tr><td><b>' + (en ? 'Total Sales (all methods)' : 'إجمالي المبيعات (كل الطرق)') + '</b></td><td style="text-align:left;direction:ltr;"><b>' + fmt(totalSales) + ' ' + currency + '</b></td></tr>' +
+    '</tbody></table>' +
+
+    // ─── الفواتير ───
+    '<h2>' + labels.invoicesTable + ' (' + sales.length + ')</h2>' +
+    '<table><thead><tr>' +
+      '<th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+
+    // ─── ملاحظة ───
+    '<div class="note"><b>' + labels.noteTitle + ':</b> ' + labels.noteBody + '</div>' +
+
+    '<p style="text-align:center;margin-top:18px;color:#687b8b;font-size:11px;">' + labels.thanks + '</p>' +
+    '<div style="text-align:center;margin-top:12px;"><button onclick="window.print()" style="padding:10px 24px;border:0;border-radius:8px;background:#176b70;color:#fff;font-weight:700;cursor:pointer;">' + tr('print_btn_text') + '</button></div>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>'
+  );
   win.document.close();
 }
 

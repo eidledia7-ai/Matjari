@@ -418,7 +418,16 @@ vat_collected: "إجمالي الضريبة المحصلة",
   profit_net_profit:       "صافي الربح",
   profit_margin_pct:       "الهامش %",
   profit_report_note_title:"ملاحظة",
-  profit_report_note_body: "هذا التقرير يحسب الإيراد بدون ضريبة القيمة المضافة، ويخصم تكلفة المرتجعات بناءً على تكلفة البيع الأصلية وقت إتمام الفاتورة. قد تختلف الأرقام قليلاً عن ملخص الفترة في اللوحة الرئيسية بسبب اختلاف طريقة الحساب."
+  profit_report_note_body: "هذا التقرير يحسب الإيراد بدون ضريبة القيمة المضافة، ويخصم تكلفة المرتجعات بناءً على تكلفة البيع الأصلية وقت إتمام الفاتورة. قد تختلف الأرقام قليلاً عن ملخص الفترة في اللوحة الرئيسية بسبب اختلاف طريقة الحساب.",
+ shift_cash_breakdown_title:    "كشف حساب الدرج",
+  shift_opening_cash:            "رصيد بداية الوردية",
+  shift_cash_sales:              "مبيعات كاش",
+  shift_cash_collections:        "تحصيلات عملاء كاش",
+  shift_cash_returns:            "مرتجعات كاش",
+  shift_cash_expenses:           "مصروفات الدرج",
+  shift_expected_total:          "صافي الكاش المتوقع",
+  shift_vat_collected:           "الضريبة المحصلة",
+  shift_reconciliation_mismatch: "تحذير: يوجد اختلاف بين الحساب اليدوي وحساب financeCore — راجع البيانات."
 },
    
         en: {
@@ -1010,7 +1019,16 @@ vat_collected: "Total VAT Collected",
   profit_net_profit:       "Net Profit",
   profit_margin_pct:       "Margin %",
   profit_report_note_title:"Note",
-  profit_report_note_body: "This report calculates revenue excluding VAT and deducts the cost of returns based on the original sale cost at the time the invoice was completed. Figures may differ slightly from the period summary on the main dashboard due to different calculation methods."
+  profit_report_note_body: "This report calculates revenue excluding VAT and deducts the cost of returns based on the original sale cost at the time the invoice was completed. Figures may differ slightly from the period summary on the main dashboard due to different calculation methods.",
+  shift_cash_breakdown_title:    "Drawer Cash Breakdown",
+  shift_opening_cash:            "Opening Cash",
+  shift_cash_sales:              "Cash Sales",
+  shift_cash_collections:        "Cash Collections",
+  shift_cash_returns:            "Cash Returns",
+  shift_cash_expenses:           "Drawer Expenses",
+  shift_expected_total:          "Expected Cash",
+  shift_vat_collected:           "VAT Collected",
+  shift_reconciliation_mismatch: "Warning: Mismatch detected between manual breakdown and financeCore — please review data."
 }
 };
 /* ============ خطط الاشتراك (مركزية) ============ */
