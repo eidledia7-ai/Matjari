@@ -153,7 +153,15 @@ function renderReports() {
   const cashSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const cardSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'visa' || (s.payMethod || s.pay_method) === 'card').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const transferSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'transfer').reduce((sum, s) => sum + Number(s.paid || 0), 0);
-  const debtSales = summary.credit_remaining;
+  // ✅ v7.5 — ديون العملاء من state.customerBalances (رصيد لحظي، غير مرتبط بالفترة)
+let debtSales;
+let debtIsFallback = false;
+if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
+  debtSales = Object.values(state.customerBalances).reduce((s, b) => s + Math.max(0, Number(b) || 0), 0);
+} else {
+  debtSales = summary.credit_remaining;
+  debtIsFallback = true;
+}
 
   const customerTotals = {};
   filteredSales.forEach(s => {
@@ -168,36 +176,46 @@ function renderReports() {
   const topCustomers = Object.entries(customerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   let detailsHtml = `
-    <div class="grid-2 mt-20">
-      <div class="card">
-        <h3>${tr('payment_methods_details')}</h3>
-        <table class="data-table">
-          <tbody>
-            <tr><td>${tr('cash_sales_label')}</td><td><b>${fmt(cashSales)}</b></td></tr>
-            <tr><td>${tr('visa_sales_label')}</td><td><b>${fmt(cardSales)}</b></td></tr>
-            <tr><td>${tr('bank_transfers_label')}</td><td><b>${fmt(transferSales)}</b></td></tr>
-            <tr style="background:#fef2f2"><td>${tr('debts_remaining_label')}</td><td><b class="red-text">${fmt(debtSales)}</b></td></tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div class="card">
-        <h3>${tr('top_customers')}</h3>
-        ${topCustomers.length > 0 ? `
-        <table class="data-table">
-          <tbody>
-            ${topCustomers.map((c, idx) => `
-              <tr>
-                <td>${idx + 1}. ${escapeHTML(c[0])}</td>
-                <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        ` : '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_cust_sales') + '</p>'}
-      </div>
+  <div class="grid-2 mt-20">
+    <div class="card">
+      <h3>${tr('payment_methods_details')}</h3>
+      <table class="data-table">
+        <tbody>
+          <tr><td>${tr('cash_sales_label')}</td><td><b>${fmt(cashSales)}</b></td></tr>
+          <tr><td>${tr('visa_sales_label')}</td><td><b>${fmt(cardSales)}</b></td></tr>
+          <tr><td>${tr('bank_transfers_label')}</td><td><b>${fmt(transferSales)}</b></td></tr>
+        </tbody>
+      </table>
     </div>
-  `;
+    
+    <div class="card">
+      <h3>${tr('top_customers')}</h3>
+      ${topCustomers.length > 0 ? `
+      <table class="data-table">
+        <tbody>
+          ${topCustomers.map((c, idx) => `
+            <tr>
+              <td>${idx + 1}. ${escapeHTML(c[0])}</td>
+              <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_cust_sales') + '</p>'}
+    </div>
+  </div>
+
+  <!-- ✅ v7.5 — صندوق الأرصدة الحالية (لحظي) -->
+  <div class="card mt-20" style="background:#fff8e1;border-left:4px solid #b8860b;">
+    <h3 style="margin:0 0 8px 0;color:#7a5c00;">${tr('current_customer_debts_title')}</h3>
+    <p style="margin:0 0 12px 0;font-size:12px;color:#7a5c00;line-height:1.6;">${tr('current_customer_debts_note')}</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #e8d79a;">
+      <span style="font-weight:700;color:#17364c;">${tr('current_total_debts')}</span>
+      <span style="font-weight:900;font-size:20px;color:#c0392b;direction:ltr;">${fmt(debtSales)} ${state.storeSettings.currency}</span>
+    </div>
+    ${debtIsFallback ? `<p style="margin:8px 0 0 0;font-size:11px;color:#b8860b;">⚠️ ${tr('current_debts_fallback_note')}</p>` : ''}
+  </div>
+`;
 
   let activityContainer = document.getElementById('activityDetailsReport');
   if (activityContainer) {
