@@ -280,7 +280,6 @@ function renderStockMoves() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-
 /* ============ المرتجعات ============ */
 function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
@@ -362,9 +361,15 @@ async function saveReturn() {
   const refundMethod = askRefundMethod(sale, item, qty);
   if (refundMethod === null) return;
 
-  // 3) حساب قيمة المرتجع
+  // 3) ✅ [VAT] حساب قيمة المرتجع شاملة الضريبة باستخدام Snapshot الفاتورة الأصلية
   const unitPrice = Number(item.price) || 0;
-  const returnValue = unitPrice * qty;
+  const baseReturn = unitPrice * qty;
+  const saleVatRate = Number(sale.vat_rate) || 0;
+  const saleVatMode = sale.vat_mode || 'inclusive';
+  const vatSnap = financeCore.calcVatFromSnapshot(baseReturn, saleVatRate, saleVatMode);
+  const returnValue = vatSnap.total;         // ✅ شامل الضريبة — يدخل في returned_total
+  const returnVat   = vatSnap.vat_amount;    // ✅ Snapshot للضريبة في المرتجع
+
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = sale.customer_id || sale.customerId || null;
 
@@ -380,7 +385,8 @@ async function saveReturn() {
     productName: item.name,
     qty: qty,
     price: unitPrice,
-    total: returnValue,
+    total: returnValue,           // ✅ شامل الضريبة
+    vat_amount: returnVat,        // ✅ Snapshot جديد
     refund_method: refundMethod,
     refundMethod: refundMethod,
     shift_id: shiftId,
@@ -391,7 +397,7 @@ async function saveReturn() {
     date: new Date().toISOString()
   };
 
-  // 5) الحفظ في Supabase (الـ trigger handle_return_full هيعمل الباقي)
+  // 5) الحفظ في Supabase (الـ trigger handle_return_full هيعمل الباقي بدون تعديل)
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: retErr } = await supabaseClient.from('returns').insert({
@@ -403,6 +409,7 @@ async function saveReturn() {
         qty: newReturn.qty,
         price: newReturn.price,
         total: newReturn.total,
+        vat_amount: newReturn.vat_amount,   // ✅ جديد
         refund_method: newReturn.refund_method,
         shift_id: newReturn.shift_id,
         customer_id: newReturn.customer_id,
@@ -422,6 +429,7 @@ async function saveReturn() {
   // ⚠️ ملاحظة: remaining = total - paid (GENERATED COLUMN) — لا يتغير بالمرتجع
   // فقط returned_total و net_total يتحدثوا
   if (sale) {
+    // ✅ returnValue صار شامل الضريبة → returned_total يُجمَع صحيحاً
     sale.returned_total = (Number(sale.returned_total) || 0) + returnValue;
     sale.returnedTotal = sale.returned_total;
     sale.net_total = Math.max(0, (Number(sale.total) || 0) - sale.returned_total);
@@ -449,7 +457,7 @@ async function saveReturn() {
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_return', {
       returnId: newReturn.id, saleId, qty,
-      refundMethod, returnValue
+      refundMethod, returnValue, vatAmount: returnVat
     }, newReturn.id);
   }
 

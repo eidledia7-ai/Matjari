@@ -38,13 +38,32 @@ async function printInvoice(sale) {
   const cashier = escapeHTML(sale.cashier || (state.currentUser && state.currentUser.email) || '—');
   const en = currentLang === 'en';
 
+  // ✅ [VAT] قراءة Snapshot الضريبة من الفاتورة
+  const vatAmount = Number(sale.vat_amount ?? sale.vatAmount ?? 0) || 0;
+  const vatRate = Number(sale.vat_rate ?? sale.vatRate ?? 0) || 0;
+  const vatMode = sale.vat_mode || sale.vatMode || 'inclusive';
+
   const payLabels = { cash: en ? 'Cash' : 'نقدي', card: en ? 'Card' : 'بطاقة', credit: en ? 'Credit' : 'آجل', wallet: en ? 'Wallet' : 'محفظة', visa: en ? 'Visa' : 'فيزا', transfer: en ? 'Transfer' : 'تحويل' };
   const payText = payLabels[sale.payMethod] || sale.payMethod || '-';
 
   const safeLogo = typeof settings.logo === 'string' && (settings.logo.startsWith('http') || settings.logo.startsWith('data:image/')) ? settings.logo : '';
-  const labels = en ? {invoice:'Invoice',date:'Date',customer:'Customer',item:'Item',qty:'Qty',price:'Price',total:'Total',subtotal:'Subtotal',discount:'Discount',net:'Net Total',paid:'Paid',remaining:'Remaining',payment:'Payment Method',cashier:'Cashier',thanks:'Thank you!'} : {invoice:'رقم الفاتورة',date:'التاريخ',customer:'العميل',item:'الصنف',qty:'الكمية',price:'السعر',total:'الإجمالي',subtotal:'الإجمالي قبل الخصم',discount:'الخصم',net:'الصافي',paid:'المدفوع',remaining:'المتبقي',payment:'طريقة الدفع',cashier:'الكاشير',thanks:'شكراً لتعاملكم معنا!'};
+  const labels = en
+    ? { invoice:'Invoice', date:'Date', customer:'Customer', item:'Item', qty:'Qty', price:'Price', total:'Total', subtotal:'Subtotal', discount:'Discount', net:'Net Total', paid:'Paid', remaining:'Remaining', payment:'Payment Method', cashier:'Cashier', thanks:'Thank you!', vat:'VAT' }
+    : { invoice:'رقم الفاتورة', date:'التاريخ', customer:'العميل', item:'الصنف', qty:'الكمية', price:'السعر', total:'الإجمالي', subtotal:'الإجمالي قبل الخصم', discount:'الخصم', net:'الصافي', paid:'المدفوع', remaining:'المتبقي', payment:'طريقة الدفع', cashier:'الكاشير', thanks:'شكراً لتعاملكم معنا!', vat:'الضريبة' };
 
-  w.document.write(`<!DOCTYPE html><html lang="${en?'en':'ar'}" dir="${en?'ltr':'rtl'}"><head><meta charset="UTF-8"><title>${labels.invoice} ${escapeHTML(sale.id)}</title><style>*{box-sizing:border-box}body{font-family:Tahoma,Arial;margin:0;padding:22px;background:#f3f6f8;color:#203447}.invoice{max-width:760px;margin:auto;background:white;padding:28px;border:1px solid #dce5ec;border-top:7px solid #176b70;border-radius:12px}.head{text-align:center;border-bottom:2px solid #e1e8ed;padding-bottom:16px}.head h1{color:#17364c;margin:0 0 8px}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.meta div{padding:11px;background:#f1f6f8;border-radius:8px}.meta b{display:block;color:#176b70;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#17364c;color:white}th,td{padding:11px;border:1px solid #dce5ec;text-align:${en?'left':'right'}}tbody tr:nth-child(even){background:#f7fafb}.totals{margin-${en?'left':'right'}:auto;max-width:340px}.totals p{display:flex;justify-content:space-between;margin:7px 0;padding:5px}.net{font-size:23px;font-weight:bold;color:#176b70;border-top:2px solid #176b70;padding-top:12px!important}.footer{text-align:center;border-top:1px solid #dce5ec;margin-top:20px;padding-top:16px}@media print{body{padding:0;background:#fff}.invoice{border:0;border-top:6px solid #176b70;border-radius:0;max-width:none;padding:10px;box-shadow:none}}</style></head><body><main class="invoice"><header class="head">${safeLogo ? `<img src="${safeLogo}" style="max-width:90px;max-height:70px">` : ''}<h1>${shopName}</h1><div>${phone} | ${address}</div></header><section class="meta"><div><b>${labels.invoice}</b>${escapeHTML(sale.id)}</div><div><b>${labels.date}</b>${dateText}</div><div><b>${labels.customer}</b>${customerName}</div></section><table><thead><tr><th>${labels.item}</th><th>${labels.qty}</th><th>${labels.price}</th><th>${labels.total}</th></tr></thead><tbody>${(sale.items||[]).map(i=>`<tr><td>${escapeHTML(i.name||'')}</td><td>${Number(i.qty||0)}</td><td>${Number(i.price||0).toFixed(2)}${currencyLabel}</td><td>${(Number(i.qty||0)*Number(i.price||0)).toFixed(2)}${currencyLabel}</td></tr>`).join('')}</tbody></table><section class="totals"><p><span>${labels.subtotal}</span><b>${subtotal.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.discount}</span><b>${discount.toFixed(2)}${currencyLabel}</b></p><p class="net"><span>${labels.net}</span><span>${total.toFixed(2)}${currencyLabel}</span></p><p><span>${labels.paid}</span><b>${paid.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.remaining}</span><b>${remaining.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.payment}</span><b>${escapeHTML(payText)}</b></p></section><footer class="footer">${qrDataUrl?`<img src="${qrDataUrl}" style="width:115px;height:115px">`:''}<p>${labels.cashier}: <b>${cashier}</b></p></footer></main><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
+  // ✅ [VAT] بناء سطر VAT وسطر Net حسب الوضع
+  const vatLineHtml = vatAmount > 0
+    ? `<p class="vat-line"><span>${labels.vat} (${vatRate}%)</span><b>${vatAmount.toFixed(2)}${currencyLabel}</b></p>`
+    : '';
+  const netLineHtml = `<p class="net"><span>${labels.net}</span><span>${total.toFixed(2)}${currencyLabel}</span></p>`;
+
+  // inclusive: Subtotal → Discount → Net → VAT → Paid
+  // exclusive: Subtotal → Discount → VAT → Net → Paid
+  const vatAndNetHtml = (vatAmount > 0 && vatMode === 'exclusive')
+    ? vatLineHtml + netLineHtml
+    : netLineHtml + vatLineHtml;
+
+  w.document.write(`<!DOCTYPE html><html lang="${en?'en':'ar'}" dir="${en?'ltr':'rtl'}"><head><meta charset="UTF-8"><title>${labels.invoice} ${escapeHTML(sale.id)}</title><style>*{box-sizing:border-box}body{font-family:Tahoma,Arial;margin:0;padding:22px;background:#f3f6f8;color:#203447}.invoice{max-width:760px;margin:auto;background:white;padding:28px;border:1px solid #dce5ec;border-top:7px solid #176b70;border-radius:12px}.head{text-align:center;border-bottom:2px solid #e1e8ed;padding-bottom:16px}.head h1{color:#17364c;margin:0 0 8px}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.meta div{padding:11px;background:#f1f6f8;border-radius:8px}.meta b{display:block;color:#176b70;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#17364c;color:white}th,td{padding:11px;border:1px solid #dce5ec;text-align:${en?'left':'right'}}tbody tr:nth-child(even){background:#f7fafb}.totals{margin-${en?'left':'right'}:auto;max-width:340px}.totals p{display:flex;justify-content:space-between;margin:7px 0;padding:5px}.net{font-size:23px;font-weight:bold;color:#176b70;border-top:2px solid #176b70;padding-top:12px!important}.vat-line{font-size:0.92em;color:#666}.footer{text-align:center;border-top:1px solid #dce5ec;margin-top:20px;padding-top:16px}@media print{body{padding:0;background:#fff}.invoice{border:0;border-top:6px solid #176b70;border-radius:0;max-width:none;padding:10px;box-shadow:none}}</style></head><body><main class="invoice"><header class="head">${safeLogo ? `<img src="${safeLogo}" style="max-width:90px;max-height:70px">` : ''}<h1>${shopName}</h1><div>${phone} | ${address}</div></header><section class="meta"><div><b>${labels.invoice}</b>${escapeHTML(sale.id)}</div><div><b>${labels.date}</b>${dateText}</div><div><b>${labels.customer}</b>${customerName}</div></section><table><thead><tr><th>${labels.item}</th><th>${labels.qty}</th><th>${labels.price}</th><th>${labels.total}</th></tr></thead><tbody>${(sale.items||[]).map(i=>`<tr><td>${escapeHTML(i.name||'')}</td><td>${Number(i.qty||0)}</td><td>${Number(i.price||0).toFixed(2)}${currencyLabel}</td><td>${(Number(i.qty||0)*Number(i.price||0)).toFixed(2)}${currencyLabel}</td></tr>`).join('')}</tbody></table><section class="totals"><p><span>${labels.subtotal}</span><b>${subtotal.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.discount}</span><b>${discount.toFixed(2)}${currencyLabel}</b></p>${vatAndNetHtml}<p><span>${labels.paid}</span><b>${paid.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.remaining}</span><b>${remaining.toFixed(2)}${currencyLabel}</b></p><p><span>${labels.payment}</span><b>${escapeHTML(payText)}</b></p></section><footer class="footer">${qrDataUrl?`<img src="${qrDataUrl}" style="width:115px;height:115px">`:''}<p>${labels.cashier}: <b>${cashier}</b></p></footer></main><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
   w.document.close();
 }
 
@@ -93,6 +112,11 @@ function printThermalInvoice(saleId) {
   const custName = cust ? cust.name : 'عميل نقدي';
   const cur = settings.currency || 'ج.م';
 
+  // ✅ [VAT] قراءة Snapshot الضريبة من الفاتورة
+  const vatAmount = Number(sale.vat_amount ?? sale.vatAmount ?? 0) || 0;
+  const vatRate = Number(sale.vat_rate ?? sale.vatRate ?? 0) || 0;
+  const vatMode = sale.vat_mode || sale.vatMode || 'inclusive';
+
   const oldFrame = document.getElementById('thermalPrintFrame');
   if (oldFrame) oldFrame.remove();
 
@@ -113,6 +137,18 @@ function printThermalInvoice(saleId) {
   const discount = Number(sale.discount || 0);
   const total = Number(sale.total || 0);
 
+  // ✅ [VAT] بناء سطر VAT وسطر الإجمالي حسب الوضع
+  const vatLineThermal = vatAmount > 0
+    ? `<div style="display:flex; justify-content:space-between;"><span>الضريبة (${vatRate}%):</span><span>${vatAmount.toFixed(2)} ${cur}</span></div>`
+    : '';
+  const totalLineThermal = `<div style="display:flex; justify-content:space-between; font-weight:bold;"><span>الإجمالي:</span><span>${total.toFixed(2)} ${cur}</span></div>`;
+
+  // inclusive: Subtotal → Discount → Total → VAT → Paid
+  // exclusive: Subtotal → Discount → VAT → Total → Paid
+  const vatAndTotalThermal = (vatAmount > 0 && vatMode === 'exclusive')
+    ? vatLineThermal + totalLineThermal
+    : totalLineThermal + vatLineThermal;
+
   win.document.write(`
     <!DOCTYPE html><html dir="rtl" lang="ar">
     <head><meta charset="UTF-8"><title>فاتورة</title>
@@ -124,7 +160,7 @@ function printThermalInvoice(saleId) {
       <div class="dashed-line"></div>${itemsHtml}<div class="dashed-line"></div>
       <div style="display:flex; justify-content:space-between;"><span>الإجمالي قبل الخصم:</span><span>${subtotal.toFixed(2)} ${cur}</span></div>
       ${discount > 0 ? `<div style="display:flex; justify-content:space-between; color:red;"><span>الخصم:</span><span>- ${discount.toFixed(2)} ${cur}</span></div>` : ''}
-      <div style="display:flex; justify-content:space-between; font-weight:bold;"><span>الإجمالي:</span><span>${total.toFixed(2)} ${cur}</span></div>
+      ${vatAndTotalThermal}
       <div style="display:flex; justify-content:space-between;"><span>المدفوع:</span><span>${Number(sale.paid || 0).toFixed(2)} ${cur}</span></div>
       ${Number(sale.remaining || 0) > 0 ? `<div style="display:flex; justify-content:space-between;"><span>المتبقي:</span><span>${Number(sale.remaining).toFixed(2)} ${cur}</span></div>` : ''}
       <div class="dashed-line"></div><div class="text-center bold" style="margin-top:10px;">شكراً لتعاملكم معنا!</div>

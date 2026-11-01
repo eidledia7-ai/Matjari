@@ -38,7 +38,11 @@ async function syncDown(ownerId) {
             taxNumber: data.tax_number, currency: data.currency, logo: data.logo,
             monthlyGoal: data.monthly_goal, pointsRate: data.points_rate,
             pointValue: data.point_value, printType: data.print_type,
-            permissions: data.permissions || {}
+            permissions: data.permissions || {},
+            // ✅ [VAT] إعدادات الضريبة (camelCase محلياً)
+            vatEnabled: data.vat_enabled === true,
+            vatRate: Number(data.vat_rate) || 0,
+            vatMode: data.vat_mode || 'inclusive'
           };
         }
       } else {
@@ -65,12 +69,31 @@ async function syncDown(ownerId) {
               points_used: row.points_used, pointsUsed: row.points_used,
               customer_id: row.customer_id, customerId: row.customer_id, 
               pay_method: row.pay_method, payMethod: row.pay_method, notes: row.notes, 
-              cashier: row.cashier, shift_id: row.shift_id, shiftId: row.shift_id, items: [] 
+              cashier: row.cashier, shift_id: row.shift_id, shiftId: row.shift_id, items: [],
+              // ✅ [VAT] Snapshot الضريبة (camel + snake)
+              vat_rate: Number(row.vat_rate) || 0,
+              vatRate: Number(row.vat_rate) || 0,
+              vat_amount: Number(row.vat_amount) || 0,
+              vatAmount: Number(row.vat_amount) || 0,
+              vat_mode: row.vat_mode || 'inclusive',
+              vatMode: row.vat_mode || 'inclusive'
             };
             if (t.name === 'products') return { id: row.id, name: row.name, barcode: row.barcode, category: row.category, price: row.price, cost: row.cost, stock: row.stock, min_stock: row.min_stock, minStock: row.min_stock };
             if (t.name === 'customers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt, points: row.points };
             if (t.name === 'expenses') return { id: row.id, name: row.name, amount: row.amount, notes: row.notes, date: row.date, shift_id: row.shift_id, shiftId: row.shift_id, pay_method: row.pay_method, payMethod: row.pay_method };
-            if (t.name === 'returns') return { id: row.id, sale_id: row.sale_id, saleId: row.sale_id, product_id: row.product_id, productId: row.product_id, product_name: row.product_name, productName: row.product_name, qty: row.qty, price: row.price, total: row.total, refund_method: row.refund_method, refundMethod: row.refund_method, shift_id: row.shift_id, shiftId: row.shift_id, customer_id: row.customer_id, customerId: row.customer_id, reason: row.reason, date: row.date };
+            if (t.name === 'returns') return { 
+              id: row.id, sale_id: row.sale_id, saleId: row.sale_id, 
+              product_id: row.product_id, productId: row.product_id, 
+              product_name: row.product_name, productName: row.product_name, 
+              qty: row.qty, price: row.price, total: row.total, 
+              refund_method: row.refund_method, refundMethod: row.refund_method, 
+              shift_id: row.shift_id, shiftId: row.shift_id, 
+              customer_id: row.customer_id, customerId: row.customer_id, 
+              reason: row.reason, date: row.date,
+              // ✅ [VAT] Snapshot ضريبة المرتجع
+              vat_amount: Number(row.vat_amount) || 0,
+              vatAmount: Number(row.vat_amount) || 0
+            };
             if (t.name === 'shifts') return { id: row.id, cashier_name: row.cashier_name, cashierName: row.cashier_name, start_time: row.start_time, startTime: row.start_time, end_time: row.end_time, endTime: row.end_time, opening_cash: row.opening_cash, openingCash: row.opening_cash, expected_cash: row.expected_cash, expectedCash: row.expected_cash, actual_cash: row.actual_cash, actualCash: row.actual_cash, difference: row.difference, cash_sales: row.cash_sales, cashSales: row.cash_sales, cash_returns: row.cash_returns, cashReturns: row.cash_returns, cash_expenses: row.cash_expenses, cashExpenses: row.cash_expenses, cash_collections: row.cash_collections, cashCollections: row.cash_collections, notes: row.notes };
             if (t.name === 'audit_logs') return { id: row.id, action: row.action, details: row.details, date: row.created_at, userId: row.user_id, role: row.role };
             if (t.name === 'suppliers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt };
@@ -149,6 +172,10 @@ async function syncUp(ownerId) {
       point_value: state.storeSettings.pointValue,
       print_type: state.storeSettings.printType,
       permissions: state.storeSettings.permissions,
+      // ✅ [VAT] إعدادات الضريبة
+      vat_enabled: !!state.storeSettings.vatEnabled,
+      vat_rate: Number(state.storeSettings.vatRate) || 0,
+      vat_mode: state.storeSettings.vatMode || 'inclusive',
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
 
@@ -195,7 +222,11 @@ async function syncEmployeeChanges() {
         points_used: sale.points_used ?? sale.pointsUsed ?? 0,
         customer_id: sale.customerId || sale.customer_id,
         pay_method: sale.payMethod || sale.pay_method,
-        notes: sale.notes, cashier: sale.cashier, shift_id: sale.shiftId || sale.shift_id
+        notes: sale.notes, cashier: sale.cashier, shift_id: sale.shiftId || sale.shift_id,
+        // ✅ [VAT] Snapshot الضريبة
+        vat_rate: Number(sale.vat_rate ?? sale.vatRate) || 0,
+        vat_amount: Number(sale.vat_amount ?? sale.vatAmount) || 0,
+        vat_mode: sale.vat_mode || sale.vatMode || 'inclusive'
       }, { onConflict: 'id' });
 
       if (sale.items && sale.items.length > 0) {
@@ -214,6 +245,8 @@ async function syncEmployeeChanges() {
         id: ret.id, user_id: ownerId, sale_id: ret.saleId || ret.sale_id,
         product_id: ret.productId || ret.product_id, product_name: ret.productName || ret.product_name,
         qty: ret.qty, price: ret.price, total: ret.total,
+        // ✅ [VAT] Snapshot ضريبة المرتجع
+        vat_amount: Number(ret.vat_amount ?? ret.vatAmount) || 0,
         refund_method: ret.refundMethod || ret.refund_method,
         shift_id: ret.shiftId || ret.shift_id,
         customer_id: ret.customerId || ret.customer_id,

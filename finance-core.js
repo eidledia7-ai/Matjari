@@ -27,6 +27,86 @@ window.financeCore = (function () {
     return d;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // VAT Core (v7.1) — Additive
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * استخراج الضريبة من مبلغ شامل (Inclusive).
+   * vat = total - (total / (1 + rate/100))
+   */
+  function calcVatInclusive(total, rate) {
+    const t = Number(total) || 0;
+    const r = Number(rate) || 0;
+    if (r <= 0) return 0;
+    return t - (t / (1 + r / 100));
+  }
+
+  /**
+   * حساب الضريبة من مبلغ أساسي غير شامل (Exclusive).
+   * vat = base * rate/100
+   */
+  function calcVatExclusive(base, rate) {
+    const b = Number(base) || 0;
+    const r = Number(rate) || 0;
+    if (r <= 0) return 0;
+    return b * (r / 100);
+  }
+
+  /**
+   * الدالة الموحّدة لحساب الضريبة عند البيع.
+   * تقرأ الإعدادات من state.storeSettings داخلياً.
+   * @param {number} base - المبلغ الأساسي (subtotal - discount - pointsDiscount)
+   * @returns {{total: number, vat_rate: number, vat_amount: number}}
+   */
+  function calcVatForSale(base) {
+    const b = Number(base) || 0;
+    const s = state.storeSettings || {};
+    const enabled = (s.vatEnabled ?? s.vat_enabled ?? false) === true;
+    const rate = enabled ? (Number(s.vatRate ?? s.vat_rate) || 0) : 0;
+    const mode = s.vatMode || s.vat_mode || 'inclusive';
+
+    if (!enabled || rate <= 0) {
+      return { total: b, vat_rate: 0, vat_amount: 0 };
+    }
+
+    if (mode === 'exclusive') {
+      const vat = calcVatExclusive(b, rate);
+      return { total: b + vat, vat_rate: rate, vat_amount: vat };
+    }
+
+    // inclusive (default)
+    const vat = calcVatInclusive(b, rate);
+    return { total: b, vat_rate: rate, vat_amount: vat };
+  }
+
+  /**
+   * حساب VAT بناءً على Snapshot الفاتورة الأصلية (للمرتجع).
+   * @param {number} base - unitPrice × qty من sale_items
+   * @param {number} vatRate - sale.vat_rate الأصلي
+   * @param {string} [vatMode='inclusive'] - وضع الضريبة الأصلي
+   * @returns {{total: number, vat_amount: number}}
+   */
+  function calcVatFromSnapshot(base, vatRate, vatMode) {
+    const b = Number(base) || 0;
+    const r = Number(vatRate) || 0;
+    const mode = vatMode || 'inclusive';
+
+    if (r <= 0) return { total: b, vat_amount: 0 };
+
+    if (mode === 'exclusive') {
+      const vat = calcVatExclusive(b, r);
+      return { total: b + vat, vat_amount: vat };
+    }
+
+    const vat = calcVatInclusive(b, r);
+    return { total: b, vat_amount: vat };
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // RPCs (بدون أي تغيير جوهري)
+  // ══════════════════════════════════════════════════════════════
+
   async function getPeriodSummary(from, to) {
     if (!supabaseClient) throw new Error('No Supabase client');
     const { data, error } = await supabaseClient.rpc('get_period_summary', {
@@ -38,7 +118,8 @@ window.financeCore = (function () {
     return data || {
       gross_sales: 0, net_sales: 0, returns_total: 0, cash_collected: 0,
       credit_remaining: 0, invoices_count: 0, expenses_total: 0,
-      collections_total: 0, cogs: 0, net_profit: 0
+      collections_total: 0, cogs: 0, net_profit: 0,
+      vat_collected: 0   // ✅ جديد — ليطابق شكل RPC
     };
   }
 
@@ -116,6 +197,9 @@ function calcPeriodSummary(from, to) {
   const expensesTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const collectionsTotal = collections.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
+  // ✅ جديد: مجموع الضريبة المحصّلة في الفترة (Additive)
+  const vatCollected = sales.reduce((sum, s) => sum + (Number(s.vat_amount) || 0), 0);
+
   const saleIds = new Set(sales.map(s => s.id));
   const cogs = (state.saleItems || [])
     .filter(si => saleIds.has(si.sale_id))
@@ -131,7 +215,8 @@ function calcPeriodSummary(from, to) {
     expenses_total: expensesTotal,
     collections_total: collectionsTotal,
     cogs: cogs,
-    net_profit: net - cogs - expensesTotal
+    net_profit: net - cogs - expensesTotal,
+    vat_collected: vatCollected   // ✅ جديد
   };
 }
 
@@ -232,6 +317,11 @@ function calcPeriodSummary(from, to) {
     getPeriod,
     startOfDay,
     endOfDay,
-    ownerId
+    ownerId,
+    // ✅ VAT API (Additive)
+    calcVatInclusive,
+    calcVatExclusive,
+    calcVatForSale,
+    calcVatFromSnapshot
   };
 })();
