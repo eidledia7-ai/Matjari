@@ -19,7 +19,7 @@ const translations = {
     change_pass_btn: "🔑 تغيير كلمة المرور",
     email_placeholder: "name@example.com",
     password_placeholder: "كلمة المرور",
-    new_password_placeholder: "6 أحرف على الأقل",
+    new_password_placeholder: "6 أحرف على الأقل",edit_btn: "تعديل",
     auth_no_connection: "فشل الاتصال بالسيرفر، تأكد من الإنترنت.",
     auth_enter_email_pass: "أدخل البريد وكلمة المرور",
     auth_password_min_6: "كلمة المرور 6 أحرف على الأقل",
@@ -911,7 +911,9 @@ error_video_element_missing: "عنصر الفيديو غير موجود",
   audit_action_auto_backup_success: "✅ نسخة احتياطية تلقائية ناجحة",
   audit_action_auto_backup_failed: "❌ نسخة احتياطية تلقائية فاشلة",
   audit_action_stock_conflict_detected: "⚠️ كشف تعارض مخزون",
-
+quick_add_btn: "إضافة كمية سريعة",
+shift_open_failed_prefix: "تعذر فتح وردية: ",
+return_for_invoice_prefix: "مرتجع فاتورة ",
   // ═══════════════════════════════════════════════════════════
   // ==== AUDIT — DETAIL TEMPLATES (8) ====
   // ═══════════════════════════════════════════════════════════
@@ -923,7 +925,7 @@ error_video_element_missing: "عنصر الفيديو غير موجود",
   audit_detail_return_template: "مرتجع فاتورة: {saleId} | الكمية: {qty} | الاسترداد: {method}",
   audit_detail_supplier_payment_template: "سداد مبلغ: {amount} للمورد",
   audit_detail_purchase_template: "مشتريات بقيمة: {total}",
-
+settings_saving_offline: "تم الحفظ محلياً، وسيتم الرفع عند عودة الاتصال.",
   // ═══════════════════════════════════════════════════════════
   // ==== MISC / SUPPORT ====
   // ═══════════════════════════════════════════════════════════
@@ -1133,6 +1135,7 @@ error_video_element_missing: "Video element not found",
   back_to_login: "← Back",
   error_generic_prefix: "Error: ",
   error_no_server_connection: "No connection to server",
+  settings_saving_offline: "Saved locally — will upload when connection returns.",
   error_no_internet: "No internet connection",
   sign_in_first: "Sign in first",
   no_data: "No data",
@@ -1183,7 +1186,7 @@ qty_label: "Quantity *",
   pay_cash: "💵 Cash",
   pay_visa: "💳 Visa / Card",
   pay_transfer: "📲 Bank Transfer",
-
+edit_btn: "Edit",
   // ═══════════════════════════════════════════════════════════
   // ==== HELD INVOICES ====
   // ═══════════════════════════════════════════════════════════
@@ -1195,7 +1198,9 @@ qty_label: "Quantity *",
   delete_held_confirm: "Delete this held invoice permanently?",
   held_modal_title: "📋 Held Invoices",
   more_held_invoices: "📋 Held Invoices",
-
+quick_add_btn: "Quick Add",
+shift_open_failed_prefix: "Failed to open shift: ",
+return_for_invoice_prefix: "Return for Invoice ",
   // ═══════════════════════════════════════════════════════════
   // ==== DRAWER EXPENSE ====
   // ═══════════════════════════════════════════════════════════

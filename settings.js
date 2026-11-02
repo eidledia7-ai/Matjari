@@ -16,20 +16,17 @@ function loadStoreSettings() {
   const pDelete = document.getElementById('perm_canDelete');
   const pEdit = document.getElementById('perm_canEditPrice');
   const pReturn = document.getElementById('perm_canReturn'); 
+  const pDrawer = document.getElementById('perm_canDrawerExpense');
   
   if (pDiscount) pDiscount.checked = perms.canDiscount || false;
   if (pDelete) pDelete.checked = perms.canDelete || false;
   if (pEdit) pEdit.checked = perms.canEditPrice || false;
   if (pReturn) pReturn.checked = perms.canReturn || false; 
-
-  // ✅ v7.10.1 — Drawer Expense permission
-  const pDrawer = document.getElementById('perm_canDrawerExpense');
   if (pDrawer) pDrawer.checked = perms.canDrawerExpense === true;
   
   const printTypeEl = document.getElementById('storePrintType');
   if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
 
-  // ✅ [VAT] تحميل إعدادات الضريبة
   const vatEnabledVal = (s.vatEnabled ?? s.vat_enabled ?? false) === true;
   const vatRateVal = Number(s.vatRate ?? s.vat_rate ?? 0) || 0;
   const vatModeVal = s.vatMode || s.vat_mode || 'inclusive';
@@ -46,7 +43,6 @@ function loadStoreSettings() {
   const vatFieldsEl = document.getElementById('storeVatFields');
   if (vatFieldsEl) vatFieldsEl.style.display = vatEnabledVal ? 'block' : 'none';
   
-  // ✅ v7.6 — Auto Backup
   const abEnabledEl = document.getElementById('autoBackupEnabled');
   if (abEnabledEl) abEnabledEl.checked = !!s.autoBackupEnabled;
 
@@ -82,7 +78,7 @@ function toggleVatFields() {
 }
 
 async function saveStoreSettings() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   
   const permDiscountEl = document.getElementById('perm_canDiscount');
   const permDeleteEl = document.getElementById('perm_canDelete');
@@ -119,7 +115,6 @@ async function saveStoreSettings() {
       canDelete: permDeleteEl ? permDeleteEl.checked : false,
       canEditPrice: permEditEl ? permEditEl.checked : false,
       canReturn: permReturnEl ? permReturnEl.checked : false,
-      // ✅ v7.10.1
       canDrawerExpense: permDrawerEl ? permDrawerEl.checked : false
     }
   };
@@ -155,7 +150,7 @@ async function saveStoreSettings() {
     
     if (error) {
       console.warn('Settings upload failed:', error);
-      showNotification('تم الحفظ محلياً، وسيتم الرفع عند عودة الاتصال.', 'warning');
+      showNotification(tr('settings_saving_offline'), 'warning');
     }
   }
 
@@ -164,7 +159,7 @@ async function saveStoreSettings() {
   }
 
   saveData();
-  showNotification('تم حفظ بيانات المحل ✅');
+  showNotification(tr('settings_saved_ok'));
 
   if (newSettings.autoBackupEnabled && typeof checkAndRunAutoBackup === 'function') {
     setTimeout(() => checkAndRunAutoBackup('load').catch(() => {}), 500);
@@ -174,14 +169,14 @@ async function saveStoreSettings() {
 function handleLogoUpload(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-  if (file.size > 500 * 1024) return showNotification('حجم الصورة كبير (حد أقصى 500KB)', 'warning');
+  if (file.size > 500 * 1024) return showNotification(tr('logo_too_large'), 'warning');
   const reader = new FileReader();
   reader.onload = function() {
     state.storeSettings.logo = reader.result;
     const preview = document.getElementById('storeLogoPreview');
     if (preview) { preview.src = reader.result; preview.style.display = 'block'; }
     saveData();
-    showNotification('تم رفع الشعار');
+    showNotification(tr('logo_uploaded'));
   };
   reader.readAsDataURL(file);
 }
@@ -194,7 +189,7 @@ function removeStoreLogo() {
   const input = document.getElementById('storeLogo');
   if (input) input.value = '';
   saveData();
-  showNotification('تم حذف الشعار');
+  showNotification(tr('logo_deleted'));
 }
 
 async function verifyCurrentUserPassword(password) {
@@ -206,10 +201,10 @@ async function verifyCurrentUserPassword(password) {
 }
 
 async function safeClearAllDataPrompt() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
-  const pass = prompt(tr('dlg_wipe_password'));
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  const pass = prompt(tr('msg_wipe_password'));
   if (pass === null) return;
-  if (!(await verifyCurrentUserPassword(pass))) return showNotification(currentLang === 'en' ? 'Password verification failed. Action cancelled.' : 'كلمة المرور غير صحيحة! تم إلغاء العملية.', 'error');
+  if (!(await verifyCurrentUserPassword(pass))) return showNotification(tr('password_verify_failed'), 'error');
 
   if (!confirm(tr('msg_wipe_all'))) return;
 
@@ -217,14 +212,14 @@ async function safeClearAllDataPrompt() {
     if (typeof downloadEncryptedBackup !== 'function') throw new Error('Backup function not available');
     await downloadEncryptedBackup(pass, true);
   } catch (backupError) {
-    showNotification(currentLang === 'en' ? 'Automatic backup failed. Data was not cleared.' : 'فشل إنشاء النسخة الاحتياطية التلقائية. لم يتم مسح البيانات.', 'error');
+    showNotification(tr('wipe_backup_failed'), 'error');
     return;
   }
 
   const ownerId = state.currentUser.id;
 
   if (navigator.onLine && supabaseClient) {
-    showLoading('جارٍ مسح البيانات...');
+    showLoading(tr('clearing_data'));
     const tablesToClear = [
       'sale_items', 'sales', 'returns', 'expenses', 'products', 
       'customers', 'shifts', 'suppliers', 'purchases', 
@@ -269,7 +264,7 @@ async function safeClearAllDataPrompt() {
   saveData();
   renderAll();
   updateStockBadge();
-  showNotification('تم مسح كافة بيانات التطبيق بنجاح ✅');
+  showNotification(tr('wipe_success'));
 }
 
 document.addEventListener('change', function(e) {

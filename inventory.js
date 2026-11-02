@@ -7,7 +7,7 @@ async function saveProduct() {
   if (!id) {
     const lim = checkLimit('products', state.products.length);
     if (!lim.allowed) {
-      return showNotification(currentLang === 'en' ? 'Product limit reached. Upgrade your plan.' : 'وصلت لحد المنتجات. رقّي باقتك.', 'warning');
+      return showNotification(tr('product_limit_reached'), 'warning');
     }
   }
 
@@ -89,11 +89,12 @@ function renderProducts() {
     return;
   }
 
-  const editBtn = currentLang === 'en' ? 'Edit' : 'تعديل';
-  const deleteBtn = currentLang === 'en' ? 'Delete' : 'حذف';
-  const quickAddTitle = currentLang === 'en' ? 'Quick Add' : 'إضافة كمية سريعة';
+  // ✅ v7.10.2 — ترجمة
+  const editBtn = tr('edit_btn');
+  const deleteBtn = tr('delete_btn');
+  const quickAddTitle = tr('quick_add_btn');
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_barcode">الباركود</th><th data-i18n="th_category">التصنيف</th><th data-i18n="th_price">السعر</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_stock">المخزن</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">' + tr('th_name') + '</th><th data-i18n="th_barcode">' + tr('th_barcode') + '</th><th data-i18n="th_category">' + tr('th_category') + '</th><th data-i18n="th_price">' + tr('th_price') + '</th><th data-i18n="th_cost">' + tr('th_cost') + '</th><th data-i18n="th_stock">' + tr('th_stock') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
   filtered.forEach(function(p) {
     const isLow = Number(p.stock) <= Number(p.minStock || p.min_stock || 5);
     html += '<tr' + (isLow ? ' style="background:#fff4d9"' : '') + '>' +
@@ -127,7 +128,7 @@ function editProduct(id) {
   document.getElementById('productStock').value = p.stock || 0;
   document.getElementById('productMin').value = p.minStock || p.min_stock || 5;
   const title = document.getElementById('productFormTitle');
-  if (title) title.innerText = (currentLang === 'en' ? 'Edit: ' : 'تعديل: ') + p.name;
+  if (title) title.innerText = tr('edit_btn') + ': ' + p.name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -168,7 +169,8 @@ function populateAdjustDropdown() {
   const sel = document.getElementById('adjustProduct');
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
-  const availableLabel = currentLang === 'en' ? ' (Available: ' : ' (المتوفر: ';
+  // ✅ v7.10.2 — ترجمة
+  const availableLabel = tr('opt_available_label');
   state.products.forEach(function(p) {
     sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + availableLabel + (Number(p.stock) || 0) + ')</option>';
   });
@@ -251,25 +253,25 @@ function renderStockMoves() {
     return;
   }
 
-  const en = currentLang === 'en';
+  // ✅ v7.10.2 — ترجمة كل أنواع الحركات
   const typeLabels = {
-    'in': en ? 'Add (+)' : 'إضافة (+)', 
-    'out': en ? 'Deduct (-)' : 'خصم (-)', 
-    'set': en ? 'Set (=)' : 'ضبط (=)',
-    'sale': en ? 'Sale (-)' : 'بيع (-)', 
-    'sale_cancel': en ? 'Sale Cancel (+)' : 'إلغاء بيع (+)',
-    'return': en ? 'Return (+)' : 'مرتجع (+)', 
-    'purchase': en ? 'Purchase (+)' : 'مشتريات (+)'
+    'in':          tr('stock_movement_in'),
+    'out':         tr('stock_movement_out'),
+    'set':         tr('stock_movement_set'),
+    'sale':        tr('stock_movement_sale'),
+    'sale_cancel': tr('stock_movement_sale_cancel'),
+    'return':      tr('stock_movement_return'),
+    'purchase':    tr('stock_movement_purchase')
   };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_movement">الحركة</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_before_after">قبل ➔ بعد</th><th data-i18n="th_reason">السبب</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_product">' + tr('th_product') + '</th><th data-i18n="th_movement">' + tr('th_movement') + '</th><th data-i18n="th_quantity">' + tr('th_quantity') + '</th><th data-i18n="th_before_after">' + tr('th_before_after') + '</th><th data-i18n="th_reason">' + tr('th_reason') + '</th></tr></thead><tbody>';
   filtered.forEach(function(m) {
     const label = typeLabels[m.type] || m.type;
     const productName = m.productName || m.product_name || '-';
     const oldS = m.oldStock ?? m.old_stock ?? 0;
     const newS = m.newStock ?? m.new_stock ?? 0;
     html += '<tr>' +
-      '<td>' + new Date(m.date).toLocaleString(en ? 'en-US' : 'ar-EG') + '</td>' +
+      '<td>' + new Date(m.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
       '<td>' + escapeHTML(productName) + '</td>' +
       '<td>' + label + '</td>' +
       '<td>' + m.qty + '</td>' +
@@ -286,7 +288,8 @@ function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
-  const invLabel = currentLang === 'en' ? 'Invoice: ' : 'فاتورة: ';
+  // ✅ v7.10.2 — ترجمة
+  const invLabel = tr('opt_invoice_label');
   state.sales.forEach(function(s) {
     saleSel.innerHTML += '<option value="' + s.id + '">' + invLabel + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
   });
@@ -310,7 +313,8 @@ function updateReturnProducts() {
       .reduce(function(sum, r) { return sum + (Number(r.qty) || 0); }, 0);
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
-      const remLabel = currentLang === 'en' ? ' (Remaining: ' : ' (متبقي: ';
+      // ✅ v7.10.2 — ترجمة
+      const remLabel = tr('opt_remaining_label');
       prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + remLabel + remaining + ')</option>';
     }
   });
@@ -349,7 +353,8 @@ async function saveReturn() {
   try {
     shiftId = await ensureOpenShift();
   } catch (e) {
-    return showNotification((currentLang === 'en' ? 'Failed to open shift: ' : 'تعذر فتح وردية: ') + (e.message || ''), 'error');
+    // ✅ v7.10.2 — ترجمة
+    return showNotification(tr('shift_open_failed_prefix') + (e.message || ''), 'error');
   }
 
   if (!shiftId) {
@@ -390,19 +395,33 @@ async function saveReturn() {
     customer_id: customerId,
     customerId: customerId,
     reason: reason || tr('return_reason_default'),
-    date: new Date().toISOString(),
-    _pendingUpload: true // ✅ v7.9.1
+    date: new Date().toISOString()
   };
 
-  // ✅ v7.8 — إدخال للـ Queue (يعمل Online/Offline)
-  enqueueSyncOperation('insert_return', {
-    id: newReturn.id, sale_id: newReturn.sale_id,
-    product_id: newReturn.product_id, product_name: newReturn.product_name,
-    qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
-    vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
-    shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
-    reason: newReturn.reason, date: newReturn.date
-  }, newReturn.id);
+  if (navigator.onLine && supabaseClient) {
+    try {
+      const { error: retErr } = await supabaseClient.from('returns').insert({
+        id: newReturn.id,
+        user_id: ownerId,
+        sale_id: newReturn.sale_id,
+        product_id: newReturn.product_id,
+        product_name: newReturn.product_name,
+        qty: newReturn.qty,
+        price: newReturn.price,
+        total: newReturn.total,
+        vat_amount: newReturn.vat_amount,
+        refund_method: newReturn.refund_method,
+        shift_id: newReturn.shift_id,
+        customer_id: newReturn.customer_id,
+        reason: newReturn.reason,
+        date: newReturn.date
+      });
+      if (retErr) throw retErr;
+    } catch (err) {
+      console.error('Return upload failed:', err);
+      return showNotification(tr('return_save_fail') + err.message, 'error');
+    }
+  }
 
   state.returns.unshift(newReturn);
 
@@ -413,7 +432,7 @@ async function saveReturn() {
     sale.netTotal = sale.net_total;
   }
 
-  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مرتجع credit فقط)
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش
   if (refundMethod === 'credit' && customerId) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - returnValue;
@@ -431,7 +450,8 @@ async function saveReturn() {
       type: 'return', qty: qty,
       old_stock: before, oldStock: before,
       new_stock: prod.stock, newStock: prod.stock,
-      reason: (currentLang === 'en' ? 'Return for Invoice ' : 'مرتجع فاتورة ') + saleId
+      // ✅ v7.10.2 — ترجمة
+      reason: tr('return_for_invoice_prefix') + saleId
     });
   }
 
@@ -455,6 +475,7 @@ async function saveReturn() {
   renderCustomers();
   updateStockBadge();
 
+  // ✅ v7.10.2 — ترجمة
   const methodText = refundMethod === 'credit' ? tr('refund_credit') : tr('refund_cash');
   showNotification(tr('return_success_1') + methodText + tr('return_success_2'), 'success');
 }
@@ -467,13 +488,14 @@ function renderReturns() {
     return;
   }
 
+  // ✅ v7.10.2 — ترجمة
   const methodLabels = {
-    'cash': tr('cash_method'),
+    'cash':   tr('cash_method'),
     'credit': tr('credit_method'),
-    'none': tr('none_method')
+    'none':   tr('none_method')
   };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_item">الصنف</th><th data-i18n="th_quantity">الكمية</th><th>' + tr('th_value') + '</th><th>' + tr('return_method') + '</th><th data-i18n="th_reason">السبب</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_invoice_number">' + tr('th_invoice_number') + '</th><th data-i18n="th_item">' + tr('th_item') + '</th><th data-i18n="th_quantity">' + tr('th_quantity') + '</th><th>' + tr('th_value') + '</th><th>' + tr('return_method') + '</th><th data-i18n="th_reason">' + tr('th_reason') + '</th></tr></thead><tbody>';
   state.returns.forEach(function(r) {
     const saleId = r.saleId || r.sale_id;
     const productName = r.productName || r.product_name;

@@ -68,7 +68,8 @@ function renderCustomers() {
     paySel.innerHTML = '';
     state.customers.forEach(function(c) {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
-      const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
+      // ✅ v7.10.2 — إزالة anti-pattern
+      const displayName = isCashCustomer ? tr('cash_customer') : c.name;
       const debtLabel = tr('debt_prefix');
       const realDebt = financeCore.calcCustomerBalance(c.id);
       paySel.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + debtLabel + realDebt.toFixed(2) + ')</option>';
@@ -81,21 +82,22 @@ function renderCustomers() {
     return;
   }
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_debts">الديون</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">' + tr('th_name') + '</th><th data-i18n="th_phone">' + tr('th_phone') + '</th><th data-i18n="th_debts">' + tr('th_debts') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
   filtered.forEach(function(c) {
     const debtVal = financeCore.calcCustomerBalance(c.id);
     const debtClass = debtVal > 0 ? 'red-text' : '';
+    // ✅ v7.10.2 — ترجمة
     const stmtBtn = tr('statement_btn');
-    const delBtn = currentLang === 'en' ? 'Delete' : 'حذف';
-    const stmtTitle = currentLang === 'en' ? 'Statement' : 'كشف حساب';
-    const delTitle = currentLang === 'en' ? 'Delete' : 'حذف';
+    const delBtn = tr('delete_btn');
+    const stmtTitle = tr('statement_btn');
+    const delTitle = tr('delete_btn');
 
     html += '<tr>' +
       '<td>' + escapeHTML(c.name) + '</td>' +
       '<td>' + escapeHTML(c.phone || '-') + '</td>' +
       '<td class="' + debtClass + '"><b>' + debtVal.toFixed(2) + '</b></td>' +
       '<td style="white-space:nowrap;">' +
-        '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="' + stmtTitle + '">📄 ' + stmtBtn + '</button>' +
+        '<button class="small-btn primary" onclick="showCustomerStatement(\'' + c.id + '\')" title="' + stmtTitle + '">' + stmtBtn + '</button>' +
         '<button class="small-btn red" onclick="deleteCustomer(\'' + c.id + '\')" title="' + delTitle + '">🗑️ ' + delBtn + '</button>' +
       '</td>' +
       '</tr>';
@@ -176,18 +178,19 @@ async function recordCustomerPayment() {
     shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
   });
 
-  // ✅ v7.8
-enqueueSyncOperation('insert_customer_payment', {
-  id: newPayment.id, customer_id: customerId, customer_name: cust.name,
-  amount: amount, date: date, notes: notes,
-  shift_id: currentShiftId, pay_method: 'cash'
-}, newPayment.id);
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('customer_payments').insert(newPayment);
+    if (error) {
+      console.warn('Payment upload failed:', error);
+      return showNotification(tr('payment_save_fail') + error.message, 'error');
+    }
+  }
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('record_customer_payment', { paymentId: newPayment.id, amount, customerId }, newPayment.id);
   }
 
-  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مطابق لـ get_all_customer_balances)
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش
   if (customerId) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - amount;
@@ -212,7 +215,7 @@ function renderCustomerPayments() {
     container.innerHTML = '<p class="text-muted">' + tr('no_collections') + '</p>';
     return;
   }
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_customer">' + tr('th_customer') + '</th><th data-i18n="th_amount">' + tr('th_amount') + '</th><th data-i18n="th_notes">' + tr('th_notes') + '</th></tr></thead><tbody>';
   state.customerPayments.forEach(function(p) {
     const custName = p.customerName || p.customer_name || '-';
     html += '<tr>' +
@@ -225,6 +228,7 @@ function renderCustomerPayments() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+
 /* ============ الموردون والمشتريات ============ */
 async function saveSupplier() {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
@@ -331,10 +335,11 @@ function renderSuppliers() {
     return;
   }
 
-  const editBtn = currentLang === 'en' ? 'Edit' : 'تعديل';
-  const deleteBtn = currentLang === 'en' ? 'Delete' : 'حذف';
+  // ✅ v7.10.2 — ترجمة
+  const editBtn = tr('edit_btn');
+  const deleteBtn = tr('delete_btn');
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">الاسم</th><th data-i18n="th_phone">الهاتف</th><th data-i18n="th_payables">المستحقات (له فلوس)</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">' + tr('th_name') + '</th><th data-i18n="th_phone">' + tr('th_phone') + '</th><th data-i18n="th_payables">' + tr('th_payables') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
   state.suppliers.forEach(function(s) {
     const debtVal = financeCore.calcSupplierBalance(s.id);
     const debtClass = debtVal > 0 ? 'green-text' : '';
@@ -464,7 +469,7 @@ async function savePurchase() {
       reason: tr('new_prod_purchase_reason')
     });
   } else {
-    return showNotification(tr('notify_select_product_name'), 'error');
+    return showNotification(tr('select_prod_name_err'), 'error');
   }
 
   const total = qty * cost;
@@ -522,7 +527,7 @@ function renderPurchases() {
   }
   const delErrBtn = tr('delete_err_btn');
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_cost">التكلفة</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_supplier">' + tr('th_supplier') + '</th><th data-i18n="th_product">' + tr('th_product') + '</th><th data-i18n="th_quantity">' + tr('th_quantity') + '</th><th data-i18n="th_cost">' + tr('th_cost') + '</th><th data-i18n="th_total">' + tr('th_total') + '</th><th data-i18n="th_remaining">' + tr('th_remaining') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
   state.purchases.forEach(function(p) {
     const supId = p.supplier_id || p.supplierId;
     const sup = state.suppliers.find(function(s) { return s.id === supId; });
@@ -555,7 +560,8 @@ async function recordSupplierPayment() {
   if (!supplierId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
 
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-  if (!sup) return showNotification(currentLang === 'en' ? 'Supplier not found' : 'المورد غير موجود', 'error');
+  // ✅ v7.10.2 — ترجمة
+  if (!sup) return showNotification(tr('supplier_not_found'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
@@ -574,7 +580,8 @@ async function recordSupplierPayment() {
     const { error } = await supabaseClient.from('supplier_payments').insert(newPayment);
     if (error) {
       console.warn('Supplier payment upload failed:', error);
-      return showNotification((currentLang === 'en' ? 'Failed to save payment: ' : 'تعذر حفظ السداد: ') + error.message, 'error');
+      // ✅ v7.10.2 — ترجمة
+      return showNotification(tr('supplier_payment_save_fail') + error.message, 'error');
     }
   }
 
@@ -597,7 +604,7 @@ function renderSupplierPayments() {
     container.innerHTML = '<p class="text-muted">' + tr('no_supplier_payments') + '</p>';
     return;
   }
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_supplier">المورد</th><th data-i18n="th_amount_paid">المبلغ المدفوع</th><th data-i18n="th_notes">ملاحظات</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_supplier">' + tr('th_supplier') + '</th><th data-i18n="th_amount_paid">' + tr('th_amount_paid') + '</th><th data-i18n="th_notes">' + tr('th_notes') + '</th></tr></thead><tbody>';
   state.supplierPayments.forEach(function(p) {
     const supName = p.supplierName || p.supplier_name || '-';
     html += '<tr>' +

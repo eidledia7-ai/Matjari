@@ -126,9 +126,10 @@ function renderDashboard() {
 
   const cardsEl = document.getElementById('dashboardCards');
   if (cardsEl) {
+    // ✅ v7.10.2 — ترجمة (كانت anti-pattern: translations[currentLang] || translations.ar)
     cardsEl.innerHTML =
       '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f"><h3>' +
-        (translations[currentLang] || translations.ar).dash_net_profit +
+        tr('dash_net_profit') +
       '</h3><p style="color:' + (netProfit >= 0 ? '#17643a' : '#c0392b') + '">' +
         netProfit.toFixed(2) + ' ' + cur +
       '</p></div>' +
@@ -138,19 +139,20 @@ function renderDashboard() {
 
   const otherCards = document.getElementById('dashboardOtherCards');
   if (otherCards) {
+    // ✅ v7.10.2 — ترجمة
     otherCards.innerHTML =
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_products + '</h3><p>' + totalProducts + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + expensesTotal.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_value + '</h3><p>' + stockValue.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_customer_debt + '</h3><p style="color:#c0392b">' + customerDebt.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_supplier_due + '</h3><p style="color:#198754">' + supplierDue.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_stock_alerts + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + tr('items_word') + '</p></div>';
+      '<div class="stat-card"><h3>' + tr('dash_products') + '</h3><p>' + totalProducts + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + expensesTotal.toFixed(2) + ' ' + cur + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_stock_value') + '</h3><p>' + stockValue.toFixed(2) + ' ' + cur + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_customer_debt') + '</h3><p style="color:#c0392b">' + customerDebt.toFixed(2) + ' ' + cur + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_supplier_due') + '</h3><p style="color:#198754">' + supplierDue.toFixed(2) + ' ' + cur + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_stock_alerts') + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + tr('items_word') + '</p></div>';
   }
 
   renderSmartAlerts();
   renderMonthlyGoal();
   renderSalesChart();
-  renderDashboardTopProducts(); // ✅ v7.9.2 - إضافة الأكثر مبيعاً للرئيسية
+  renderDashboardTopProducts();
 }
 
 // ✅ v7.9.2 - دالة عرض الأكثر مبيعاً (صافي الكمية) في الصفحة الرئيسية
@@ -257,15 +259,15 @@ function renderMonthlyGoal() {
   const percent   = Math.min(100, (actualSales / goal * 100));
   const remaining = Math.max(0, goal - actualSales);
   const cur       = state.storeSettings.currency;
-  const en        = currentLang === 'en';
 
+  // ✅ v7.10.2 — ترجمة كاملة
   container.innerHTML =
     '<div class="goal-card">' +
-    '<h3>🎯 ' + (en ? 'Monthly Sales Goal' : 'هدف المبيعات الشهري') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
+    '<h3>🎯 ' + tr('monthly_goal_title') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
     '<div class="goal-header"><div class="goal-values">' +
-    '<div class="goal-value"><div class="label">' + (en ? 'Sales' : 'المبيعات') + '</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">' + (en ? 'Goal' : 'الهدف') + '</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">' + (en ? 'Remaining' : 'المتبقي') + '</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + tr('monthly_goal_sales') + '</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + tr('monthly_goal_target') + '</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
+    '<div class="goal-value"><div class="label">' + tr('monthly_goal_remaining') + '</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
     '</div></div>' +
     '<div class="goal-bar-container"><div class="goal-bar" style="width: ' + percent + '%"></div></div>' +
     '</div>';
