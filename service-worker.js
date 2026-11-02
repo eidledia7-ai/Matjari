@@ -1,9 +1,9 @@
 /* ==========================================================
-   متجري v6.3 - Service Worker (Network First for Everything)
+   متجري v7.10 - Service Worker (Network First for Everything)
    ========================================================== */
 
-// ✅ غيرنا الإصدار عشان نمسح الكاش القديم فوراً
-const CACHE_NAME = 'matjari-cache-v6.3'; 
+// ✅ تم تحديث الإصدار لـ v7.10 لمسح الكاش القديم فوراً
+const CACHE_NAME = 'matjari-cache-v7.10'; 
 
 const ASSETS = [
   './index.html', './style.css', './manifest.json', './icon-192.png', './icon-512.png',
@@ -11,6 +11,10 @@ const ASSETS = [
   './auth.js', './products.js', './settings.js', './sales.js', './inventory.js', './partners.js',
   './finance.js', './dashboard.js', './printing.js', './backup.js', './updates.js', './barcode.js',
   './compare.js', './staff.js', './subscription.js', './landing.js', './main.js',
+  /* ✅ إضافة الملفات الجديدة لضمان عملها أوفلاين */
+  './finance-core.js', './cashier-hotkeys.js', './auto-backup.js', './sync-queue.js',
+  './stock-conflicts.js', './connection-banner.js', './operations-center.js',
+  /* الخطوط */
   './cairo-regular.ttf', './cairo-semibold.ttf', './cairo-bold.ttf', './cairo-extrabold.ttf', './cairo-black.ttf'
 ];
 
@@ -57,7 +61,6 @@ self.addEventListener('fetch', function (event) {
   if (url.href.includes('supabase.co')) return;
 
   // ✅ الحل الجذري: كل الملفات هتشتغل بنظام Network First (السيرفر الأول)
-  // لو فيه نت، هيجيب الجديد. لو مفيش نت، هيجيب من الكاش.
   const isStaticAsset = ASSETS.some(asset => url.pathname.endsWith(asset.replace('./', '')));
 
   if (isStaticAsset || request.mode === 'navigate') {
