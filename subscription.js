@@ -4,7 +4,6 @@ function renderSubscriptionPage() {
   if (!container) return;
 
   const sub = state.subscription || {};
-  const en = currentLang === 'en';
   const cur = state.storeSettings.currency || 'ج.م';
 
   let endDate = null;
@@ -16,12 +15,10 @@ function renderSubscriptionPage() {
   const isActive = sub.status === 'active' && (!endDate || endDate > now);
 
   const planNames = {
-    trial: en ? 'Free Trial' : 'تجربة مجانية',
-    starter: en ? 'Starter' : 'البداية',
-    growth: en ? 'Growth' : 'النمو',
-    pro: en ? 'Pro' : 'الاحترافي'
+    trial: tr('plan_trial'), starter: tr('plan_starter'),
+    growth: tr('plan_growth'), pro: tr('plan_pro')
   };
-  const planName = planNames[sub.plan] || sub.plan || 'Trial';
+  const planName = planNames[sub.plan] || sub.plan || tr('plan_trial');
 
   let progressPercent = 0;
   if (sub.plan === 'trial' && endDate) {
@@ -31,50 +28,30 @@ function renderSubscriptionPage() {
 
   const plans = PLANS.map(function(p) {
     return {
-      id: p.id,
-      name: en ? p.name_en : p.name_ar,
-      price: p.price,
-      yearly: p.yearly,
-      popular: !!p.popular,
-      features: buildPlanFeaturesList(p.id, en)
+      id: p.id, name: currentLang === 'en' ? p.name_en : p.name_ar,
+      price: p.price, yearly: p.yearly, popular: !!p.popular,
+      features: buildPlanFeaturesList(p.id, currentLang === 'en')
     };
   });
 
   let html = '';
-
   html += '<div class="card">';
   html += '<h3>' + tr('current_status_title') + '</h3>';
   html += '<div class="sub-status-grid">';
-
-  html += '<div class="stat-card ' + (isActive ? 'active' : 'expired') + '">';
-  html += '<h3>' + tr('current_plan') + '</h3><p>' + planName + '</p></div>';
-
-  html += '<div class="stat-card ' + (isActive ? 'active' : 'expired') + '">';
-  html += '<h3>' + tr('th_status') + '</h3><p>' + (isActive ? tr('active_status') : tr('expired_status')) + '</p></div>';
-
+  html += '<div class="stat-card ' + (isActive ? 'active' : 'expired') + '"><h3>' + tr('current_plan') + '</h3><p>' + planName + '</p></div>';
+  html += '<div class="stat-card ' + (isActive ? 'active' : 'expired') + '"><h3>' + tr('th_status') + '</h3><p>' + (isActive ? tr('active_status') : tr('expired_status')) + '</p></div>';
   if (endDate) {
-    html += '<div class="stat-card">';
-    html += '<h3>' + tr('days_remaining') + '</h3><p>' + daysLeft + ' ' + tr('days_word') + '</p></div>';
-
-    html += '<div class="stat-card">';
-    html += '<h3>' + tr('expires_on') + '</h3><p style="font-size:14px">' + new Date(endDate).toLocaleDateString(en ? 'en-US' : 'ar-EG') + '</p></div>';
+    html += '<div class="stat-card"><h3>' + tr('days_remaining') + '</h3><p>' + daysLeft + ' ' + tr('days_word') + '</p></div>';
+    html += '<div class="stat-card"><h3>' + tr('expires_on') + '</h3><p style="font-size:14px">' + new Date(endDate).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</p></div>';
   }
-
   html += '</div>';
-
   if (sub.plan === 'trial' && endDate && isActive) {
-    html += '<div class="sub-progress-wrap mt-15">';
-    html += '<div class="sub-progress-label">' + tr('trial_progress') + ' — ' + daysLeft + ' / 14 ' + tr('days_word') + '</div>';
-    html += '<div class="sub-progress-bar"><div class="sub-progress-fill" style="width:' + progressPercent + '%"></div></div>';
-    html += '</div>';
+    html += '<div class="sub-progress-wrap mt-15"><div class="sub-progress-label">' + tr('trial_progress') + ' — ' + daysLeft + ' / 14 ' + tr('days_word') + '</div>';
+    html += '<div class="sub-progress-bar"><div class="sub-progress-fill" style="width:' + progressPercent + '%"></div></div></div>';
   }
-
   html += '</div>';
 
-  html += '<div class="card mt-20">';
-  html += '<h3>' + tr('available_plans') + '</h3>';
-  html += '<div class="plans-grid">';
-
+  html += '<div class="card mt-20"><h3>' + tr('available_plans') + '</h3><div class="plans-grid">';
   plans.forEach(plan => {
     const isCurrent = sub.plan === plan.id;
     html += '<div class="plan-card' + (plan.popular ? ' popular' : '') + (isCurrent ? ' current' : '') + '" onclick="showPlanDetail(\'' + plan.id + '\', \'subscription\')" style="cursor:pointer">';
@@ -93,11 +70,9 @@ function renderSubscriptionPage() {
     }
     html += '</div>';
   });
-
   html += '</div></div>';
 
   html += '<div class="notice info mt-20">💳 <b>' + tr('payment_coming_soon') + '</b> ' + tr('payment_coming_desc') + '</div>';
-
   container.innerHTML = html;
 }
 
@@ -113,22 +88,18 @@ function buildPlanFeaturesList(planId, en) {
   return features;
 }
 
-/* ============ بدء الاشتراك (Paymob) ============ */
 async function startSubscription(planId) {
   const plan = PLANS.find(p => p.id === planId);
   if (!plan) return;
 
-  if (!supabaseClient) {
-    return showNotification(currentLang === 'en' ? 'No connection to server.' : 'لا يوجد اتصال بالسيرفر.', 'error');
-  }
+  if (!supabaseClient) return showNotification(tr('error_no_server_connection'), 'error');
   
-  showLoading(currentLang === 'en' ? 'Connecting to payment...' : 'جارٍ الاتصال ببوابة الدفع...');
+  showLoading(tr('sub_connecting_payment'));
 
   try {
     const { data, error } = await supabaseClient.functions.invoke('create-payment', {
       body: {
-        amount: plan.price,
-        planId: planId,
+        amount: plan.price, planId: planId,
         userEmail: state.currentUser ? state.currentUser.email : '',
         userName: 'Customer',
         userId: state.currentUser ? state.currentUser.id : ''
@@ -136,7 +107,7 @@ async function startSubscription(planId) {
     });
 
     if (error) throw error;
-    if (!data || !data.token) throw new Error('لم يتم استلام توكن الدفع');
+    if (!data || !data.token) throw new Error(tr('sub_token_error'));
 
     hideLoading();
 
@@ -146,7 +117,6 @@ async function startSubscription(planId) {
     const oldModal = document.getElementById('paymobIframeModal');
     if (oldModal) oldModal.remove();
 
-    // ✅ [إضافة] متغير لحفظ مؤقت فحص الدفع
     if (window._paymentCheckInterval) clearInterval(window._paymentCheckInterval);
 
     const modal = document.createElement('div');
@@ -156,7 +126,7 @@ async function startSubscription(planId) {
     modal.innerHTML = `
       <div class="modal-card" style="max-width: 600px; width: 100%; padding: 0; overflow: hidden; height: 85vh;">
         <div style="padding: 15px; background: #17364c; color: white; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="margin: 0; color: white;">💳 ${currentLang === 'en' ? 'Secure Payment' : 'الدفع الآمن'}</h3>
+          <h3 style="margin: 0; color: white;">💳 ${tr('sub_secure_payment')}</h3>
           <button onclick="closePaymobModal()" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
         </div>
         <iframe src="${iframeUrl}" width="100%" height="100%" style="border: none;"></iframe>
@@ -164,7 +134,6 @@ async function startSubscription(planId) {
     `;
     document.body.appendChild(modal);
 
-    // ✅ [إضافة] فحص تلقائي لحالة الدفع كل 5 ثواني
     window._paymentCheckInterval = setInterval(async () => {
       try {
         const { data: subData } = await supabaseClient
@@ -173,29 +142,23 @@ async function startSubscription(planId) {
           .eq('user_id', state.currentUser.id)
           .maybeSingle();
 
-        // لو الباقة اتغيرت أو الاشتراك اتفعل
         if (subData && (subData.plan === planId || (subData.expires_at && new Date(subData.expires_at) > new Date()))) {
-          
           clearInterval(window._paymentCheckInterval);
-          state.subscription = subData; // تحديث الـ State
-          
-          closePaymobModal(); // إغلاق شاشة الدفع
-          
-          showNotification(currentLang === 'en' ? 'Subscription activated successfully! 🎉' : 'تم تجديد الاشتراك بنجاح! شكراً لك 🎉', 'success');
-          
-          renderSubscriptionPage(); // تحديث الشاشة
+          state.subscription = subData;
+          closePaymobModal();
+          showNotification(tr('sub_activated_success'), 'success');
+          renderSubscriptionPage();
           if (typeof enforceSubscriptionBlock === 'function') enforceSubscriptionBlock();
         }
-      } catch (e) { /* تجاهل الأخطاء أثناء الفحص */ }
+      } catch (e) { }
     }, 5000);
 
   } catch (err) {
     hideLoading();
-    showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + err.message, 'error');
+    showNotification(tr('error_generic_prefix') + err.message, 'error');
   }
 }
 
-// ✅ [إضافة] دالة لإغلاق المودال ومسح المؤقت
 function closePaymobModal() {
   const modal = document.getElementById('paymobIframeModal');
   if (modal) modal.remove();
@@ -205,45 +168,40 @@ function closePaymobModal() {
   }
 }
 
-/* ============ عرض تفاصيل باقة ============ */
 function showPlanDetail(planId, context) {
   const plan = PLANS.find(p => p.id === planId);
   if (!plan) return;
 
-  const en = currentLang === 'en';
   const cur = state.storeSettings.currency || 'ج.م';
-  const dict = translations[currentLang] || translations.ar;
 
   const old = document.getElementById('planDetailModal');
   if (old) old.remove();
 
-  const names = { starter: en ? 'Starter' : 'البداية', growth: en ? 'Growth' : 'النمو', pro: en ? 'Pro' : 'الاحترافي' };
+  const names = { starter: tr('plan_starter'), growth: tr('plan_growth'), pro: tr('plan_pro') };
   const icons = { starter: '🚀', growth: '⭐', pro: '👑' };
   const subtitles = {
-    starter: en ? 'Perfect to get started' : 'مناسبة للبداية والاحتياج الأساسي',
-    growth:  en ? 'Best for growing shops' : 'الأفضل للمحلات النامية',
-    pro:     en ? 'For large stores & chains' : 'للمحلات الكبيرة والسلاسل'
+    starter: tr('sub_sub_starter'),
+    growth:  tr('sub_sub_growth'),
+    pro:     tr('sub_sub_pro')
   };
 
-  const includesText = planId === 'growth'
-    ? (en ? '✅ Everything in Starter +' : '✅ كل مميزات البداية +')
-    : planId === 'pro'
-    ? (en ? '✅ Everything in Growth +' : '✅ كل مميزات النمو +')
-    : (en ? 'This plan includes:' : 'هذه الباقة تشمل:');
+  const includesText = planId === 'growth' ? tr('sub_includes_starter')
+    : planId === 'pro' ? tr('sub_includes_growth')
+    : tr('sub_includes_base');
 
   let featuresHtml = '';
   PLAN_FEATURES.forEach(f => {
     const val = f.values[planId];
     let icon, text, cls;
-    if (val === true)  { icon = '✅'; text = en ? f.label_en : f.label_ar; cls = 'pd-on'; }
-    else if (val === false) { icon = '❌'; text = en ? f.label_en : f.label_ar; cls = 'pd-off'; }
-    else { icon = '✓'; text = (en ? f.label_en : f.label_ar) + ': <b>' + val + '</b>'; cls = 'pd-on'; }
+    if (val === true)  { icon = '✅'; text = currentLang === 'en' ? f.label_en : f.label_ar; cls = 'pd-on'; }
+    else if (val === false) { icon = '❌'; text = currentLang === 'en' ? f.label_en : f.label_ar; cls = 'pd-off'; }
+    else { icon = '✓'; text = (currentLang === 'en' ? f.label_en : f.label_ar) + ': <b>' + val + '</b>'; cls = 'pd-on'; }
     featuresHtml += '<li class="' + cls + '"><span class="pd-fi">' + icon + '</span><span>' + text + '</span></li>';
   });
 
   const ctaHtml = context === 'landing'
-    ? '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); showAuthView(\'signup\')">' + dict.start_free_trial + '</button>'
-    : '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); startSubscription(\'' + planId + '\')">' + dict.subscribe_now + ' — ' + plan.price + ' ' + cur + '/' + dict.per_month + '</button>';
+    ? '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); showAuthView(\'signup\')">' + tr('start_free_trial') + '</button>'
+    : '<button class="btn green w-100 pd-cta" onclick="hidePlanDetail(); startSubscription(\'' + planId + '\')">' + tr('subscribe_now') + ' — ' + plan.price + ' ' + cur + '/' + tr('per_month') + '</button>';
 
   const modal = document.createElement('div');
   modal.id = 'planDetailModal';
@@ -252,25 +210,25 @@ function showPlanDetail(planId, context) {
   modal.innerHTML =
     '<div class="plan-detail-card pd-theme-' + planId + '">' +
       '<button class="pd-close" onclick="hidePlanDetail()">✕</button>' +
-      (plan.popular ? '<div class="pd-popular-badge">⭐ ' + dict.most_popular + '</div>' : '') +
+      (plan.popular ? '<div class="pd-popular-badge">⭐ ' + tr('most_popular') + '</div>' : '') +
       '<div class="pd-hero">' +
         '<div class="pd-icon">' + icons[planId] + '</div>' +
         '<h2 class="pd-name">' + names[planId] + '</h2>' +
         '<p class="pd-subtitle">' + subtitles[planId] + '</p>' +
       '</div>' +
       '<div class="pd-price-block">' +
-        '<div class="pd-price"><span class="pd-amount">' + plan.price + '</span><span class="pd-cur">' + cur + '</span><span class="pd-period">/' + dict.per_month + '</span></div>' +
-        '<div class="pd-yearly">' + (en ? 'or ' : 'أو ') + '<b>' + plan.yearly + ' ' + cur + '</b>/' + dict.per_year +
-          '<span class="pd-save-badge">' + (en ? 'Save 2 months' : 'وفّر شهرين') + '</span></div>' +
+        '<div class="pd-price"><span class="pd-amount">' + plan.price + '</span><span class="pd-cur">' + cur + '</span><span class="pd-period">/' + tr('per_month') + '</span></div>' +
+        '<div class="pd-yearly">' + tr('or_text') + ' <b>' + plan.yearly + ' ' + cur + '</b>/' + tr('per_year') +
+          '<span class="pd-save-badge">' + tr('sub_save_2_months') + '</span></div>' +
       '</div>' +
       '<div class="pd-divider"></div>' +
       '<div class="pd-includes">' + includesText + '</div>' +
       '<ul class="pd-features">' + featuresHtml + '</ul>' +
       ctaHtml +
       '<div class="pd-trust">' +
-        '<span>🔒 ' + (en ? 'Secure' : 'دفع آمن') + '</span>' +
-        '<span>↩️ ' + (en ? '7-day guarantee' : 'ضمان 7 أيام') + '</span>' +
-        '<span>📞 ' + (en ? '24/7 support' : 'دعم 24/7') + '</span>' +
+        '<span>🔒 ' + tr('sub_secure_label') + '</span>' +
+        '<span>↩️ ' + tr('sub_trust_guarantee') + '</span>' +
+        '<span>📞 ' + tr('sub_trust_support') + '</span>' +
       '</div>' +
     '</div>';
 

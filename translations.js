@@ -972,7 +972,18 @@ settings_saving_offline: "تم الحفظ محلياً، وسيتم الرفع �
   empty_sales_period: "لا توجد مبيعات في الفترة.",
   empty_shifts: "لا توجد ورديات مغلقة.",
   
-
+// ar
+auth_change_password_prompt: "أدخل كلمة المرور الجديدة (6 أحرف على الأقل):",
+auth_change_password_confirm_prompt: "تأكيد كلمة المرور الجديدة:",
+auth_passwords_mismatch: "كلمتا المرور غير متطابقتين.",
+auth_updating: "جارٍ التحديث...",
+auth_password_updated: "تم تغيير كلمة المرور بنجاح! ✅",
+auth_sub_inactive: "اشتراكك غير نشط. جدد الآن.",
+auth_trial_expired: "انتهت فترة التجربة. اشترك للاستمرار.",
+auth_trial_expires_today: "تجربتك تنتهي اليوم!",
+auth_trial_expires_in_days: "تجربتك تنتهي خلال {days} أيام.",
+auth_no_permissions_found: "لم يتم العثور على صلاحيات لهذا الحساب. تواصل مع الدعم.",
+auth_data_load_fail_prefix: "تعذر تحميل البيانات: ",
   // ═══════════════════════════════════════════════════════════
   // ==== CONFIRM DIALOGS (msg_*) ====
   // ═══════════════════════════════════════════════════════════
@@ -1187,6 +1198,17 @@ qty_label: "Quantity *",
   pay_visa: "💳 Visa / Card",
   pay_transfer: "📲 Bank Transfer",
 edit_btn: "Edit",
+auth_change_password_prompt: "Enter new password (at least 6 characters):",
+auth_change_password_confirm_prompt: "Confirm new password:",
+auth_passwords_mismatch: "Passwords do not match.",
+auth_updating: "Updating...",
+auth_password_updated: "Password updated successfully! ✅",
+auth_sub_inactive: "Your subscription is inactive. Renew now.",
+auth_trial_expired: "Your trial has expired. Subscribe to continue.",
+auth_trial_expires_today: "Your trial expires today!",
+auth_trial_expires_in_days: "Your trial expires in {days} days.",
+auth_no_permissions_found: "No permissions found for this account. Contact support.",
+auth_data_load_fail_prefix: "Failed to load data: ",
   // ═══════════════════════════════════════════════════════════
   // ==== HELD INVOICES ====
   // ═══════════════════════════════════════════════════════════

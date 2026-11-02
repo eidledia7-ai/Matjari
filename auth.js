@@ -10,7 +10,7 @@ function togglePassword(id, btn) {
   if (!field) return;
   const showing = field.type === 'password';
   field.type = showing ? 'text' : 'password';
-  if (btn) btn.textContent = showing ? (currentLang === 'ar' ? 'إخفاء' : 'Hide') : (currentLang === 'ar' ? 'إظهار' : 'Show');
+  if (btn) btn.textContent = showing ? tr('hide_pass') : tr('show_pass');
 }
 
 function setAuthMessage(msg, isError) {
@@ -24,7 +24,7 @@ function setAuthBusy(busy) {
   const lb = document.getElementById('loginButton');
   const sb = document.getElementById('signupButton');
   const fb = document.getElementById('forgotButton');
-  if (lb) { lb.disabled = busy; lb.textContent = busy ? '...' : (currentLang === 'ar' ? 'دخول للنظام 🚀' : 'Sign In 🚀'); }
+  if (lb) { lb.disabled = busy; lb.textContent = busy ? '...' : tr('login_btn'); }
   if (sb) sb.disabled = busy;
   if (fb) fb.disabled = busy;
 }
@@ -34,18 +34,18 @@ async function signIn() {
   const password = document.getElementById('authPassword').value || '';
 
   if (!supabaseClient) initSupabase();
-  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  if (!supabaseClient) return setAuthMessage(tr('auth_no_connection'), true);
 
-  if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
+  if (!email || !password) return setAuthMessage(tr('auth_enter_email_pass'), true);
   setAuthBusy(true);
-  showLoading(currentLang === 'en' ? 'Signing in...' : 'جارٍ تسجيل الدخول...');
-  setAuthMessage(currentLang === 'en' ? 'Signing in...' : 'جارٍ تسجيل الدخول...');
+  showLoading(tr('auth_signing_in'));
+  setAuthMessage(tr('auth_signing_in'));
   try {
     const result = await supabaseClient.auth.signInWithPassword({ email: email, password: password });
     if (result.error) throw result.error;
     await openUserSession(result.data.user);
   } catch (e) {
-    setAuthMessage('تعذر الدخول: ' + (e.message || ''), true);
+    setAuthMessage(tr('auth_sign_in_fail_prefix') + (e.message || ''), true);
   } finally {
     setAuthBusy(false);
     hideLoading();
@@ -57,12 +57,12 @@ async function signUp() {
   const password = document.getElementById('authPassword').value || '';
 
   if (!supabaseClient) initSupabase();
-  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  if (!supabaseClient) return setAuthMessage(tr('auth_no_connection'), true);
 
-  if (!email || !password) return setAuthMessage('أدخل البريد وكلمة المرور', true);
-  if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
+  if (!email || !password) return setAuthMessage(tr('auth_enter_email_pass'), true);
+  if (password.length < 6) return setAuthMessage(tr('auth_password_min_6'), true);
   setAuthBusy(true);
-  setAuthMessage('جارٍ إنشاء الحساب...');
+  setAuthMessage(tr('auth_creating_account'));
   try {
     const result = await supabaseClient.auth.signUp({ email: email, password: password });
     if (result.error) throw result.error;
@@ -70,10 +70,10 @@ async function signUp() {
     if (result.data.session && result.data.user) {
       await openUserSession(result.data.user);
     } else {
-      setAuthMessage('تم إنشاء الحساب. تحقق من بريدك ثم سجّل دخول.');
+      setAuthMessage(tr('auth_check_email'));
     }
   } catch (e) {
-    setAuthMessage('تعذر الإنشاء: ' + (e.message || ''), true);
+    setAuthMessage(tr('auth_signup_fail_prefix') + (e.message || ''), true);
   } finally {
     setAuthBusy(false);
   }
@@ -81,17 +81,17 @@ async function signUp() {
 
 async function sendPasswordReset() {
   const email = (document.getElementById('authEmail').value || '').trim();
-  if (!email) return setAuthMessage('أدخل البريد أولاً', true);
-  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  if (!email) return setAuthMessage(tr('auth_enter_email_first'), true);
+  if (!supabaseClient) return setAuthMessage(tr('auth_no_connection'), true);
   setAuthBusy(true);
   try {
     const result = await supabaseClient.auth.resetPasswordForEmail(email, {
       redirectTo: location.origin + location.pathname
     });
     if (result.error) throw result.error;
-    setAuthMessage('تم إرسال رابط الاسترجاع على بريدك.');
+    setAuthMessage(tr('auth_reset_sent'));
   } catch (e) {
-    setAuthMessage('تعذر الإرسال: ' + (e.message || ''), true);
+    setAuthMessage(tr('auth_reset_fail_prefix') + (e.message || ''), true);
   } finally {
     setAuthBusy(false);
   }
@@ -99,16 +99,16 @@ async function sendPasswordReset() {
 
 async function saveNewPassword() {
   const password = document.getElementById('newPassword').value || '';
-  if (password.length < 6) return setAuthMessage('كلمة المرور 6 أحرف على الأقل', true);
-  if (!supabaseClient) return setAuthMessage('فشل الاتصال بالسيرفر، تأكد من الإنترنت.', true);
+  if (password.length < 6) return setAuthMessage(tr('auth_password_min_6'), true);
+  if (!supabaseClient) return setAuthMessage(tr('auth_no_connection'), true);
   try {
     const result = await supabaseClient.auth.updateUser({ password: password });
     if (result.error) throw result.error;
     await supabaseClient.auth.signOut();
     showLoggedOutUI();
-    setAuthMessage('تم تغيير كلمة المرور. سجّل دخول الآن.');
+    setAuthMessage(tr('auth_pass_changed_login'));
   } catch (e) {
-    setAuthMessage('تعذر التغيير: ' + (e.message || ''), true);
+    setAuthMessage(tr('auth_pass_change_fail_prefix') + (e.message || ''), true);
   }
 }
 
@@ -149,34 +149,34 @@ async function handleLogout() {
     localStorage.removeItem('matjari_last_user');
     showLoggedOutUI();
   } catch (e) {
-    showNotification('تعذر الخروج', 'error');
+    showNotification(tr('auth_logout_fail'), 'error');
   }
 }
 
 /* ============ تغيير كلمة المرور ============ */
 async function changePasswordPrompt() {
   if (!supabaseClient) {
-    return showNotification(currentLang === 'en' ? 'No connection to server.' : 'لا يوجد اتصال بالسيرفر.', 'error');
+    return showNotification(tr('error_no_server_connection'), 'error');
   }
-  const newPass = prompt(currentLang === 'en' ? 'Enter new password (at least 6 characters):' : 'أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
+  const newPass = prompt(tr('auth_change_password_prompt'));
   if (newPass === null) return;
 
   if (newPass.length < 6) {
-    return showNotification(currentLang === 'en' ? 'Password must be at least 6 characters.' : 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.', 'error');
+    return showNotification(tr('auth_password_min_6'), 'error');
   }
 
-  const confirmPass = prompt(currentLang === 'en' ? 'Confirm new password:' : 'تأكيد كلمة المرور الجديدة:');
+  const confirmPass = prompt(tr('auth_change_password_confirm_prompt'));
   if (confirmPass !== newPass) {
-    return showNotification(currentLang === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.', 'error');
+    return showNotification(tr('auth_passwords_mismatch'), 'error');
   }
 
-  showLoading(currentLang === 'en' ? 'Updating...' : 'جارٍ التحديث...');
+  showLoading(tr('auth_updating'));
   try {
     const { data, error } = await supabaseClient.auth.updateUser({ password: newPass });
     if (error) throw error;
-    showNotification(currentLang === 'en' ? 'Password updated successfully!' : 'تم تغيير كلمة المرور بنجاح! ✅', 'success');
+    showNotification(tr('auth_password_updated'), 'success');
   } catch (e) {
-    showNotification((currentLang === 'en' ? 'Error: ' : 'خطأ: ') + (e.message || ''), 'error');
+    showNotification(tr('error_generic_prefix') + (e.message || ''), 'error');
   } finally {
     hideLoading();
   }
@@ -190,7 +190,6 @@ async function openUserSession(user) {
   if (main) main.style.display = 'none';
 
   try {
-    // 1. تحديد الدور ورقم المدير
     const roleRes = await supabaseClient
       .from('shop_user_roles')
       .select('role, owner_id')
@@ -201,13 +200,11 @@ async function openUserSession(user) {
       state.role = roleRes.data.role;
       state.ownerId = roleRes.data.owner_id || null;
     } else {
-      throw new Error('لم يتم العثور على صلاحيات لهذا الحساب. تواصل مع الدعم.');
+      throw new Error(tr('auth_no_permissions_found'));
     }
 
-    // 2. تحديد صاحب المحل (المدير) لجلب البيانات
     const ownerId = state.role === 'employee' ? state.ownerId : user.id;
 
-    // 3. جلب الاشتراك (للموظف بيجيب اشتراك مديره)
     const subRes = await supabaseClient
       .from('shop_subscriptions')
       .select('*')
@@ -221,12 +218,10 @@ async function openUserSession(user) {
     }
     state.ownerPlan = state.subscription.plan;
 
-    // 4. تحميل البيانات (من الكاش أو من السيرفر)
     const cacheOwnerId = ownerId;
     let localCache = null;
     try { localCache = JSON.parse(localStorage.getItem('matjari_cache_' + cacheOwnerId)); } catch (e) {}
 
-    // تحميل الكاش الأول (سريع)
     if (localCache) {
       if (localCache.products) state.products = localCache.products;
       if (localCache.customers) state.customers = localCache.customers;
@@ -242,45 +237,41 @@ async function openUserSession(user) {
       if (localCache.supplierPayments) state.supplierPayments = localCache.supplierPayments;
       if (localCache.stockMoves) state.stockMoves = localCache.stockMoves;
       if (localCache.heldCarts) state.heldCarts = localCache.heldCarts;
-      // ✨ جديد: saleItems (flat) للـ finance-core COGS
       if (localCache.saleItems) state.saleItems = localCache.saleItems;
     }
 
-    // التحميل من السيرفر (لو أونلاين)
+    // ✅ v7.10.2 — heldCarts normalization
+    if (Array.isArray(state.heldCarts)) {
+      state.heldCarts = state.heldCarts.map(h => ({
+        ...h,
+        customer_id: h.customer_id || h.customerId || null,
+        customer_name: h.customer_name || h.customerName || null
+      }));
+    }
+
     if (navigator.onLine && supabaseClient) {
-  await syncDown(ownerId);
-}
+      await syncDown(ownerId);
+    }
 
-// ✅ v7.6 — فحص النسخة التلقائية بعد المزامنة
-setTimeout(() => {
-  if (typeof checkAndRunAutoBackup === 'function') {
-    checkAndRunAutoBackup('load').catch(e => console.warn('auto-backup:', e));
-  }
-}, 2000);
+    setTimeout(() => {
+      if (typeof checkAndRunAutoBackup === 'function') {
+        checkAndRunAutoBackup('load').catch(e => console.warn('auto-backup:', e));
+      }
+    }, 2000);
 
-    // لو saleItems مش موجود (كاش قديم)، ابنيه من sales[].items
     if (!state.saleItems || state.saleItems.length === 0) {
       state.saleItems = [];
       (state.sales || []).forEach(s => {
         (s.items || []).forEach(i => {
           state.saleItems.push({
-            id: uid('SI'),
-            sale_id: s.id,
-            saleId: s.id,
-            user_id: ownerId,
-            product_id: i.id,
-            productId: i.id,
-            product_name: i.name,
-            productName: i.name,
-            qty: Number(i.qty) || 0,
-            price: Number(i.price) || 0,
-            cost: Number(i.cost) || 0
+            id: uid('SI'), sale_id: s.id, saleId: s.id, user_id: ownerId,
+            product_id: i.id, productId: i.id, product_name: i.name, productName: i.name,
+            qty: Number(i.qty) || 0, price: Number(i.price) || 0, cost: Number(i.cost) || 0
           });
         });
       });
     }
 
-    // التأكد من وجود العميل النقدي العام
     if (!state.customers || state.customers.length === 0) {
       state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 }];
     } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
@@ -306,19 +297,15 @@ setTimeout(() => {
     console.error(e);
     document.getElementById('skeletonLoader').style.display = 'none';
     if (main) main.style.display = 'block';
-    setAuthMessage('تعذر تحميل البيانات: ' + (e.message || ''), true);
+    setAuthMessage(tr('auth_data_load_fail_prefix') + (e.message || ''), true);
     showLoggedOutUI();
   } finally {
     hideLoading();
   }
 
-  // حفظ الجلسة للأوفلاين
   try {
     localStorage.setItem('matjari_last_user', JSON.stringify({
-      id: user.id,
-      email: user.email,
-      role: state.role,
-      ownerId: state.ownerId || null
+      id: user.id, email: user.email, role: state.role, ownerId: state.ownerId || null
     }));
   } catch (e) {}
 }
@@ -326,10 +313,9 @@ setTimeout(() => {
 /* ============ فحص حالة الاشتراك ============ */
 function checkSubscriptionStatus() {
   const sub = state.subscription || {};
-  const en = currentLang === 'en';
 
   if (sub.status !== 'active') {
-    showNotification(en ? 'Your subscription is inactive.' : 'اشتراكك غير نشط. جدد الآن.', 'error');
+    showNotification(tr('auth_sub_inactive'), 'error');
     return;
   }
 
@@ -347,23 +333,21 @@ function checkSubscriptionStatus() {
   const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
 
   if (daysLeft < 0) {
-    showNotification(en ? 'Your trial has expired.' : 'انتهت فترة التجربة. اشترك للاستمرار.', 'error');
+    showNotification(tr('auth_trial_expired'), 'error');
   } else if (daysLeft === 0) {
-    showNotification(en ? 'Your trial expires today!' : 'تجربتك تنتهي اليوم!', 'warning');
+    showNotification(tr('auth_trial_expires_today'), 'warning');
   } else if (daysLeft <= 3) {
-    showNotification(en ? `Your trial expires in ${daysLeft} days.` : `تجربتك تنتهي خلال ${daysLeft} أيام.`, 'warning');
+    showNotification(tr('auth_trial_expires_in_days').replace('{days}', daysLeft), 'warning');
   }
 }
 
 function applyRolePermissions() {
   const employee = state.role === 'employee';
 
-  // 1) الموظف: إخفاء كل الـ nav-group بالكامل
   document.querySelectorAll('.nav-group').forEach(function(group) {
     group.style.display = employee ? 'none' : '';
   });
 
-  // 2) الموظف: إخفاء أي زرار data-page مش sales/invReturns
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
     if (employee && page !== 'sales' && page !== 'invReturns') {
@@ -373,7 +357,6 @@ function applyRolePermissions() {
     }
   });
 
-  // 3) إخفاء زرار المزامنة عن الموظف
   document.querySelectorAll('.sync-btn').forEach(function(btn) {
     btn.style.display = employee ? 'none' : '';
   });
@@ -387,7 +370,7 @@ async function startAuth() {
 
   if (!supabaseClient) initSupabase();
   if (!supabaseClient) {
-    setAuthMessage('فشل الاتصال بالسيرفر', true);
+    setAuthMessage(tr('error_no_server_connection'), true);
     return;
   }
   try {
@@ -398,7 +381,7 @@ async function startAuth() {
       showLoggedOutUI();
       document.getElementById('recoveryPanel').style.display = 'block';
       document.getElementById('loginButtons').style.display = 'none';
-      document.getElementById('authTitle').textContent = 'مرحباً بك! عيّن كلمة المرور الخاصة بك';
+      document.getElementById('authTitle').textContent = tr('auth_welcome_set_pass');
       history.replaceState(null, null, ' ');
       return;
     }
@@ -415,7 +398,7 @@ async function startAuth() {
     if (isNetworkErr) {
       loadOfflineSession();
     } else {
-      setAuthMessage('تعذر الدخول: ' + (e.message || ''), true);
+      setAuthMessage(tr('auth_sign_in_fail_prefix') + (e.message || ''), true);
       showLoggedOutUI();
     }
   }
