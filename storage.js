@@ -250,47 +250,39 @@ async function syncDown(ownerId) {
     console.warn('syncDown customer balances failed:', err.message);
     if (!state.customerBalances) state.customerBalances = {};
   }
+  // ✅ v7.8
+if (typeof refreshStockConflictIndicator === 'function') refreshStockConflictIndicator().catch(() => {});
 }
 
 async function syncUp(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
   try {
     await supabaseClient.from('store_settings').upsert({
-      user_id: ownerId,
-      name: state.storeSettings.name, phone: state.storeSettings.phone,
+      user_id: ownerId, name: state.storeSettings.name, phone: state.storeSettings.phone,
       address: state.storeSettings.address, tax_number: state.storeSettings.taxNumber,
       currency: state.storeSettings.currency, logo: state.storeSettings.logo,
       monthly_goal: state.storeSettings.monthlyGoal, points_rate: state.storeSettings.pointsRate,
       point_value: state.storeSettings.pointValue, print_type: state.storeSettings.printType,
-      permissions: state.storeSettings.permissions,
-      vat_enabled: !!state.storeSettings.vatEnabled,
-      vat_rate: Number(state.storeSettings.vatRate) || 0,
-      vat_mode: state.storeSettings.vatMode || 'inclusive',
-      auto_backup_enabled: !!state.storeSettings.autoBackupEnabled,
-      auto_backup_interval: state.storeSettings.autoBackupInterval || 'daily',
-      auto_backup_retention: Number(state.storeSettings.autoBackupRetention) || 7,
-      updated_at: new Date().toISOString()
+      permissions: state.storeSettings.permissions, vat_enabled: !!state.storeSettings.vatEnabled,
+      vat_rate: Number(state.storeSettings.vatRate) || 0, vat_mode: state.storeSettings.vatMode || 'inclusive',
+      auto_backup_enabled: !!state.storeSettings.autoBackupEnabled, auto_backup_interval: state.storeSettings.autoBackupInterval || 'daily',
+      auto_backup_retention: Number(state.storeSettings.autoBackupRetention) || 7, updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
-
-    for (const log of state.auditLogs) {
-      if (log.uploaded) continue; 
-      if (log.userId && log.userId !== state.currentUser.id) continue;
-      try {
-        const { error } = await supabaseClient.from('audit_logs').insert({
-          id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
-          role: 'manager', action: log.action, details: log.details,
-          created_at: log.date || new Date().toISOString()
-        });
-        if (!error) {
-          log.uploaded = true;
-        } else if (error.code === '23505') {
-          log.uploaded = true; 
-        } else {
-          console.warn('Audit log upload failed', error); 
-        }
-      } catch (e) { console.warn('Audit log upload failed', e); }
-    }
   } catch (e) { console.warn('Settings sync failed', e); }
+
+  try { await drainSyncQueue(); } catch (e) { console.warn('Queue drain failed', e); }
+
+  for (const log of state.auditLogs) {
+    if (log.uploaded) continue;
+    if (log.userId && log.userId !== state.currentUser.id) continue;
+    try {
+      const { error } = await supabaseClient.from('audit_logs').insert({
+        id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
+        role: 'manager', action: log.action, details: log.details, created_at: log.date || new Date().toISOString()
+      });
+      if (!error || error.code === '23505') log.uploaded = true; 
+    } catch (e) { console.warn('Audit log upload failed', e); }
+  }
 }
 
 function saveData() {
@@ -318,79 +310,15 @@ function saveData() {
 async function syncEmployeeChanges() {
   if (!state.currentUser || state.role !== 'employee' || !state.ownerId) return;
   if (!navigator.onLine || !supabaseClient) return;
-
-  const ownerId = state.ownerId;
-
-  for (const sale of state.sales) {
-    try {
-      await supabaseClient.from('sales').upsert({
-        id: sale.id, user_id: ownerId, date: sale.date, subtotal: sale.subtotal,
-        discount: sale.discount, total: sale.total, paid: sale.paid,
-        points_used: sale.points_used ?? sale.pointsUsed ?? 0,
-        customer_id: sale.customerId || sale.customer_id,
-        pay_method: sale.payMethod || sale.pay_method,
-        notes: sale.notes, cashier: sale.cashier, shift_id: sale.shiftId || sale.shift_id,
-        vat_rate: Number(sale.vat_rate ?? sale.vatRate) || 0,
-        vat_amount: Number(sale.vat_amount ?? sale.vatAmount) || 0,
-        vat_mode: sale.vat_mode || sale.vatMode || 'inclusive'
-      }, { onConflict: 'id' });
-
-      if (sale.items && sale.items.length > 0) {
-        const itemsToInsert = sale.items.map(i => ({
-          sale_id: sale.id, user_id: ownerId, product_id: i.id, product_name: i.name,
-          qty: i.qty, price: i.price, cost: i.cost
-        }));
-        await supabaseClient.from('sale_items').upsert(itemsToInsert, { onConflict: 'sale_id,product_id' });
-      }
-    } catch (e) { console.warn('Sale upload failed', e); }
-  }
-
-  for (const ret of state.returns) {
-    try {
-      await supabaseClient.from('returns').upsert({
-        id: ret.id, user_id: ownerId, sale_id: ret.saleId || ret.sale_id,
-        product_id: ret.productId || ret.product_id, product_name: ret.productName || ret.product_name,
-        qty: ret.qty, price: ret.price, total: ret.total,
-        vat_amount: Number(ret.vat_amount ?? ret.vatAmount) || 0,
-        refund_method: ret.refundMethod || ret.refund_method,
-        shift_id: ret.shiftId || ret.shift_id,
-        customer_id: ret.customerId || ret.customer_id,
-        reason: ret.reason, date: ret.date
-      }, { onConflict: 'id' });
-    } catch (e) { console.warn('Return upload failed', e); }
-  }
-
-  for (const exp of state.expenses) {
-    try {
-      await supabaseClient.from('expenses').upsert({
-        id: exp.id, user_id: ownerId, name: exp.name, amount: exp.amount,
-        notes: exp.notes, date: exp.date,
-        shift_id: exp.shiftId || exp.shift_id,
-        pay_method: exp.payMethod || exp.pay_method
-      }, { onConflict: 'id' });
-    } catch (e) { console.warn('Expense upload failed', e); }
-  }
-
-  for (const pay of (state.customerPayments || [])) {
-    try {
-      await supabaseClient.from('customer_payments').upsert({
-        id: pay.id, user_id: ownerId,
-        customer_id: pay.customerId || pay.customer_id,
-        customer_name: pay.customerName || pay.customer_name,
-        amount: pay.amount, date: pay.date, notes: pay.notes,
-        shift_id: pay.shiftId || pay.shift_id,
-        pay_method: pay.payMethod || pay.pay_method
-      }, { onConflict: 'id' });
-    } catch (e) { console.warn('Customer payment upload failed', e); }
-  }
-
+  try { await drainSyncQueue(); } catch (e) { console.warn('Queue drain failed', e); }
   for (const log of state.auditLogs) {
+    if (log.uploaded) continue;
     try {
-      await supabaseClient.from('audit_logs').upsert({
-        id: log.id, user_id: state.currentUser.id, owner_id: ownerId,
-        role: 'employee', action: log.action, details: log.details,
-        created_at: log.date || new Date().toISOString()
-      }, { onConflict: 'id' });
+      const { error } = await supabaseClient.from('audit_logs').insert({
+        id: log.id, user_id: state.currentUser.id, owner_id: state.ownerId, role: 'employee',
+        action: log.action, details: log.details, created_at: log.date || new Date().toISOString()
+      });
+      if (!error || error.code === '23505') log.uploaded = true;
     } catch (e) { console.warn('Audit log upload failed', e); }
   }
 }

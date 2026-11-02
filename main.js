@@ -99,6 +99,8 @@ window.onload = function() {
       checkForUpdates().catch(function() {});
     }
   }, 30 * 60 * 1000);
+  // ✅ v7.8 — Init Offline-First بعد جاهزية التطبيق
+setTimeout(() => { if (typeof initOfflineFirst === 'function') initOfflineFirst(); }, 500);
 };
 
 function setupEventListeners() {

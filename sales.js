@@ -377,34 +377,16 @@ async function completeSale() {
     vat_mode: vatMode
   };
 
-  if (navigator.onLine && supabaseClient) {
-    try {
-      const { error: saleErr } = await supabaseClient.from('sales').insert({
-        id: saleObj.id, user_id: ownerId, date: saleObj.date, subtotal: saleObj.subtotal,
-        discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
-        points_used: pointsUsed,
-        customer_id: saleCustomerId,
-        pay_method: saleObj.payMethod,
-        notes: saleObj.notes, cashier: saleObj.cashier, shift_id: shiftId,
-        vat_rate: vat.vat_rate,
-        vat_amount: vat.vat_amount,
-        vat_mode: vatMode
-      });
-      if (saleErr) throw saleErr;
-
-      if (saleObj.items.length > 0) {
-        const itemsData = saleObj.items.map(i => ({
-          sale_id: saleObj.id, user_id: ownerId, product_id: i.id,
-          product_name: i.name, qty: i.qty, price: i.price, cost: i.cost
-        }));
-        const { error: itemsErr } = await supabaseClient.from('sale_items').insert(itemsData);
-        if (itemsErr) throw itemsErr;
-      }
-    } catch (err) {
-      console.error('Error saving sale to server:', err);
-      showNotification(tr('save_offline_warning'), 'warning');
-    }
-  }
+  // ✅ v7.8 — إدخال للـ Queue (يعمل Online/Offline)
+enqueueSyncOperation('insert_sale', {
+  id: saleObj.id, date: saleObj.date, subtotal: saleObj.subtotal,
+  discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
+  points_used: pointsUsed, customer_id: saleCustomerId,
+  pay_method: saleObj.payMethod, notes: saleObj.notes,
+  cashier: saleObj.cashier, shift_id: shiftId,
+  vat_rate: vat.vat_rate, vat_amount: vat.vat_amount, vat_mode: vatMode,
+  items: saleObj.items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, cost: i.cost }))
+}, saleObj.id);
 
   state.sales.unshift(saleObj);
 
@@ -570,21 +552,13 @@ async function executeDeleteRecord(type, id) {
     if (idx === -1) return;
     const s = state.sales[idx];
 
-    if (navigator.onLine && supabaseClient) {
-      try {
-        const { error } = await supabaseClient.from('sales').delete().eq('id', id);
-        if (error) throw error;
-      } catch (e) {
-        console.error('Error deleting sale:', e);
-        showNotification(tr('delete_sale_error') + e.message, 'error');
-        return;
-      }
-    } else {
-      s.items.forEach(function(item) {
-        const prod = state.products.find(function(p) { return p.id === item.id; });
-        if (prod) prod.stock += item.qty;
-      });
-    }
+   // ✅ v7.8 — نضع الحذف في الـ Queue (يعمل أونلاين وأوفلاين) + نرجّع المخزون محلياً فوراً
+enqueueSyncOperation('delete_sale', { id }, id);
+
+s.items.forEach(function(item) {
+  const prod = state.products.find(function(p) { return p.id === item.id; });
+  if (prod) prod.stock += item.qty;
+});
 
     state.sales.splice(idx, 1);
     if (state.saleItems) {
@@ -599,9 +573,8 @@ async function executeDeleteRecord(type, id) {
     const exp = state.expenses.find(function(e) { return e.id === id; });
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
 
-    if (navigator.onLine && supabaseClient) {
-      await supabaseClient.from('expenses').delete().eq('id', id);
-    }
+    // ✅ v7.8
+enqueueSyncOperation('delete_expense', { id }, id);
 
     if (exp && typeof addAuditLog === 'function') {
       addAuditLog('delete_expense', { expenseId: exp.id, amount: exp.amount }, exp.id);

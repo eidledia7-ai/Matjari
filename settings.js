@@ -253,6 +253,7 @@ async function safeClearAllDataPrompt() {
   state.heldCarts = [];
 
   localStorage.removeItem('matjari_cache_' + ownerId);
+  if (typeof clearSyncQueue === 'function') clearSyncQueue();
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });

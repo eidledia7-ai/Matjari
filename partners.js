@@ -176,13 +176,12 @@ async function recordCustomerPayment() {
     shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
   });
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('customer_payments').insert(newPayment);
-    if (error) {
-      console.warn('Payment upload failed:', error);
-      return showNotification(tr('payment_save_fail') + error.message, 'error');
-    }
-  }
+  // ✅ v7.8
+enqueueSyncOperation('insert_customer_payment', {
+  id: newPayment.id, customer_id: customerId, customer_name: cust.name,
+  amount: amount, date: date, notes: notes,
+  shift_id: currentShiftId, pay_method: 'cash'
+}, newPayment.id);
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('record_customer_payment', { paymentId: newPayment.id, amount, customerId }, newPayment.id);

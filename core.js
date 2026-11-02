@@ -58,6 +58,9 @@ function toggleSubMenu(id) {
 
 /* ============ الحالة العامة (State) ============ */
 let state = {
+_syncing: false,
+_syncProgress: null,
+_negativeStockCount: 0,
   currentUser: null,
   role: 'employee',
   ownerId: null,
@@ -324,4 +327,16 @@ function playSound(type) {
     osc.start(now);
     osc.stop(now + dur);
   } catch (e) { }
+}
+
+function initOfflineFirst() {
+// ✅ v7.8.1 — طلب تخزين دائم
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+  try { if (typeof initSyncQueue === 'function') initSyncQueue(); } catch (e) {}
+  try { if (typeof initConnectionBanner === 'function') initConnectionBanner(); } catch (e) {}
+  if (navigator.onLine && typeof refreshStockConflictIndicator === 'function') {
+    setTimeout(() => refreshStockConflictIndicator().catch(() => {}), 3000);
+  }
 }

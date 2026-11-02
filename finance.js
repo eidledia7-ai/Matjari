@@ -25,13 +25,12 @@ async function saveExpense() {
     shift_id: currentShiftId, pay_method: 'cash'
   };
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('expenses').insert(newExpense);
-    if (error) {
-      console.warn('Expense upload failed:', error);
-      return showNotification(tr('expense_save_fail') + error.message, 'error');
-    }
-  }
+// ✅ v7.8
+enqueueSyncOperation('insert_expense', {
+  id: newExpense.id, name: newExpense.name, amount: newExpense.amount,
+  notes: newExpense.notes, date: newExpense.date,
+  shift_id: newExpense.shift_id, pay_method: 'cash'
+}, newExpense.id);
 
   state.expenses.unshift({
     id: newExpense.id, name: name, amount: amount, date: date, notes: notes,
