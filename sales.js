@@ -42,7 +42,7 @@ function addToCartManual() {
     state.cart.push({ id: product.id, name: product.name, price: Number(product.price), cost: Number(product.cost), qty: qty });
   }
   document.getElementById('saleQty').value = 1;
-    playBeep(true);
+  playBeep(true);
   renderCart();
   state.selectedCartIndex = state.cart.length - 1;
   _flashCart('add');
@@ -86,8 +86,8 @@ function renderCart() {
   state.cart.forEach(function(item, idx) {
     const tot = item.price * item.qty;
     subtotal += tot;
-  const isSelected = (state.selectedCartIndex === idx);
-html += '<tr class="cart-row' + (isSelected ? ' cart-row-selected' : '') + '" data-cart-idx="' + idx + '" onclick="selectCartRow(' + idx + ')" style="cursor:pointer;">' +
+    const isSelected = (state.selectedCartIndex === idx);
+    html += '<tr class="cart-row' + (isSelected ? ' cart-row-selected' : '') + '" data-cart-idx="' + idx + '" onclick="selectCartRow(' + idx + ')" style="cursor:pointer;">' +
       '<td>' + escapeHTML(item.name) + '</td>' +
       '<td>' + item.price + '</td>' +
       '<td><input type="number" min="1" value="' + item.qty + '" style="width:70px" onchange="updateCartQty(' + idx + ', this.value)"></td>' +
@@ -97,12 +97,14 @@ html += '<tr class="cart-row' + (isSelected ? ' cart-row-selected' : '') + '" da
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
-// ✅ v7.7 — ضمان وجود selectedCartIndex صالح
-if (state.cart.length === 0) {
-  state.selectedCartIndex = -1;
-} else if (state.selectedCartIndex < 0 || state.selectedCartIndex >= state.cart.length) {
-  state.selectedCartIndex = state.cart.length - 1;
-}
+  
+  // ✅ v7.7 — ضمان وجود selectedCartIndex صالح
+  if (state.cart.length === 0) {
+    state.selectedCartIndex = -1;
+  } else if (state.selectedCartIndex < 0 || state.selectedCartIndex >= state.cart.length) {
+    state.selectedCartIndex = state.cart.length - 1;
+  }
+  
   const discVal = parseFloat(document.getElementById('saleDiscount').value) || 0;
   const discType = document.getElementById('saleDiscountType').value;
   let discountAmount = discType === 'percent' ? (subtotal * discVal / 100) : discVal;
@@ -178,7 +180,7 @@ function clearCart() {
   renderCart();
   const pts = document.getElementById('salePointsUsed'); if (pts) pts.value = 0;
   state.selectedCartIndex = -1;
-refocusCashierInput();
+  refocusCashierInput();
 }
 
 /* ============================================================
@@ -258,18 +260,6 @@ function askRefundMethod(sale, soldItem, qty) {
   }
 
   return 'cash';
-}
-
-/* ============================================================
-   دالة مساعدة: خصم نقاط العميل (للأوفلاين فقط)
-   ============================================================ */
-async function deductCustomerPoints(customerId, pointsToDeduct) {
-  if (!customerId || pointsToDeduct <= 0) return;
-  const cust = state.customers.find(c => c.id === customerId);
-  if (!cust) return;
-
-  cust.points = Math.max(0, (Number(cust.points) || 0) - pointsToDeduct);
-  // ⚠️ ممنوع UPDATE للسيرفر — trigger handle_sale_points بيتولى الحساب
 }
 
 /* ============================================================
@@ -374,19 +364,20 @@ async function completeSale() {
     shiftId: shiftId,
     vat_rate: vat.vat_rate,
     vat_amount: vat.vat_amount,
-    vat_mode: vatMode
+    vat_mode: vatMode,
+    _pendingUpload: true // ✅ v7.9.1 — لحماية الفاتورة من المسح
   };
 
   // ✅ v7.8 — إدخال للـ Queue (يعمل Online/Offline)
-enqueueSyncOperation('insert_sale', {
-  id: saleObj.id, date: saleObj.date, subtotal: saleObj.subtotal,
-  discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
-  points_used: pointsUsed, customer_id: saleCustomerId,
-  pay_method: saleObj.payMethod, notes: saleObj.notes,
-  cashier: saleObj.cashier, shift_id: shiftId,
-  vat_rate: vat.vat_rate, vat_amount: vat.vat_amount, vat_mode: vatMode,
-  items: saleObj.items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, cost: i.cost }))
-}, saleObj.id);
+  enqueueSyncOperation('insert_sale', {
+    id: saleObj.id, date: saleObj.date, subtotal: saleObj.subtotal,
+    discount: saleObj.discount, total: saleObj.total, paid: saleObj.paid,
+    points_used: pointsUsed, customer_id: saleCustomerId,
+    pay_method: saleObj.payMethod, notes: saleObj.notes,
+    cashier: saleObj.cashier, shift_id: shiftId,
+    vat_rate: vat.vat_rate, vat_amount: vat.vat_amount, vat_mode: vatMode,
+    items: saleObj.items.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price, cost: i.cost }))
+  }, saleObj.id);
 
   state.sales.unshift(saleObj);
 
@@ -430,7 +421,6 @@ enqueueSyncOperation('insert_sale', {
   }
 
   // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (مطابق لـ get_all_customer_balances)
-  // remaining = total - paid (يُضاف للدين الحقيقي)
   if (saleObj.customerId && saleObj.remaining > 0) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[saleObj.customerId] = (Number(state.customerBalances[saleObj.customerId]) || 0) + saleObj.remaining;
@@ -463,7 +453,7 @@ enqueueSyncOperation('insert_sale', {
     renderCustomers();
     populateSalesDropdowns();
     state.selectedCartIndex = -1;
-refocusCashierInput();
+    refocusCashierInput();
     hideLoading();
   }
 }
@@ -552,13 +542,13 @@ async function executeDeleteRecord(type, id) {
     if (idx === -1) return;
     const s = state.sales[idx];
 
-   // ✅ v7.8 — نضع الحذف في الـ Queue (يعمل أونلاين وأوفلاين) + نرجّع المخزون محلياً فوراً
-enqueueSyncOperation('delete_sale', { id }, id);
+    // ✅ v7.8 — نضع الحذف في الـ Queue (يعمل أونلاين وأوفلاين) + نرجّع المخزون محلياً فوراً
+    enqueueSyncOperation('delete_sale', { id }, id);
 
-s.items.forEach(function(item) {
-  const prod = state.products.find(function(p) { return p.id === item.id; });
-  if (prod) prod.stock += item.qty;
-});
+    s.items.forEach(function(item) {
+      const prod = state.products.find(function(p) { return p.id === item.id; });
+      if (prod) prod.stock += item.qty;
+    });
 
     state.sales.splice(idx, 1);
     if (state.saleItems) {
@@ -574,7 +564,7 @@ s.items.forEach(function(item) {
     state.expenses = state.expenses.filter(function(e) { return e.id !== id; });
 
     // ✅ v7.8
-enqueueSyncOperation('delete_expense', { id }, id);
+    enqueueSyncOperation('delete_expense', { id }, id);
 
     if (exp && typeof addAuditLog === 'function') {
       addAuditLog('delete_expense', { expenseId: exp.id, amount: exp.amount }, exp.id);
