@@ -1,9 +1,8 @@
 /* ==========================================================
-   متجري v7.10 - Service Worker (Network First for Everything)
+   متجري v7.10.1 - Service Worker
    ========================================================== */
 
-// ✅ تم تحديث الإصدار لـ v7.10 لمسح الكاش القديم فوراً
-const CACHE_NAME = 'matjari-cache-v7.10'; 
+const CACHE_NAME = 'matjari-cache-v7.10.1'; 
 
 const ASSETS = [
   './index.html', './style.css', './manifest.json', './icon-192.png', './icon-512.png',
@@ -11,7 +10,7 @@ const ASSETS = [
   './auth.js', './products.js', './settings.js', './sales.js', './inventory.js', './partners.js',
   './finance.js', './dashboard.js', './printing.js', './backup.js', './updates.js', './barcode.js',
   './compare.js', './staff.js', './subscription.js', './landing.js', './main.js',
-  /* ✅ إضافة الملفات الجديدة لضمان عملها أوفلاين */
+  /* ملفات v7.10.1 */
   './finance-core.js', './cashier-hotkeys.js', './auto-backup.js', './sync-queue.js',
   './stock-conflicts.js', './connection-banner.js', './operations-center.js',
   /* الخطوط */
@@ -19,7 +18,6 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', function (event) {
-  // ✅ إجبار الـ Service Worker الجديد على التفعيل فوراً
   self.skipWaiting(); 
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
@@ -40,12 +38,12 @@ self.addEventListener('activate', function (event) {
       return Promise.all(
         keys.map(function (key) {
           if (key !== CACHE_NAME) {
-            return caches.delete(key); // مسح أي كاش قديم
+            return caches.delete(key); 
           }
         })
       );
     }).then(function () {
-      return self.clients.claim(); // السيطرة على الصفحات المفتوحة فوراً
+      return self.clients.claim(); 
     })
   );
 });
@@ -55,18 +53,15 @@ self.addEventListener('fetch', function (event) {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   
-  // تجاهل طلبات السيرفرات الخارجية زي Supabase
   if (!url.protocol.startsWith('http')) return;
   if (url.origin !== self.location.origin) return;
   if (url.href.includes('supabase.co')) return;
 
-  // ✅ الحل الجذري: كل الملفات هتشتغل بنظام Network First (السيرفر الأول)
   const isStaticAsset = ASSETS.some(asset => url.pathname.endsWith(asset.replace('./', '')));
 
   if (isStaticAsset || request.mode === 'navigate') {
     event.respondWith(networkFirst(request));
   } else {
-    // الصور والملفات التانية (زي الخطوط) ممكن تفضل Cache First عشان السرعة
     event.respondWith(cacheFirst(request));
   }
 });
@@ -76,7 +71,7 @@ async function networkFirst(request) {
     const response = await fetch(request);
     if (response && response.ok) {
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone()); // تحديث الكاش بالنسخة الجديدة
+      cache.put(request, response.clone()); 
     }
     return response;
   } catch (err) {

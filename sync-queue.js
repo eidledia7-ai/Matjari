@@ -1,5 +1,5 @@
 /* ============================================================
-   sync-queue.js — v7.8.1 (Hardened)
+   sync-queue.js — v7.10.1
    ============================================================ */
 
 const SYNC_QUEUE_KEY_PREFIX        = 'matjari_syncq_';
@@ -9,13 +9,11 @@ const SYNC_QUEUE_MAX_ATTEMPTS      = 5;
 const SYNC_QUEUE_DRAIN_INTERVAL_MS = 30000;
 const SYNC_QUEUE_KEEP_SYNCED_MS    = 24 * 60 * 60 * 1000;
 const SYNC_QUEUE_MAX_PENDING       = 200;
-const SYNC_QUEUE_ENC_KEY_PREFIX    = 'matjari_syncq_enc_';
 
 let _syncQueueChannel = null;
 let _syncQueueChannelOwner = null;
 let _drainTimer = null;
 let _isDraining = false;
-
 let _queueMem = null;
 let _queueMemOwner = null;
 let _drainLockHeld = false;
@@ -212,14 +210,15 @@ function enqueueSyncOperation(type, payload, idempotencyKey) {
   };
 
   queue.push(op);
+
   if (type === 'insert_sale' && payload && payload.id) {
-  const s = (state.sales || []).find(x => x.id === payload.id);
-  if (s) s._pendingUpload = true;
-}
-if (type === 'insert_return' && payload && payload.id) {
-  const r = (state.returns || []).find(x => x.id === payload.id);
-  if (r) r._pendingUpload = true;
-}
+    const s = (state.sales || []).find(x => x.id === payload.id);
+    if (s) s._pendingUpload = true;
+  }
+  if (type === 'insert_return' && payload && payload.id) {
+    const r = (state.returns || []).find(x => x.id === payload.id);
+    if (r) r._pendingUpload = true;
+  }
 
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
@@ -236,6 +235,15 @@ if (type === 'insert_return' && payload && payload.id) {
 
 function getPendingSyncCount() { return getSyncQueueCounts().pending; }
 function getFailedSyncCount()  { return getSyncQueueCounts().failed;  }
+
+function getPendingSaleIdsFromQueue() {
+  const q = _loadQueue();
+  return new Set(q.filter(o => o.type === 'insert_sale' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
+}
+function getPendingReturnIdsFromQueue() {
+  const q = _loadQueue();
+  return new Set(q.filter(o => o.type === 'insert_return' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
+}
 
 async function _executeOp(op, ownerId) {
   const c = supabaseClient;
@@ -258,9 +266,9 @@ async function _executeOp(op, ownerId) {
       }));
       const { error: e2 } = await c.from('sale_items').upsert(items, { onConflict: 'sale_id,product_id' });
       if (e2) throw e2;
-      const idx = (state.sales || []).findIndex(s => s.id === p.id);
-if (idx !== -1) delete state.sales[idx]._pendingUpload;
     }
+    const idx = (state.sales || []).findIndex(s => s.id === p.id);
+    if (idx !== -1) delete state.sales[idx]._pendingUpload;
     return;
   }
 
@@ -274,14 +282,17 @@ if (idx !== -1) delete state.sales[idx]._pendingUpload;
     }, { onConflict: 'id' });
     if (error) throw error;
     const idxR = (state.returns || []).findIndex(r => r.id === p.id);
-if (idxR !== -1) delete state.returns[idxR]._pendingUpload;
+    if (idxR !== -1) delete state.returns[idxR]._pendingUpload;
     return;
   }
 
   if (t === 'insert_expense') {
     const { error } = await c.from('expenses').upsert({
       id: p.id, user_id: ownerId, name: p.name, amount: p.amount,
-      notes: p.notes, date: p.date, shift_id: p.shift_id, pay_method: p.pay_method
+      notes: p.notes, date: p.date, shift_id: p.shift_id, pay_method: p.pay_method,
+      // ✅ v7.10.1
+      needs_review: p.needs_review === true,
+      created_by: p.created_by || null
     }, { onConflict: 'id' });
     if (error) throw error;
     return;
@@ -429,12 +440,4 @@ function clearSyncQueue() {
     localStorage.removeItem(SYNC_QUEUE_COUNTS_PREFIX + oid);
   } catch (e) {}
   _broadcastQueueChange();
-}
-function getPendingSaleIdsFromQueue() {
-  const q = _loadQueue();
-  return new Set(q.filter(o => o.type === 'insert_sale' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
-}
-function getPendingReturnIdsFromQueue() {
-  const q = _loadQueue();
-  return new Set(q.filter(o => o.type === 'insert_return' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
 }

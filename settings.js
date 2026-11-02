@@ -21,6 +21,10 @@ function loadStoreSettings() {
   if (pDelete) pDelete.checked = perms.canDelete || false;
   if (pEdit) pEdit.checked = perms.canEditPrice || false;
   if (pReturn) pReturn.checked = perms.canReturn || false; 
+
+  // ✅ v7.10.1 — Drawer Expense permission
+  const pDrawer = document.getElementById('perm_canDrawerExpense');
+  if (pDrawer) pDrawer.checked = perms.canDrawerExpense === true;
   
   const printTypeEl = document.getElementById('storePrintType');
   if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
@@ -84,6 +88,7 @@ async function saveStoreSettings() {
   const permDeleteEl = document.getElementById('perm_canDelete');
   const permEditEl = document.getElementById('perm_canEditPrice');
   const permReturnEl = document.getElementById('perm_canReturn');
+  const permDrawerEl = document.getElementById('perm_canDrawerExpense');
 
   const vatEnabledEl = document.getElementById('storeVatEnabled');
   const vatRateEl = document.getElementById('storeVatRate');
@@ -113,7 +118,9 @@ async function saveStoreSettings() {
       canDiscount: permDiscountEl ? permDiscountEl.checked : false,
       canDelete: permDeleteEl ? permDeleteEl.checked : false,
       canEditPrice: permEditEl ? permEditEl.checked : false,
-      canReturn: permReturnEl ? permReturnEl.checked : false
+      canReturn: permReturnEl ? permReturnEl.checked : false,
+      // ✅ v7.10.1
+      canDrawerExpense: permDrawerEl ? permDrawerEl.checked : false
     }
   };
 
@@ -159,7 +166,6 @@ async function saveStoreSettings() {
   saveData();
   showNotification('تم حفظ بيانات المحل ✅');
 
-  // ✅ v7.6 — تشغيل فوري لو فُعّل للتو
   if (newSettings.autoBackupEnabled && typeof checkAndRunAutoBackup === 'function') {
     setTimeout(() => checkAndRunAutoBackup('load').catch(() => {}), 500);
   }
@@ -253,6 +259,7 @@ async function safeClearAllDataPrompt() {
   state.heldCarts = [];
 
   localStorage.removeItem('matjari_cache_' + ownerId);
+  
   if (typeof clearSyncQueue === 'function') clearSyncQueue();
 
   if (typeof addAuditLog === 'function') {
