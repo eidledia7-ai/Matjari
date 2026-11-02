@@ -25,12 +25,13 @@ async function saveExpense() {
     shift_id: currentShiftId, pay_method: 'cash'
   };
 
-// ✅ v7.8
-enqueueSyncOperation('insert_expense', {
-  id: newExpense.id, name: newExpense.name, amount: newExpense.amount,
-  notes: newExpense.notes, date: newExpense.date,
-  shift_id: newExpense.shift_id, pay_method: 'cash'
-}, newExpense.id);
+  if (navigator.onLine && supabaseClient) {
+    const { error } = await supabaseClient.from('expenses').insert(newExpense);
+    if (error) {
+      console.warn('Expense upload failed:', error);
+      return showNotification(tr('expense_save_fail') + error.message, 'error');
+    }
+  }
 
   state.expenses.unshift({
     id: newExpense.id, name: name, amount: amount, date: date, notes: notes,
@@ -47,9 +48,7 @@ enqueueSyncOperation('insert_expense', {
   document.getElementById('expenseNotes').value = '';
   renderExpenses();
   renderDashboard();
-
   if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
-
   showNotification(tr('expense_saved'));
 }
 
@@ -61,40 +60,25 @@ function renderExpenses() {
     return;
   }
   const delErrBtn = tr('delete_err_btn');
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_item_name">البند</th><th data-i18n="th_amount">المبلغ</th><th data-i18n="th_notes">ملاحظات</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + tr('th_item_name') + '</th><th>' + tr('th_amount') + '</th><th>' + tr('th_notes') + '</th><th>' + tr('th_action') + '</th></tr></thead><tbody>';
   state.expenses.forEach(function(e) {
-    html += '<tr>' +
-      '<td>' + escapeHTML(e.date) + '</td>' +
-      '<td>' + escapeHTML(e.name) + '</td>' +
-      '<td><b>' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
-      '<td>' + escapeHTML(e.notes || '-') + '</td>' +
-      '<td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td>' +
-      '</tr>';
+    html += '<tr><td>' + escapeHTML(e.date) + '</td><td>' + escapeHTML(e.name) + '</td><td><b>' + Number(e.amount || 0).toFixed(2) + '</b></td><td>' + escapeHTML(e.notes || '-') + '</td><td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td></tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
 
-/* ============================================================
-   [تعديل] filterByPeriod — تدعم camelCase و snake_case
-   ============================================================ */
 function filterByPeriod(items, dateField, from, to) {
   if (!Array.isArray(items)) return [];
   const fields = Array.isArray(dateField) ? dateField : [dateField];
-
   return items.filter(function(item) {
     if (!item) return false;
-
     let raw = null;
     for (let i = 0; i < fields.length; i++) {
       const v = item[fields[i]];
-      if (v !== undefined && v !== null && v !== '') {
-        raw = v;
-        break;
-      }
+      if (v !== undefined && v !== null && v !== '') { raw = v; break; }
     }
     if (raw === null) return false;
-
     const d = String(raw).split('T')[0];
     if (from && d < from) return false;
     if (to && d > to) return false;
@@ -102,9 +86,6 @@ function filterByPeriod(items, dateField, from, to) {
   });
 }
 
-/* ============================================================
-   التقارير — Single Source of Truth (financeCore.calcPeriodSummary)
-   ============================================================ */
 function renderReports() {
   const from = (document.getElementById('reportFrom') || {}).value || '';
   const to = (document.getElementById('reportTo') || {}).value || '';
@@ -121,18 +102,16 @@ function renderReports() {
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
   const avgInvoice = summary.invoices_count > 0 ? summary.gross_sales / summary.invoices_count : 0;
 
-  const en = currentLang === 'en';
-
   const cardsContainer = document.getElementById('reportCards');
   if (cardsContainer) {
     cardsContainer.innerHTML =
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_total_sales + '</h3><p>' + fmt(summary.gross_sales) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + (en ? 'Invoices Count' : 'عدد الفواتير') + '</h3><p>' + summary.invoices_count + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_total_sales') + '</h3><p>' + fmt(summary.gross_sales) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + (translations[currentLang] || translations.ar).dash_expenses + '</h3><p>' + fmt(summary.expenses_total) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + fmt(summary.expenses_total) + ' ' + state.storeSettings.currency + '</p></div>' +
       '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
-      '<h3>' + (translations[currentLang] || translations.ar).dash_net_profit + '</h3>' +
+      '<h3>' + tr('dash_net_profit') + '</h3>' +
       '<p style="color:' + (summary.net_profit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(summary.net_profit) + ' ' + state.storeSettings.currency + '</p>' +
       '</div>';
   }
@@ -140,7 +119,7 @@ function renderReports() {
   const daily = document.getElementById('dailyReport');
   if (daily) {
     daily.innerHTML =
-      '<p>' + (en ? 'Invoices Count:' : 'عدد الفواتير:') + ' <b>' + summary.invoices_count + '</b></p>' +
+      '<p>' + tr('invoices_count_label') + ': <b>' + summary.invoices_count + '</b></p>' +
       '<p>' + tr('total_discounts') + ': <b>' + fmt(totalDiscount) + ' ' + state.storeSettings.currency + '</b></p>' +
       '<p>' + tr('net_sales_after_returns') + ' <b>' + fmt(summary.net_sales) + ' ' + state.storeSettings.currency + '</b></p>' +
       '<p>' + tr('total_returns') + ' <b>' + fmt(summary.returns_total) + ' ' + state.storeSettings.currency + '</b></p>' +
@@ -152,15 +131,16 @@ function renderReports() {
   const cashSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const cardSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'visa' || (s.payMethod || s.pay_method) === 'card').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const transferSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'transfer').reduce((sum, s) => sum + Number(s.paid || 0), 0);
-  // ✅ v7.5 — ديون العملاء من state.customerBalances (رصيد لحظي، غير مرتبط بالفترة)
-let debtSales;
-let debtIsFallback = false;
-if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
-  debtSales = Object.values(state.customerBalances).reduce((s, b) => s + Math.max(0, Number(b) || 0), 0);
-} else {
-  debtSales = summary.credit_remaining;
-  debtIsFallback = true;
-}
+
+  // ✅ v7.5 — debtSales من customerBalances
+  let debtSales;
+  let debtIsFallback = false;
+  if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
+    debtSales = Object.values(state.customerBalances).reduce((s, b) => s + Math.max(0, Number(b) || 0), 0);
+  } else {
+    debtSales = summary.credit_remaining;
+    debtIsFallback = true;
+  }
 
   const customerTotals = {};
   filteredSales.forEach(s => {
@@ -175,86 +155,72 @@ if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
   const topCustomers = Object.entries(customerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   let detailsHtml = `
-  <div class="grid-2 mt-20">
-    <div class="card">
-      <h3>${tr('payment_methods_details')}</h3>
-      <table class="data-table">
-        <tbody>
-          <tr><td>${tr('cash_sales_label')}</td><td><b>${fmt(cashSales)}</b></td></tr>
-          <tr><td>${tr('visa_sales_label')}</td><td><b>${fmt(cardSales)}</b></td></tr>
-          <tr><td>${tr('bank_transfers_label')}</td><td><b>${fmt(transferSales)}</b></td></tr>
-        </tbody>
-      </table>
+    <div class="grid-2 mt-20">
+      <div class="card">
+        <h3>${tr('payment_methods_details')}</h3>
+        <table class="data-table">
+          <tbody>
+            <tr><td>${tr('cash_sales_label')}</td><td><b>${fmt(cashSales)}</b></td></tr>
+            <tr><td>${tr('visa_sales_label')}</td><td><b>${fmt(cardSales)}</b></td></tr>
+            <tr><td>${tr('bank_transfers_label')}</td><td><b>${fmt(transferSales)}</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>${tr('top_customers')}</h3>
+        ${topCustomers.length > 0 ? `
+        <table class="data-table">
+          <tbody>
+            ${topCustomers.map((c, idx) => `
+              <tr>
+                <td>${idx + 1}. ${escapeHTML(c[0])}</td>
+                <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_cust_sales') + '</p>'}
+      </div>
     </div>
-    
-    <div class="card">
-      <h3>${tr('top_customers')}</h3>
-      ${topCustomers.length > 0 ? `
-      <table class="data-table">
-        <tbody>
-          ${topCustomers.map((c, idx) => `
-            <tr>
-              <td>${idx + 1}. ${escapeHTML(c[0])}</td>
-              <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ` : '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_cust_sales') + '</p>'}
+    <div class="card mt-20" style="background:#fff8e1;border-left:4px solid #b8860b;">
+      <h3 style="margin:0 0 8px 0;color:#7a5c00;">${tr('current_customer_debts_title')}</h3>
+      <p style="margin:0 0 12px 0;font-size:12px;color:#7a5c00;line-height:1.6;">${tr('current_customer_debts_note')}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #e8d79a;">
+        <span style="font-weight:700;color:#17364c;">${tr('current_total_debts')}</span>
+        <span style="font-weight:900;font-size:20px;color:#c0392b;direction:ltr;">${fmt(debtSales)} ${state.storeSettings.currency}</span>
+      </div>
+      ${debtIsFallback ? `<p style="margin:8px 0 0 0;font-size:11px;color:#b8860b;">⚠️ ${tr('current_debts_fallback_note')}</p>` : ''}
     </div>
-  </div>
-
-  <!-- ✅ v7.5 — صندوق الأرصدة الحالية (لحظي) -->
-  <div class="card mt-20" style="background:#fff8e1;border-left:4px solid #b8860b;">
-    <h3 style="margin:0 0 8px 0;color:#7a5c00;">${tr('current_customer_debts_title')}</h3>
-    <p style="margin:0 0 12px 0;font-size:12px;color:#7a5c00;line-height:1.6;">${tr('current_customer_debts_note')}</p>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #e8d79a;">
-      <span style="font-weight:700;color:#17364c;">${tr('current_total_debts')}</span>
-      <span style="font-weight:900;font-size:20px;color:#c0392b;direction:ltr;">${fmt(debtSales)} ${state.storeSettings.currency}</span>
-    </div>
-    ${debtIsFallback ? `<p style="margin:8px 0 0 0;font-size:11px;color:#b8860b;">⚠️ ${tr('current_debts_fallback_note')}</p>` : ''}
-  </div>
-`;
+  `;
 
   let activityContainer = document.getElementById('activityDetailsReport');
-  if (activityContainer) {
-    activityContainer.innerHTML = detailsHtml;
-  }
+  if (activityContainer) activityContainer.innerHTML = detailsHtml;
 
   const topContainer = document.getElementById('topProductsReportFinance');
-if (topContainer) {
-  let top = [];
-  if (typeof financeCore !== 'undefined' && typeof financeCore.calcProductProfitReport === 'function') {
-    const allProfitData = financeCore.calcProductProfitReport(startDate, endDate);
-    top = allProfitData
-      .filter(p => Number(p.net_qty) > 0)
-      .sort((a, b) => Number(b.net_qty) - Number(a.net_qty))
-      .slice(0, 10);
-  }
-
-  if (top.length === 0) {
-    topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
-  } else {
-    let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-      '<th>#</th>' +
-      '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
-      '<th>' + tr('profit_net_qty') + '</th>' +
-      '<th>' + tr('profit_net_revenue') + '</th>' +
-      '</tr></thead><tbody>';
-    top.forEach(function(t, i) {
-      html += '<tr>' +
-        '<td>' + (i + 1) + '</td>' +
-        '<td>' + escapeHTML(t.product_name) + '</td>' +
-        '<td><b>' + t.net_qty + '</b></td>' +
-        '<td>' + fmt(t.net_revenue_ex_vat) + '</td>' +
-        '</tr>';
+  if (topContainer) {
+    const salesByProduct = {};
+    filteredSales.forEach(function(s) {
+      if (!s.items || !Array.isArray(s.items)) return;
+      s.items.forEach(function(i) {
+        if (!salesByProduct[i.name]) salesByProduct[i.name] = { name: i.name, qty: 0, total: 0 };
+        salesByProduct[i.name].qty += Number(i.qty || 0);
+        salesByProduct[i.name].total += Number(i.price || 0) * Number(i.qty || 0);
+      });
     });
-    html += '</tbody></table></div>';
-    topContainer.innerHTML = html;
+    const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
+    if (top.length === 0) {
+      topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
+    } else {
+      let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>#</th><th>' + tr('th_product') + '</th><th>' + tr('th_quantity') + '</th><th>' + tr('th_value') + '</th></tr></thead><tbody>';
+      top.forEach(function(t, i) {
+        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHTML(t.name) + '</td><td><b>' + t.qty + '</b></td><td>' + fmt(t.total) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      topContainer.innerHTML = html;
+    }
   }
-}
 
-  // ✅ v7.4 — تقرير أرباح المنتجات (Product Profit Report)
+  // ✅ v7.2 — تقرير أرباح المنتجات
   const profitContainer = document.getElementById('productProfitReport');
   if (profitContainer && typeof financeCore.calcProductProfitReport === 'function') {
     try {
@@ -266,16 +232,15 @@ if (topContainer) {
       if (rows.length === 0) {
         profitContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
       } else {
-        // ✅ v7.4 — Banner عند تفعيل الـ pagination
-        let bannerHtml = '';
-        if (state.salesDataLimited) {
-          bannerHtml = '<div style="background:#fff8e1;border-left:4px solid #b8860b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#7a5c00;line-height:1.6;">⚠️ ' + tr('profit_data_limited_note') + '</div>';
-        }
-
         const sumRevenue = rows.reduce((s, p) => s + (Number(p.net_revenue_ex_vat) || 0), 0);
         const sumCost = rows.reduce((s, p) => s + (Number(p.net_cogs) || 0), 0);
         const sumProfit = rows.reduce((s, p) => s + (Number(p.gross_profit) || 0), 0);
         const avgMargin = sumRevenue > 0 ? (sumProfit / sumRevenue) * 100 : 0;
+
+        let bannerHtml = '';
+        if (state.salesDataLimited) {
+          bannerHtml = '<div style="background:#fff8e1;border-left:4px solid #b8860b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#7a5c00;line-height:1.6;">⚠️ ' + tr('profit_data_limited_note') + '</div>';
+        }
 
         const summaryCardsHtml =
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:15px;">' +
@@ -287,7 +252,7 @@ if (topContainer) {
 
         let html = bannerHtml + summaryCardsHtml +
           '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-            '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
+            '<th>' + tr('th_product') + '</th>' +
             '<th>' + tr('profit_sold_qty') + '</th>' +
             '<th>' + tr('profit_returned_qty') + '</th>' +
             '<th>' + tr('profit_net_qty') + '</th>' +
@@ -315,11 +280,9 @@ if (topContainer) {
           '</tr>';
         });
         html += '</tbody></table></div>';
-
         html += '<p style="margin-top:12px;padding:10px;background:#f1f6f8;border-left:3px solid #176b70;border-radius:6px;font-size:12px;line-height:1.7;color:#4a5f70;">' +
           '<b>' + tr('profit_report_note_title') + ':</b> ' + tr('profit_report_note_body') +
         '</p>';
-
         profitContainer.innerHTML = html;
       }
     } catch (e) {
@@ -333,19 +296,11 @@ function setReportPeriod(period) {
   const end = today();
   const d = new Date(end + 'T12:00:00');
   let from = end;
-
   if (period === 'today') from = end;
   if (period === 'week') { d.setDate(d.getDate() - 6); from = d.toISOString().slice(0, 10); }
   if (period === 'month') { d.setDate(d.getDate() - 29); from = d.toISOString().slice(0, 10); }
-  if (period === 'currentMonth') {
-    const now = new Date();
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  }
-  if (period === 'year') {
-    const now = new Date();
-    from = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
-  }
-
+  if (period === 'currentMonth') { const now = new Date(); from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); }
+  if (period === 'year') { const now = new Date(); from = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10); }
   document.getElementById('reportFrom').value = from;
   document.getElementById('reportTo').value = end;
   renderReports();
@@ -357,31 +312,47 @@ function clearReportPeriod() {
   renderReports();
 }
 
-/* ============================================================
-   الوردية — الكاش المتوقع من financeCore
-   ============================================================ */
-   /* ============================================================
-   ✅ v7.3 — كشف حساب الدرج التفصيلي (Additive)
-   تُحسب البنود مباشرة من state، ويُقارن المجموع مع financeCore
-   لضمان المطابقة الرياضية 100%.
-   ============================================================ */
+/* ============ الوردية ============ */
+async function calcExpectedShiftCash() {
+  const shift = state.currentShift;
+  if (!shift) {
+    const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
+    if (!openShift) {
+      const el = document.getElementById('shiftExpectedCash');
+      if (el) el.value = '0.00 ' + state.storeSettings.currency;
+      const bd = document.getElementById('shiftCashBreakdown');
+      if (bd) { bd.style.display = 'none'; bd.innerHTML = ''; }
+      calculateShiftDiff();
+      return;
+    }
+    state.currentShift = openShift;
+  }
+
+  const currentShift = state.currentShift;
+  let expectedCash = null;
+  if (navigator.onLine && supabaseClient) {
+    try { expectedCash = await financeCore.getShiftExpectedCash(currentShift.id); }
+    catch (e) { console.warn('RPC getShiftExpectedCash failed, using local fallback:', e); }
+  }
+  if (expectedCash === null) expectedCash = financeCore.calcShiftExpectedCash(currentShift.id);
+
+  const el = document.getElementById('shiftExpectedCash');
+  if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
+
+  calculateShiftDiff();
+  try { renderShiftCashBreakdown(currentShift.id, expectedCash); }
+  catch (e) { console.warn('Shift breakdown render failed:', e); }
+}
+
 function renderShiftCashBreakdown(shiftId, expectedTotalFromCore) {
   const container = document.getElementById('shiftCashBreakdown');
   if (!container) return;
+  if (!shiftId) { container.style.display = 'none'; container.innerHTML = ''; return; }
 
-  if (!shiftId) {
-    container.style.display = 'none';
-    container.innerHTML = '';
-    return;
-  }
-
-  const en = currentLang === 'en';
   const cur = state.storeSettings.currency || 'ج.م';
-
   const shift = (state.shifts || []).find(s => s.id === shiftId);
   const openingCash = Number(shift?.opening_cash ?? shift?.openingCash) || 0;
 
-  // مبيعات كاش — مع فلتر paid > 0
   const shiftCashSales = (state.sales || []).filter(s =>
     (s.shift_id === shiftId || s.shiftId === shiftId) &&
     (s.pay_method === 'cash' || s.payMethod === 'cash') &&
@@ -391,54 +362,39 @@ function renderShiftCashBreakdown(shiftId, expectedTotalFromCore) {
   const cashVat = shiftCashSales.reduce((sum, s) => sum + (Number(s.vat_amount ?? s.vatAmount ?? 0) || 0), 0);
   const cashInvoicesCount = shiftCashSales.length;
 
-  // تحصيلات عملاء كاش
   const cashCollections = (state.customerPayments || [])
     .filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash'))
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // مرتجعات كاش
   const cashReturns = (state.returns || [])
     .filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash'))
     .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
 
-  // مصروفات الدرج
   const cashExpenses = (state.expenses || [])
     .filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash'))
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-  // التحقق الرياضي
   const manualExpected = openingCash + cashSales + cashCollections - cashReturns - cashExpenses;
   const finalExpected = Number(expectedTotalFromCore);
   const resolvedExpected = Number.isFinite(finalExpected) ? finalExpected : manualExpected;
   const matches = Math.abs(manualExpected - resolvedExpected) < 0.01;
-
-  if (!matches) {
-    console.warn('[Shift Breakdown] Mismatch with financeCore:', {
-      shiftId,
-      manual: manualExpected.toFixed(2),
-      core: resolvedExpected.toFixed(2)
-    });
-  }
+  if (!matches) console.warn('[Shift Breakdown] Mismatch:', { shiftId, manual: manualExpected.toFixed(2), core: resolvedExpected.toFixed(2) });
 
   const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const row = (label, value, opts) => {
     const o = opts || {};
-    const sign = o.sign || '';
-    const color = o.color || '#203447';
-    const weight = o.weight || '500';
-    const icon = o.icon || '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px dashed #e1e8ed;">' +
-      '<span style="color:#4a5f70;font-size:13px;">' + icon + ' ' + label + '</span>' +
-      '<span style="color:' + color + ';font-weight:600;font-size:14px;direction:ltr;white-space:nowrap;">' + sign + fmt(value) + ' ' + cur + '</span>' +
+      '<span style="color:#4a5f70;font-size:13px;">' + (o.icon || '') + ' ' + label + '</span>' +
+      '<span style="color:' + (o.color || '#203447') + ';font-weight:600;font-size:14px;direction:ltr;white-space:nowrap;">' + (o.sign || '') + fmt(value) + ' ' + cur + '</span>' +
     '</div>';
   };
 
   container.style.display = 'block';
   container.innerHTML =
     '<h4 style="margin:0 0 12px 0;color:#17364c;font-size:15px;">💼 ' + tr('shift_cash_breakdown_title') + '</h4>' +
-    row(tr('shift_opening_cash'), openingCash, { sign: '', icon: '💵', color: '#176b70' }) +
-    row(tr('shift_cash_sales') + ' (' + cashInvoicesCount + ' ' + (en ? 'invoices' : 'فاتورة') + ')', cashSales, { sign: '+ ', icon: '🛒', color: '#176b70' }) +
+    row(tr('shift_opening_cash'), openingCash, { icon: '💵', color: '#176b70' }) +
+    row(tr('shift_cash_sales') + ' (' + cashInvoicesCount + ' ' + tr('invoices_word') + ')', cashSales, { sign: '+ ', icon: '🛒', color: '#176b70' }) +
     row(tr('shift_cash_collections'), cashCollections, { sign: '+ ', icon: '💰', color: '#176b70' }) +
     row(tr('shift_cash_returns'), cashReturns, { sign: '− ', icon: '↩️', color: '#c0392b' }) +
     row(tr('shift_cash_expenses'), cashExpenses, { sign: '− ', icon: '📤', color: '#c0392b' }) +
@@ -450,53 +406,7 @@ function renderShiftCashBreakdown(shiftId, expectedTotalFromCore) {
       '<span style="color:#4a5f70;font-size:12px;">ℹ️ ' + tr('shift_vat_collected') + '</span>' +
       '<span style="color:#17364c;font-weight:600;font-size:13px;direction:ltr;">' + fmt(cashVat) + ' ' + cur + '</span>' +
     '</div>' +
-    (!matches
-      ? '<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border-left:3px solid #c0392b;border-radius:6px;color:#c0392b;font-size:12px;">⚠️ ' + tr('shift_reconciliation_mismatch') + '</div>'
-      : '');
-}
-async function calcExpectedShiftCash() {
-  const shift = state.currentShift;
-
-  if (!shift) {
-    const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
-    if (!openShift) {
-      const el = document.getElementById('shiftExpectedCash');
-      if (el) el.value = '0.00 ' + state.storeSettings.currency;
-      // ✅ v7.3 — إخفاء الكشف عند عدم وجود وردية
-      const bd = document.getElementById('shiftCashBreakdown');
-      if (bd) { bd.style.display = 'none'; bd.innerHTML = ''; }
-      calculateShiftDiff();
-      return;
-    }
-    state.currentShift = openShift;
-  }
-
-  const currentShift = state.currentShift;
-
-  let expectedCash = null;
-  if (navigator.onLine && supabaseClient) {
-    try {
-      expectedCash = await financeCore.getShiftExpectedCash(currentShift.id);
-    } catch (e) {
-      console.warn('RPC getShiftExpectedCash failed, using local fallback:', e);
-    }
-  }
-
-  if (expectedCash === null) {
-    expectedCash = financeCore.calcShiftExpectedCash(currentShift.id);
-  }
-
-  const el = document.getElementById('shiftExpectedCash');
-  if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
-
-  calculateShiftDiff();
-
-  // ✅ v7.3 — كشف حساب الدرج التفصيلي
-  try {
-    renderShiftCashBreakdown(currentShift.id, expectedCash);
-  } catch (e) {
-    console.warn('Shift breakdown render failed:', e);
-  }
+    (!matches ? '<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border-left:3px solid #c0392b;border-radius:6px;color:#c0392b;font-size:12px;">⚠️ ' + tr('shift_reconciliation_mismatch') + '</div>' : '');
 }
 
 function calculateShiftDiff() {
@@ -504,45 +414,29 @@ function calculateShiftDiff() {
   const actEl = document.getElementById('shiftActualCash');
   const diffEl = document.getElementById('shiftDifference');
   if (!expEl || !actEl || !diffEl) return;
-
   const expected = parseFloat(expEl.value) || 0;
   const actual = parseFloat(actEl.value) || 0;
   const diff = actual - expected;
-
-  if (diff < 0) {
-    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('shortage');
-    diffEl.style.color = '#c62828';
-  } else if (diff > 0) {
-    diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('surplus');
-    diffEl.style.color = '#2e7d32';
-  } else {
-    diffEl.value = '0.00 ' + state.storeSettings.currency + tr('matched');
-    diffEl.style.color = '#17643a';
-  }
+  if (diff < 0) { diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('shortage'); diffEl.style.color = '#c62828'; }
+  else if (diff > 0) { diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('surplus'); diffEl.style.color = '#2e7d32'; }
+  else { diffEl.value = '0.00 ' + state.storeSettings.currency + tr('matched'); diffEl.style.color = '#17643a'; }
 }
 
 async function closeShift() {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
-
   const cashierName = (document.getElementById('shiftCashierName').value || '').trim();
   if (!cashierName) return showNotification(tr('enter_cashier_name'), 'error');
-
   const actualCash = parseFloat(document.getElementById('shiftActualCash').value) || 0;
   const notes = (document.getElementById('shiftNotes').value || '').trim();
 
   if (!state.currentShift) {
     const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
-    if (openShift) {
-      state.currentShift = openShift;
-    } else {
-      return showNotification(tr('no_open_shift_sell'), 'warning');
-    }
+    if (openShift) state.currentShift = openShift;
+    else return showNotification(tr('no_open_shift_sell'), 'warning');
   }
 
   const currentShift = state.currentShift;
-
   const expectedCash = financeCore.calcShiftExpectedCash(currentShift.id);
-
   const shiftStart = new Date(currentShift.start_time || currentShift.startTime).getTime();
   const shiftEnd = Date.now();
 
@@ -551,21 +445,10 @@ async function closeShift() {
     return t >= shiftStart && t <= shiftEnd && (s.shift_id === currentShift.id || s.shiftId === currentShift.id);
   });
 
-  const cashSales = shiftSales
-    .filter(s => (s.pay_method || s.payMethod) === 'cash')
-    .reduce((sum, s) => sum + Number(s.paid || 0), 0);
-
-  const cashCollections = (state.customerPayments || [])
-    .filter(p => (p.shift_id === currentShift.id || p.shiftId === currentShift.id) && (p.pay_method || p.payMethod) === 'cash')
-    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-  const cashReturns = (state.returns || [])
-    .filter(r => (r.shift_id === currentShift.id || r.shiftId === currentShift.id) && (r.refund_method || r.refundMethod) === 'cash')
-    .reduce((sum, r) => sum + Number(r.total || 0), 0);
-
-  const cashExpenses = (state.expenses || [])
-    .filter(e => (e.shift_id === currentShift.id || e.shiftId === currentShift.id) && (e.pay_method || e.payMethod) === 'cash')
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const cashSales = shiftSales.filter(s => (s.pay_method || s.payMethod) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
+  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === currentShift.id || p.shiftId === currentShift.id) && (p.pay_method || p.payMethod) === 'cash').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const cashReturns = (state.returns || []).filter(r => (r.shift_id === currentShift.id || r.shiftId === currentShift.id) && (r.refund_method || r.refundMethod) === 'cash').reduce((sum, r) => sum + Number(r.total || 0), 0);
+  const cashExpenses = (state.expenses || []).filter(e => (e.shift_id === currentShift.id || e.shiftId === currentShift.id) && (e.pay_method || e.payMethod) === 'cash').reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
   const totalSales = shiftSales.reduce((sum, s) => sum + Number(s.total || 0), 0);
   const difference = actualCash - expectedCash;
@@ -600,31 +483,17 @@ async function closeShift() {
         cash_returns: closedShift.cash_returns, cash_expenses: closedShift.cash_expenses,
         actual_cash: actualCash, difference: difference, notes: notes
       }, { onConflict: 'id' });
-
-      if (error) {
-        console.warn('Shift close upload failed:', error);
-        showNotification(tr('save_offline_warning'), 'warning');
-      }
-    } catch (e) {
-      console.warn('Shift close failed:', e);
-    }
+      if (error) { console.warn('Shift close upload failed:', error); showNotification(tr('save_offline_warning'), 'warning'); }
+    } catch (e) { console.warn('Shift close failed:', e); }
   }
 
   const existingIdx = state.shifts.findIndex(s => s.id === currentShift.id);
-  if (existingIdx !== -1) {
-    state.shifts[existingIdx] = closedShift;
-  } else {
-    state.shifts.unshift(closedShift);
-  }
-
+  if (existingIdx !== -1) state.shifts[existingIdx] = closedShift;
+  else state.shifts.unshift(closedShift);
   state.currentShift = null;
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('close_shift', {
-      shiftId: closedShift.id, cashierName: cashierName, cashSales: cashSales,
-      cashCollections: cashCollections, cashReturns: cashReturns, cashExpenses: cashExpenses,
-      expectedCash: expectedCash, actualCash: actualCash, difference: difference
-    }, closedShift.id);
+    addAuditLog('close_shift', { shiftId: closedShift.id, cashierName: cashierName, cashSales, cashCollections, cashReturns, cashExpenses, expectedCash, actualCash, difference }, closedShift.id);
   }
 
   saveData();
@@ -632,25 +501,21 @@ async function closeShift() {
   document.getElementById('shiftActualCash').value = '';
   document.getElementById('shiftDifference').value = '';
   document.getElementById('shiftNotes').value = '';
-
   calcExpectedShiftCash();
   renderShifts();
   renderDashboard();
   showNotification(tr('shift_closed'));
-  // ✅ v7.6 — نسخة تلقائية عند إغلاق الوردية
-if (typeof triggerAutoBackup === 'function') {
-  setTimeout(() => triggerAutoBackup('shift_close').catch(e => console.warn('shift auto-backup:', e)), 800);
-}
+
+  if (typeof triggerAutoBackup === 'function') {
+    setTimeout(() => triggerAutoBackup('shift_close').catch(e => console.warn('shift auto-backup:', e)), 800);
+  }
 }
 
 function renderShifts() {
   const container = document.getElementById('shiftsTable');
   if (!container) return;
-  if (state.shifts.length === 0) {
-    container.innerHTML = '<p class="text-muted">' + tr('no_closed_shifts') + '</p>';
-    return;
-  }
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">التاريخ</th><th data-i18n="th_cashier">الكاشير</th><th data-i18n="th_invoice_count">عدد الفواتير</th><th data-i18n="th_expected_cash">الكاش المتوقع</th><th data-i18n="th_actual_cash">الكاش الفعلي</th><th data-i18n="th_difference">الفرق</th></tr></thead><tbody>';
+  if (state.shifts.length === 0) { container.innerHTML = '<p class="text-muted">' + tr('no_closed_shifts') + '</p>'; return; }
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + tr('th_cashier') + '</th><th>' + tr('th_invoice_count') + '</th><th>' + tr('th_expected_cash') + '</th><th>' + tr('th_actual_cash') + '</th><th>' + tr('th_difference') + '</th></tr></thead><tbody>';
   state.shifts.forEach(function(s) {
     const diff = Number(s.difference) || 0;
     const diffClass = diff < 0 ? 'red-text' : (diff > 0 ? 'green-text' : '');
@@ -658,204 +523,95 @@ function renderShifts() {
     const cashierName = s.cashier_name || s.cashierName || '-';
     const expected = Number(s.expected_cash ?? s.expectedCash ?? s.cash_sales ?? s.cashSales ?? 0) || 0;
     const actual = Number(s.actual_cash ?? s.actualCash ?? 0) || 0;
-    html += '<tr>' +
-      '<td>' + new Date(endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
-      '<td>' + escapeHTML(cashierName) + '</td>' +
-      '<td>' + (s.saleCount || s.sale_count || 0) + '</td>' +
-      '<td>' + expected.toFixed(2) + '</td>' +
-      '<td>' + actual.toFixed(2) + '</td>' +
-      '<td class="' + diffClass + '"><b>' + diff.toFixed(2) + '</b></td>' +
-      '</tr>';
+    html += '<tr><td>' + new Date(endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td><td>' + escapeHTML(cashierName) + '</td><td>' + (s.saleCount || s.sale_count || 0) + '</td><td>' + expected.toFixed(2) + '</td><td>' + actual.toFixed(2) + '</td><td class="' + diffClass + '"><b>' + diff.toFixed(2) + '</b></td></tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+
 function printShiftReport() {
   const current = state.currentShift;
   const shift = current || state.shifts[0] || null;
   if (!shift) return showNotification(tr('no_closed_shifts'), 'warning');
-
   const shiftId = shift.id;
 
-  // ✅ v7.3 — فلترة بـ shift_id (بدلاً من النطاق الزمني)
   const sales = (state.sales || []).filter(s => (s.shift_id === shiftId || s.shiftId === shiftId));
-
   const shiftStart = new Date(shift.start_time || shift.startTime).getTime();
-  const shiftEnd = (shift.end_time || shift.endTime)
-    ? new Date(shift.end_time || shift.endTime).getTime()
-    : Date.now();
+  const shiftEnd = (shift.end_time || shift.endTime) ? new Date(shift.end_time || shift.endTime).getTime() : Date.now();
 
-  // ✅ v7.3 — كشف حساب الدرج
   const openingCash = Number(shift.opening_cash ?? shift.openingCash) || 0;
 
-  const shiftCashSales = sales.filter(s =>
-    (s.pay_method === 'cash' || s.payMethod === 'cash') && (Number(s.paid) || 0) > 0
-  );
+  const shiftCashSales = sales.filter(s => (s.pay_method === 'cash' || s.payMethod === 'cash') && (Number(s.paid) || 0) > 0);
   const cashSales = shiftCashSales.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
   const cashVat = shiftCashSales.reduce((sum, s) => sum + (Number(s.vat_amount ?? s.vatAmount ?? 0) || 0), 0);
   const cashInvoicesCount = shiftCashSales.length;
 
-  const cashCollections = (state.customerPayments || [])
-    .filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash'))
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-  const cashReturnsTotal = (state.returns || [])
-    .filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash'))
-    .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
-
-  const drawerExpensesTotal = (state.expenses || [])
-    .filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash'))
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const cashReturnsTotal = (state.returns || []).filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash')).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const drawerExpensesTotal = (state.expenses || []).filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash')).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   const expectedCash = financeCore.calcShiftExpectedCash(shiftId);
-  const manualExpected = openingCash + cashSales + cashCollections - cashReturnsTotal - drawerExpensesTotal;
-  const matches = Math.abs(manualExpected - expectedCash) < 0.01;
-
-  // قيم إضافية للسياق
   const totalSales = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
   const visaSales = sales.filter(s => (s.pay_method === 'visa' || s.payMethod === 'visa')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
   const transferSales = sales.filter(s => (s.pay_method === 'transfer' || s.payMethod === 'transfer')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
 
-  const actualCash = current
-    ? (parseFloat(document.getElementById('shiftActualCash').value) || 0)
-    : (Number(shift.actual_cash ?? shift.actualCash) || 0);
-
+  const actualCash = current ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift.actual_cash ?? shift.actualCash) || 0);
   const difference = actualCash - expectedCash;
 
-  const en = currentLang === 'en';
-  const labels = en ? {
-    title: 'Shift Report',
-    shift: 'Shift', cashier: 'Cashier',
-    start: 'Start', end: 'End',
-    invoice: 'Invoice', date: 'Date', customer: 'Customer', payment: 'Payment', total: 'Total', paid: 'Paid',
-    breakdown: 'Drawer Cash Breakdown',
-    opening: 'Opening Cash',
-    cashSales: 'Cash Sales',
-    cashCollections: 'Cash Collections',
-    cashReturns: 'Cash Returns',
-    cashExpenses: 'Drawer Expenses',
-    expectedTotal: 'Expected Cash',
-    vatCollected: 'VAT Collected',
-    reconciliation: 'Reconciliation',
-    expectedCashLabel: 'Expected Cash',
-    actualCashLabel: 'Actual Cash',
-    differenceLabel: 'Difference',
-    otherPayments: 'Other Payment Methods',
-    invoicesTable: 'Invoices',
-    noteTitle: 'Note',
-    noteBody: 'Cash Sales excludes invoices with paid = 0. VAT Collected is part of Total and is not added separately to the drawer.',
-    thanks: 'Generated by Matjari'
-  } : {
-    title: 'تقرير الوردية',
-    shift: 'الوردية', cashier: 'الكاشير',
-    start: 'بداية الوردية', end: 'نهاية الوردية',
-    invoice: 'رقم الفاتورة', date: 'التاريخ', customer: 'العميل', payment: 'طريقة الدفع', total: 'الإجمالي', paid: 'المدفوع',
-    breakdown: 'كشف حساب الدرج',
-    opening: 'رصيد بداية الوردية',
-    cashSales: 'مبيعات كاش',
-    cashCollections: 'تحصيلات عملاء كاش',
-    cashReturns: 'مرتجعات كاش',
-    cashExpenses: 'مصروفات الدرج',
-    expectedTotal: 'صافي الكاش المتوقع',
-    vatCollected: 'الضريبة المحصلة',
-    reconciliation: 'المطابقة',
-    expectedCashLabel: 'الكاش المتوقع',
-    actualCashLabel: 'الكاش الفعلي',
-    differenceLabel: 'الفرق',
-    otherPayments: 'طرق دفع أخرى',
-    invoicesTable: 'الفواتير',
-    noteTitle: 'ملاحظة',
-    noteBody: 'مبيعات الكاش تستثني الفواتير التي paid = 0. الضريبة المحصلة جزء من الإجمالي ولا تُضاف منفصلة للدرج.',
-    thanks: 'صادر من متجري'
-  };
+  const cur = escapeHTML(state.storeSettings.currency || 'ج.م');
+  const shop = escapeHTML(state.storeSettings.name || 'متجري');
 
-  const currency = escapeHTML(state.storeSettings.currency || (en ? 'EGP' : 'ج.م'));
-  const shop = escapeHTML(state.storeSettings.name || (en ? 'My Store' : 'متجري'));
+  const payLabels = { cash: tr('cash_label'), visa: tr('th_visa_sales'), transfer: tr('th_bank_transfers'), card: tr('card_label') };
 
   const rows = sales.map(function(sale) {
     const custId = sale.customer_id || sale.customerId;
     const customer = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = sale.pay_method || sale.payMethod;
-    return '<tr>' +
-      '<td>' + escapeHTML(sale.id) + '</td>' +
-      '<td>' + escapeHTML(new Date(sale.date).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</td>' +
-      '<td>' + escapeHTML(customer ? customer.name : tr('cash_customer')) + '</td>' +
-      '<td>' + escapeHTML(payMethod || '-') + '</td>' +
-      '<td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + currency + '</td>' +
-      '<td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + currency + '</td>' +
-    '</tr>';
+    return '<tr><td>' + escapeHTML(sale.id) + '</td><td>' + escapeHTML(new Date(sale.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG')) + '</td><td>' + escapeHTML(customer ? customer.name : tr('cash_customer')) + '</td><td>' + escapeHTML(payLabels[payMethod] || payMethod || '-') + '</td><td>' + (Number(sale.total) || 0).toFixed(2) + ' ' + cur + '</td><td>' + (Number(sale.paid) || 0).toFixed(2) + ' ' + cur + '</td></tr>';
   }).join('');
 
   const fmt = (n) => Number(n || 0).toFixed(2);
   const bdRow = (label, value, sign, cls) =>
-    '<tr class="' + (cls || '') + '"><td>' + sign + ' ' + label + '</td><td style="text-align:left;direction:ltr;">' + fmt(value) + ' ' + currency + '</td></tr>';
+    '<tr class="' + (cls || '') + '"><td>' + sign + ' ' + label + '</td><td style="text-align:left;direction:ltr;">' + fmt(value) + ' ' + cur + '</td></tr>';
 
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) return showNotification(tr('allow_popups_print'), 'warning');
 
+  const en = currentLang === 'en';
+  const dir = en ? 'ltr' : 'rtl';
+
   win.document.write(
-    '<!doctype html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + (en ? 'ltr' : 'rtl') + '"><head><meta charset="utf-8"><title>' + labels.title + '</title>' +
-    '<style>' +
-      'body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}' +
-      'h1{color:#176b70;margin:0 0 6px}' +
-      'h2{color:#17364c;font-size:16px;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}' +
-      'table{width:100%;border-collapse:collapse;margin:8px 0}' +
-      'th{background:#17364c;color:white;padding:9px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}' +
-      'td{padding:8px 10px;border:1px solid #ccd7df;font-size:12px;text-align:' + (en ? 'left' : 'right') + '}' +
-      '.breakdown td{border:1px solid #e1e8ed}' +
-      '.breakdown tr.total td{background:#e8f4f4;font-weight:900;color:#176b70;border-top:2px solid #176b70;font-size:13px}' +
-      '.breakdown tr.vat td{background:#f1f6f8;color:#4a5f70;font-size:11px}' +
-      '.breakdown tr.minus td{color:#c0392b}' +
-      '.recon-box{padding:14px;background:#f8fafb;border:1px solid #dce5ec;border-radius:8px;margin:12px 0}' +
-      '.recon-box table td{border:none;padding:6px 0}' +
-      '.recon-box .diff-row td{border-top:2px solid #dce5ec;padding-top:10px;font-weight:900;font-size:15px;color:' + (difference < 0 ? '#c0392b' : (difference > 0 ? '#176b70' : '#4a5f70')) + '}' +
-      '.note{padding:10px 14px;background:#fff8e1;border-left:3px solid #b8860b;border-radius:6px;font-size:11px;color:#7a5c00;line-height:1.6;margin-top:14px}' +
-      '@media print{button{display:none}body{padding:10px}}' +
-    '</style></head><body>' +
-    '<h1>' + shop + ' — ' + labels.title + '</h1>' +
-    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + labels.cashier + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + '</p>' +
-    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + labels.start + ':</b> ' + new Date(shiftStart).toLocaleString(en ? 'en-US' : 'ar-EG') +
-    ' &nbsp;&nbsp; <b>' + labels.end + ':</b> ' + new Date(shiftEnd).toLocaleString(en ? 'en-US' : 'ar-EG') + '</p>' +
-
-    // ─── كشف حساب الدرج ───
-    '<h2>' + labels.breakdown + '</h2>' +
+    '<!doctype html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + dir + '"><head><meta charset="utf-8"><title>' + tr('shift_report') + '</title>' +
+    '<style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70;margin:0 0 6px}h2{color:#17364c;font-size:16px;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin:8px 0}th{background:#17364c;color:white;padding:9px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}td{padding:8px 10px;border:1px solid #ccd7df;font-size:12px;text-align:' + (en ? 'left' : 'right') + '}.breakdown td{border:1px solid #e1e8ed}.breakdown tr.total td{background:#e8f4f4;font-weight:900;color:#176b70;border-top:2px solid #176b70;font-size:13px}.breakdown tr.vat td{background:#f1f6f8;color:#4a5f70;font-size:11px}.breakdown tr.minus td{color:#c0392b}.recon-box{padding:14px;background:#f8fafb;border:1px solid #dce5ec;border-radius:8px;margin:12px 0}.recon-box table td{border:none;padding:6px 0}.recon-box .diff-row td{border-top:2px solid #dce5ec;padding-top:10px;font-weight:900;font-size:15px;color:' + (difference < 0 ? '#c0392b' : (difference > 0 ? '#176b70' : '#4a5f70')) + '}.note{padding:10px 14px;background:#fff8e1;border-left:3px solid #b8860b;border-radius:6px;font-size:11px;color:#7a5c00;line-height:1.6;margin-top:14px}@media print{button{display:none}body{padding:10px}}</style></head><body>' +
+    '<h1>' + shop + ' — ' + tr('shift_report') + '</h1>' +
+    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + tr('th_cashier') + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + '</p>' +
+    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + tr('shift_start') + ':</b> ' + new Date(shiftStart).toLocaleString(en ? 'en-US' : 'ar-EG') + ' &nbsp;&nbsp; <b>' + tr('shift_end') + ':</b> ' + new Date(shiftEnd).toLocaleString(en ? 'en-US' : 'ar-EG') + '</p>' +
+    '<h2>' + tr('shift_cash_breakdown_title') + '</h2>' +
     '<table class="breakdown"><tbody>' +
-      bdRow(labels.opening, openingCash, '💵', '') +
-      bdRow(labels.cashSales + ' (' + cashInvoicesCount + ' ' + (en ? 'invoices' : 'فاتورة') + ')', cashSales, '+', '') +
-      bdRow(labels.cashCollections, cashCollections, '+', '') +
-      bdRow(labels.cashReturns, cashReturnsTotal, '−', 'minus') +
-      bdRow(labels.cashExpenses, drawerExpensesTotal, '−', 'minus') +
-      '<tr class="total"><td>= ' + labels.expectedTotal + '</td><td style="text-align:left;direction:ltr;">' + fmt(expectedCash) + ' ' + currency + '</td></tr>' +
-      '<tr class="vat"><td>ℹ️ ' + labels.vatCollected + '</td><td style="text-align:left;direction:ltr;">' + fmt(cashVat) + ' ' + currency + '</td></tr>' +
+      bdRow(tr('shift_opening_cash'), openingCash, '💵', '') +
+      bdRow(tr('shift_cash_sales') + ' (' + cashInvoicesCount + ' ' + tr('invoices_word') + ')', cashSales, '+', '') +
+      bdRow(tr('shift_cash_collections'), cashCollections, '+', '') +
+      bdRow(tr('shift_cash_returns'), cashReturnsTotal, '−', 'minus') +
+      bdRow(tr('shift_cash_expenses'), drawerExpensesTotal, '−', 'minus') +
+      '<tr class="total"><td>= ' + tr('shift_expected_total') + '</td><td style="text-align:left;direction:ltr;">' + fmt(expectedCash) + ' ' + cur + '</td></tr>' +
+      '<tr class="vat"><td>ℹ️ ' + tr('shift_vat_collected') + '</td><td style="text-align:left;direction:ltr;">' + fmt(cashVat) + ' ' + cur + '</td></tr>' +
     '</tbody></table>' +
-
-    // ─── المطابقة ───
-    '<h2>' + labels.reconciliation + '</h2>' +
+    '<h2>' + tr('shift_reconciliation_title') + '</h2>' +
     '<div class="recon-box"><table>' +
-      '<tr><td>' + labels.expectedCashLabel + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(expectedCash) + ' ' + currency + '</b></td></tr>' +
-      '<tr><td>' + labels.actualCashLabel + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(actualCash) + ' ' + currency + '</b></td></tr>' +
-      '<tr class="diff-row"><td>' + labels.differenceLabel + '</td><td style="text-align:left;direction:ltr;">' + (difference < 0 ? '−' : (difference > 0 ? '+' : '')) + fmt(Math.abs(difference)) + ' ' + currency + '</td></tr>' +
+      '<tr><td>' + tr('th_expected_cash') + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(expectedCash) + ' ' + cur + '</b></td></tr>' +
+      '<tr><td>' + tr('th_actual_cash') + '</td><td style="text-align:left;direction:ltr;"><b>' + fmt(actualCash) + ' ' + cur + '</b></td></tr>' +
+      '<tr class="diff-row"><td>' + tr('th_difference') + '</td><td style="text-align:left;direction:ltr;">' + (difference < 0 ? '−' : (difference > 0 ? '+' : '')) + fmt(Math.abs(difference)) + ' ' + cur + '</td></tr>' +
     '</table></div>' +
-    (matches ? '' : '<p style="color:#c0392b;font-size:12px;">⚠️ ' + tr('shift_reconciliation_mismatch') + '</p>') +
-
-    // ─── طرق دفع أخرى ───
-    '<h2>' + labels.otherPayments + '</h2>' +
+    '<h2>' + tr('shift_other_payments_title') + '</h2>' +
     '<table><tbody>' +
-      '<tr><td>' + (en ? 'Visa / Card' : 'فيزا / بطاقة') + '</td><td style="text-align:left;direction:ltr;">' + fmt(visaSales) + ' ' + currency + '</td></tr>' +
-      '<tr><td>' + (en ? 'Bank Transfer' : 'تحويل بنكي') + '</td><td style="text-align:left;direction:ltr;">' + fmt(transferSales) + ' ' + currency + '</td></tr>' +
-      '<tr><td><b>' + (en ? 'Total Sales (all methods)' : 'إجمالي المبيعات (كل الطرق)') + '</b></td><td style="text-align:left;direction:ltr;"><b>' + fmt(totalSales) + ' ' + currency + '</b></td></tr>' +
+      '<tr><td>' + tr('th_visa_sales') + '</td><td style="text-align:left;direction:ltr;">' + fmt(visaSales) + ' ' + cur + '</td></tr>' +
+      '<tr><td>' + tr('th_bank_transfers') + '</td><td style="text-align:left;direction:ltr;">' + fmt(transferSales) + ' ' + cur + '</td></tr>' +
+      '<tr><td><b>' + tr('shift_total_sales_all') + '</b></td><td style="text-align:left;direction:ltr;"><b>' + fmt(totalSales) + ' ' + cur + '</b></td></tr>' +
     '</tbody></table>' +
-
-    // ─── الفواتير ───
-    '<h2>' + labels.invoicesTable + ' (' + sales.length + ')</h2>' +
-    '<table><thead><tr>' +
-      '<th>' + labels.invoice + '</th><th>' + labels.date + '</th><th>' + labels.customer + '</th><th>' + labels.payment + '</th><th>' + labels.total + '</th><th>' + labels.paid + '</th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table>' +
-
-    // ─── ملاحظة ───
-    '<div class="note"><b>' + labels.noteTitle + ':</b> ' + labels.noteBody + '</div>' +
-
-    '<p style="text-align:center;margin-top:18px;color:#687b8b;font-size:11px;">' + labels.thanks + '</p>' +
+    '<h2>' + tr('shift_invoices_table_title') + ' (' + sales.length + ')</h2>' +
+    '<table><thead><tr><th>' + tr('th_invoice_number') + '</th><th>' + tr('th_date') + '</th><th>' + tr('th_customer') + '</th><th>' + tr('th_payment_method') + '</th><th>' + tr('th_total') + '</th><th>' + tr('th_paid') + '</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="note"><b>' + tr('shift_report_note_title') + ':</b> ' + tr('shift_report_note_body') + '</div>' +
+    '<p style="text-align:center;margin-top:18px;color:#687b8b;font-size:11px;">' + tr('generated_by') + '</p>' +
     '<div style="text-align:center;margin-top:12px;"><button onclick="window.print()" style="padding:10px 24px;border:0;border-radius:8px;background:#176b70;color:#fff;font-weight:700;cursor:pointer;">' + tr('print_btn_text') + '</button></div>' +
     '<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>'
   );
@@ -885,21 +641,14 @@ function executeExportAction(action) {
   const scope = scopeEl.value;
   let from = '';
   let to = '';
-
   if (scope === 'custom') {
     from = document.getElementById('exportModalFrom').value || '';
     to = document.getElementById('exportModalTo').value || '';
   }
-
   closeExportModal();
-
-  if (action === 'print') {
-    printTableReportFiltered(type, from, to);
-  } else if (action === 'excel') {
-    exportTableCSVFiltered(type, from, to);
-  } else if (action === 'whatsapp') {
-    sendTableWhatsAppFiltered(type, from, to);
-  }
+  if (action === 'print') printTableReportFiltered(type, from, to);
+  else if (action === 'excel') exportTableCSVFiltered(type, from, to);
+  else if (action === 'whatsapp') sendTableWhatsAppFiltered(type, from, to);
 }
 
 function getFilteredDataForExport(tableType, from, to) {
@@ -916,7 +665,7 @@ function getFilteredDataForExport(tableType, from, to) {
         const custId = s.customer_id || s.customerId;
         const cust = state.customers.find(c => c.id === custId);
         const isCash = cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer');
-        return [s.id, new Date(s.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), cust ? (isCash ? (translations[currentLang] || translations.ar).cash_customer : cust.name) : ((translations[currentLang] || translations.ar).cash_customer), (Number(s.total) || 0).toFixed(2), (Number(s.paid) || 0).toFixed(2), (Number(s.remaining) || 0).toFixed(2)];
+        return [s.id, new Date(s.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), cust ? (isCash ? tr('cash_customer') : cust.name) : tr('cash_customer'), (Number(s.total) || 0).toFixed(2), (Number(s.paid) || 0).toFixed(2), (Number(s.remaining) || 0).toFixed(2)];
       });
       break;
     case 'products':
@@ -926,17 +675,13 @@ function getFilteredDataForExport(tableType, from, to) {
       break;
     case 'stockMoves':
       title = tr('moves_log');
-      headers = [tr('th_date'), tr('th_product'), (en ? 'Type' : 'النوع'), tr('th_quantity'), (en ? 'Before' : 'قبل'), (en ? 'After' : 'بعد'), tr('th_reason')];
+      headers = [tr('th_date'), tr('th_product'), tr('th_type'), tr('th_quantity'), tr('th_before'), tr('th_after'), tr('th_reason')];
       rawData = filterByPeriod(state.stockMoves, 'date', from, to).map(m => [new Date(m.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), m.productName || m.product_name, m.type, m.qty, m.oldStock ?? m.old_stock, m.newStock ?? m.new_stock, m.reason]);
       break;
     case 'returns':
       title = tr('returns_log');
       headers = [tr('th_date'), tr('th_invoice_number'), tr('th_item'), tr('th_quantity'), tr('th_value'), tr('return_method'), tr('th_reason')];
-      rawData = filterByPeriod(state.returns, 'date', from, to).map(r => [
-        new Date(r.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'),
-        r.saleId || r.sale_id, r.productName || r.product_name, r.qty,
-        (Number(r.total) || 0).toFixed(2), r.refundMethod || r.refund_method || '-', r.reason
-      ]);
+      rawData = filterByPeriod(state.returns, 'date', from, to).map(r => [new Date(r.date).toLocaleDateString(en ? 'en-US' : 'ar-EG'), r.saleId || r.sale_id, r.productName || r.product_name, r.qty, (Number(r.total) || 0).toFixed(2), r.refundMethod || r.refund_method || '-', r.reason]);
       break;
     case 'customers':
       title = tr('customers_list');
@@ -993,15 +738,11 @@ function printTableReportFiltered(tableType, from, to) {
 function exportTableCSVFiltered(tableType, from, to) {
   const data = getFilteredDataForExport(tableType, from, to);
   const settings = state.storeSettings;
-
   let csv = '\uFEFF';
   csv += '"' + settings.name + ' - ' + data.title + '"\r\n';
   csv += '"' + tr('print_date') + ': ' + new Date().toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '"\r\n\r\n';
   csv += data.headers.map(h => '"' + h + '"').join(',') + '\r\n';
-  data.rows.forEach(r => {
-    csv += r.map(c => '"' + String(c || '').replace(/"/g, '""') + '"').join(',') + '\r\n';
-  });
-
+  data.rows.forEach(r => { csv += r.map(c => '"' + String(c || '').replace(/"/g, '""') + '"').join(',') + '\r\n'; });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1033,36 +774,16 @@ function sendTableWhatsAppFiltered(tableType, from, to) {
 
 function openPrintWindow(title, headers, rows, settings) {
   const en = currentLang === 'en';
-  const logoHTML = settings.logo
-    ? '<img src="' + escapeHTML(settings.logo) + '" style="max-height:60px;max-width:150px">'
-    : '';
-
+  const logoHTML = settings.logo ? '<img src="' + escapeHTML(settings.logo) + '" style="max-height:60px;max-width:150px">' : '';
   let headerHTML = headers.map(h => '<th>' + escapeHTML(h) + '</th>').join('');
   let bodyHTML = '';
-  rows.forEach(r => {
-    bodyHTML += '<tr>';
-    r.forEach(c => { bodyHTML += '<td>' + escapeHTML(c) + '</td>'; });
-    bodyHTML += '</tr>';
-  });
-
-  if (rows.length === 0) {
-    bodyHTML = '<tr><td colspan="' + headers.length + '" style="text-align:center;padding:20px;color:#687b8b">' + tr('no_data') + '</td></tr>';
-  }
-
+  rows.forEach(r => { bodyHTML += '<tr>'; r.forEach(c => { bodyHTML += '<td>' + escapeHTML(c) + '</td>'; }); bodyHTML += '</tr>'; });
+  if (rows.length === 0) bodyHTML = '<tr><td colspan="' + headers.length + '" style="text-align:center;padding:20px;color:#687b8b">' + tr('no_data') + '</td></tr>';
   const w = window.open('', '_blank');
   if (!w) return showNotification(tr('allow_popups'), 'warning');
-
   w.document.write(
     '<!DOCTYPE html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + (en ? 'ltr' : 'rtl') + '"><head><meta charset="UTF-8"><title>' + escapeHTML(title) + '</title>' +
-    '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Tahoma;background:#fff;padding:20px;color:#203447}' +
-    '.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #17364c;padding-bottom:15px;margin-bottom:20px}' +
-    '.header-info h1{margin:0 0 6px;font-size:20px;color:#17364c}.header-info p{margin:2px 0;font-size:12px;color:#687b8b}' +
-    '.report-title{text-align:center;font-size:18px;font-weight:800;color:#17364c;margin:15px 0;padding:10px;background:#edf3f9;border-radius:8px}' +
-    'table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#17364c;color:#fff;padding:10px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}' +
-    'td{padding:8px 10px;border-bottom:1px solid #e9eef2;font-size:12px}tbody tr:nth-child(even){background:#f8fafb}' +
-    '.meta{margin-top:20px;text-align:center;font-size:11px;color:#687b8b;padding-top:15px;border-top:1px dashed #dce3ec}' +
-    '.actions{margin-top:20px;text-align:center}.actions button{padding:10px 20px;border:0;border-radius:8px;font-weight:700;cursor:pointer;background:#176b70;color:#fff}' +
-    '@media print{.actions{display:none}body{padding:0}}</style></head><body>' +
+    '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Tahoma;background:#fff;padding:20px;color:#203447}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #17364c;padding-bottom:15px;margin-bottom:20px}.header-info h1{margin:0 0 6px;font-size:20px;color:#17364c}.header-info p{margin:2px 0;font-size:12px;color:#687b8b}.report-title{text-align:center;font-size:18px;font-weight:800;color:#17364c;margin:15px 0;padding:10px;background:#edf3f9;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#17364c;color:#fff;padding:10px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}td{padding:8px 10px;border-bottom:1px solid #e9eef2;font-size:12px}tbody tr:nth-child(even){background:#f8fafb}.meta{margin-top:20px;text-align:center;font-size:11px;color:#687b8b;padding-top:15px;border-top:1px dashed #dce3ec}.actions{margin-top:20px;text-align:center}.actions button{padding:10px 20px;border:0;border-radius:8px;font-weight:700;cursor:pointer;background:#176b70;color:#fff}@media print{.actions{display:none}body{padding:0}}</style></head><body>' +
     '<div class="header"><div class="header-info"><h1>' + escapeHTML(settings.name) + '</h1>' +
     (settings.phone ? '<p>📞 ' + escapeHTML(settings.phone) + '</p>' : '') +
     (settings.address ? '<p>📍 ' + escapeHTML(settings.address) + '</p>' : '') +
@@ -1076,13 +797,9 @@ function openPrintWindow(title, headers, rows, settings) {
   w.document.close();
 }
 
-/* ============ تقرير المصروفات التفصيلي ============ */
 function openExpensesDetailReport() {
   const modal = document.getElementById('expensesReportModal');
-  if (modal) {
-    setExpenseReportPeriod('currentMonth');
-    modal.style.display = 'flex';
-  }
+  if (modal) { setExpenseReportPeriod('currentMonth'); modal.style.display = 'flex'; }
 }
 
 function closeExpensesReportModal() {
@@ -1097,14 +814,8 @@ function setExpenseReportPeriod(period) {
   if (period === 'today') from = end;
   if (period === 'week') { d.setDate(d.getDate() - 6); from = d.toISOString().slice(0, 10); }
   if (period === 'month') { d.setDate(d.getDate() - 29); from = d.toISOString().slice(0, 10); }
-  if (period === 'currentMonth') {
-    const now = new Date();
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  }
-  if (period === 'year') {
-    const now = new Date();
-    from = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
-  }
+  if (period === 'currentMonth') { const now = new Date(); from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); }
+  if (period === 'year') { const now = new Date(); from = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10); }
   document.getElementById('expReportFrom').value = from;
   document.getElementById('expReportTo').value = period === 'all' ? '' : end;
 }
@@ -1112,43 +823,32 @@ function setExpenseReportPeriod(period) {
 function printExpensesDetail() {
   const from = document.getElementById('expReportFrom').value;
   const to = document.getElementById('expReportTo').value;
-
   const filtered = filterByPeriod(state.expenses, 'date', from, to);
   const total = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
   const en = currentLang === 'en';
-
   let html = `
     <html dir="${en ? 'ltr' : 'rtl'}" lang="${en ? 'en' : 'ar'}"><head><title>${tr('expense_report')}</title>
     <style>body{font-family:Tahoma;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:${en ? 'left' : 'right'};}</style>
     </head><body>
-    <h2>${tr('expense_report')} (${from || (en ? 'Start' : 'البداية')} - ${to || (en ? 'End' : 'النهاية')})</h2>
+    <h2>${tr('expense_report')} (${from || tr('from_date')} - ${to || tr('to_date')})</h2>
     <h3>${tr('total_label')} ${total.toFixed(2)} ${state.storeSettings.currency}</h3>
     <table><tr><th>${tr('th_date')}</th><th>${tr('th_item_name')}</th><th>${tr('th_amount')}</th><th>${tr('th_notes')}</th></tr>
   `;
-
-  filtered.forEach(e => {
-    html += `<tr><td>${e.date}</td><td>${e.name}</td><td>${e.amount}</td><td>${e.notes || '-'}</td></tr>`;
-  });
+  filtered.forEach(e => { html += `<tr><td>${e.date}</td><td>${e.name}</td><td>${e.amount}</td><td>${e.notes || '-'}</td></tr>`; });
   html += `</table><script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script></body></html>`;
-
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
   closeExpensesReportModal();
 }
 
-/* ============ طباعة التقرير المالي ============ */
 function printReportSummary() {
   const container = document.getElementById('reportCards');
   if (!container) return;
-
   const topContainer = document.getElementById('topProductsReportFinance');
   const topHtml = topContainer ? topContainer.innerHTML : '';
-
-  // ✅ v7.2 — إضافة تقرير أرباح المنتجات للطباعة
   const profitContainer = document.getElementById('productProfitReport');
   const profitHtml = profitContainer ? profitContainer.innerHTML : '';
-
   const detailsContainer = document.getElementById('activityDetailsReport');
   const detailsHtml = detailsContainer ? detailsContainer.innerHTML : '';
   const en = currentLang === 'en';
@@ -1156,40 +856,19 @@ function printReportSummary() {
   const w = window.open('', '_blank');
   if (!w) return showNotification(tr('allow_popups'), 'warning');
 
-  const printStyles = `
-    <style>
-      body { font-family: Tahoma, Arial, sans-serif; padding: 20px; direction: ${en ? 'ltr' : 'rtl'}; }
-      h2 { text-align: center; margin-bottom: 30px; }
-      .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-      .stat-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; text-align: center; background: #fff; page-break-inside: avoid; }
-      .stat-card h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; border: none; padding: 0;}
-      .stat-card p { margin: 0; font-size: 20px; font-weight: bold; color: #000; }
-      table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
-      tr { page-break-inside: avoid; page-break-after: auto; }
-      th, td { border: 1px solid #ddd; padding: 8px; text-align: ${en ? 'left' : 'right'}; }
-      th { background: #f5f5f5; }
-      .card h3 { font-size: 16px; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 20px;}
-      .no-print, button, input, select { display: none !important; }
-    </style>
-  `;
+  const printStyles = `<style>body{font-family:Tahoma,Arial,sans-serif;padding:20px;direction:${en ? 'ltr' : 'rtl'}}h2{text-align:center;margin-bottom:30px}.stat-card{border:1px solid #ddd;border-radius:8px;padding:15px;text-align:center;background:#fff;page-break-inside:avoid}.stat-card h3{margin:0 0 10px 0;font-size:14px;color:#555;border:none;padding:0}.stat-card p{margin:0;font-size:20px;font-weight:bold;color:#000}table{width:100%;border-collapse:collapse;margin-top:10px}tr{page-break-inside:avoid}th,td{border:1px solid #ddd;padding:8px;text-align:${en ? 'left' : 'right'}}th{background:#f5f5f5}.card h3{font-size:16px;border-bottom:2px solid #eee;padding-bottom:10px;margin-top:20px}.no-print,button,input,select{display:none!important}</style>`;
 
   w.document.write(`
     <html dir="${en ? 'ltr' : 'rtl'}" lang="${en ? 'en' : 'ar'}">
     <head><title>${tr('financial_report')} ${escapeHTML(state.storeSettings.name)}</title>${printStyles}</head>
     <body>
       <h2>${tr('financial_report')} ${escapeHTML(state.storeSettings.name)}</h2>
-      
       <div>${container.innerHTML}</div>
-      
       ${detailsHtml ? `<div>${detailsHtml}</div>` : ''}
-      
-      ${topHtml ? `<div style="margin-top: 20px;"><h3>${tr('top_selling')}</h3>${topHtml}</div>` : ''}
-
-      ${profitHtml ? `<div style="margin-top: 20px;page-break-before: auto;"><h3>${tr('profit_section_title')}</h3>${profitHtml}</div>` : ''}
-      
+      ${topHtml ? `<div style="margin-top:20px;"><h3>${tr('top_selling')}</h3>${topHtml}</div>` : ''}
+      ${profitHtml ? `<div style="margin-top:20px;page-break-before:auto;"><h3>${tr('profit_section_title')}</h3>${profitHtml}</div>` : ''}
       <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
-    </body>
-    </html>
+    </body></html>
   `);
   w.document.close();
 }

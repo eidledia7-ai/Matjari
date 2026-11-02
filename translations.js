@@ -23,6 +23,15 @@ const translations = {
     auth_no_connection: "فشل الاتصال بالسيرفر، تأكد من الإنترنت.",
     auth_enter_email_pass: "أدخل البريد وكلمة المرور",
     auth_password_min_6: "كلمة المرور 6 أحرف على الأقل",
+    // ar
+sales_points_word: "نقطة",
+points_discount_prefix: "نقاط: -",
+sales_print_title: "طباعة",
+sales_options_title: "خيارات",
+sales_send_whatsapp: "إرسال واتساب",
+sales_delete_invoice: "حذف الفاتورة",
+customer_dropdown_no_results: "لا توجد نتائج",
+customer_dropdown_no_customers: "لا يوجد عملاء",
     auth_signing_in: "جارٍ تسجيل الدخول...",
     auth_sign_in_fail_prefix: "تعذر الدخول: ",
     auth_creating_account: "جارٍ إنشاء الحساب...",
@@ -1109,6 +1118,15 @@ en: {
   auth_welcome_set_pass: "Welcome! Set your password",
   back_btn: "← Back",
 error_video_element_missing: "Video element not found",
+// en
+sales_points_word: "points",
+points_discount_prefix: "Points: -",
+sales_print_title: "Print",
+sales_options_title: "Options",
+sales_send_whatsapp: "Send WhatsApp",
+sales_delete_invoice: "Delete Invoice",
+customer_dropdown_no_results: "No results",
+customer_dropdown_no_customers: "No customers",
   // ═══════════════════════════════════════════════════════════
   // ==== NAV / MENU ====
   // ═══════════════════════════════════════════════════════════

@@ -17,12 +17,12 @@ function populateSalesDropdowns() {
   if (custSelect) {
     custSelect.innerHTML = '';
     if (!state.customers || !state.customers.length) {
-      state.customers = [{ id: 'CASH-CUSTOMER', name: (translations[currentLang] || translations.ar).cash_customer, phone: '-', openingDebt: 0 }];
+      state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0 }];
     }
     state.customers.forEach(function(c) {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
-      const displayName = isCashCustomer ? (translations[currentLang] || translations.ar).cash_customer : c.name;
-      const pointsWord = currentLang === 'en' ? 'points' : 'نقطة';
+      const displayName = isCashCustomer ? tr('cash_customer') : c.name;
+      const pointsWord = tr('sales_points_word');
       const pointsLabel = (c.points && c.points > 0) ? ' (💎 ' + c.points + ' ' + pointsWord + ')' : '';
       custSelect.innerHTML += '<option value="' + c.id + '">' + escapeHTML(displayName) + pointsLabel + '</option>';
     });
@@ -32,7 +32,6 @@ function populateSalesDropdowns() {
   renderProductGrid();
   bindProductSearch();
 
-  // ✅ v7.10.1 — Sync customer search + drawer button + held badge
   const searchInput = document.getElementById('saleCustomerSearch');
   const custSelEl = document.getElementById('saleCustomer');
   if (searchInput && custSelEl) {
@@ -219,7 +218,7 @@ function updateMobileCartBar() {
 
   if (cntEl) cntEl.textContent = count;
   if (totEl) totEl.textContent = total.toFixed(2) + ' ' + cur;
-  if (hdrCnt) hdrCnt.textContent = count + ' ' + (count === 1 ? (currentLang === 'en' ? 'item' : 'صنف') : (currentLang === 'en' ? 'items' : 'صنف'));
+  if (hdrCnt) hdrCnt.textContent = count + ' ' + (count === 1 ? tr('cart_items_one') : tr('cart_items_many'));
 }
 
 function openMobileCart() {
@@ -276,11 +275,11 @@ function renderCart() {
   }
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th data-i18n="th_item">' + tr('th_item') + '</th>' +
-    '<th data-i18n="th_price">' + tr('th_price') + '</th>' +
-    '<th data-i18n="th_quantity">' + tr('th_quantity') + '</th>' +
-    '<th data-i18n="th_total">' + tr('th_total') + '</th>' +
-    '<th data-i18n="th_action">' + tr('th_action') + '</th>' +
+    '<th>' + tr('th_item') + '</th>' +
+    '<th>' + tr('th_price') + '</th>' +
+    '<th>' + tr('th_quantity') + '</th>' +
+    '<th>' + tr('th_total') + '</th>' +
+    '<th>' + tr('th_action') + '</th>' +
     '</tr></thead><tbody>';
 
   let subtotal = 0;
@@ -327,12 +326,10 @@ function renderCart() {
   if (t) {
     let totalText = finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
     if (pointsDiscount > 0) {
-      const pDiscLabel = currentLang === 'en' ? 'Points: -' : 'نقاط: -';
-      totalText += ' (' + pDiscLabel + pointsDiscount.toFixed(2) + ')';
+      totalText += ' (' + tr('points_discount_prefix') + pointsDiscount.toFixed(2) + ')';
     }
     if (vat.vat_amount > 0) {
-      const vatLabel = currentLang === 'en' ? 'VAT' : 'ضريبة';
-      totalText += ' [' + vatLabel + ': ' + vat.vat_amount.toFixed(2) + ']';
+      totalText += ' [' + tr('vat') + ': ' + vat.vat_amount.toFixed(2) + ']';
     }
     t.innerText = totalText;
   }
@@ -351,7 +348,6 @@ function renderCart() {
   updateMobileCartBar();
 }
 
-/* ✅ v7.10.1 — Qty +/- Buttons */
 function increaseQty(idx) {
   if (idx < 0 || idx >= state.cart.length) return;
   const item = state.cart[idx];
@@ -376,7 +372,6 @@ function decreaseQty(idx) {
   playSound && playSound('tick');
   renderCart();
 }
-
 function updateCartQty(idx, val) {
   const raw = parseInt(val);
   const q = (!Number.isFinite(raw) || raw < 1) ? 1 : raw;
@@ -415,15 +410,12 @@ function clearCart() {
   const p = document.getElementById('salePaid'); if (p) p.value = 0;
   const n = document.getElementById('saleNotes'); if (n) n.value = '';
   const pts = document.getElementById('salePointsUsed'); if (pts) pts.value = 0;
-  // ✅ v7.10.1
   const pt = document.getElementById('salePrintToggle'); if (pt) pt.checked = true;
   const cs = document.getElementById('saleCustomerSearch'); if (cs) cs.value = '';
   renderCart();
   refocusCashierInput && refocusCashierInput();
 }
-/* ============================================================
-   دالة مساعدة: ضمان وجود وردية مفتوحة
-   ============================================================ */
+
 async function ensureOpenShift() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   if (state.currentShift && !state.currentShift.end_time && !state.currentShift.endTime) return state.currentShift.id;
@@ -444,7 +436,7 @@ async function ensureOpenShift() {
         id: newShiftId, user_id: ownerId, cashier_name: newShift.cashier_name,
         start_time: newShift.start_time, opening_cash: 0
       }, { onConflict: 'id' });
-      if (error) throw new Error((currentLang === 'en' ? 'Failed to save shift: ' : 'تعذر حفظ الوردية: ') + error.message);
+      if (error) throw new Error(tr('shift_open_failed_prefix') + error.message);
     } catch (e) {
       console.error('Shift auto-open failed:', e);
       return null;
@@ -473,19 +465,16 @@ function askRefundMethod(sale, soldItem, qty) {
   return 'cash';
 }
 
-/* ============================================================
-   إتمام البيع
-   ============================================================ */
 async function completeSale() {
   if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
   if (state.cart.length === 0) { playBeep(false); return showNotification(tr('empty_cart_err'), 'error'); }
 
-  showLoading(currentLang === 'en' ? 'Saving invoice...' : 'جارٍ حفظ الفاتورة...');
+  showLoading(tr('sale_saving_loading'));
   await new Promise(function(resolve) { requestAnimationFrame(function() { resolve(); }); });
 
   let shiftId;
   try { shiftId = await ensureOpenShift(); }
-  catch (e) { hideLoading(); return showNotification((currentLang === 'en' ? 'Failed to open shift: ' : 'تعذر فتح وردية: ') + (e.message || ''), 'error'); }
+  catch (e) { hideLoading(); return showNotification(tr('shift_open_failed_prefix') + (e.message || ''), 'error'); }
   if (!shiftId) { hideLoading(); return showNotification(tr('shift_create_fail'), 'error'); }
 
   const subtotal = state.cart.reduce(function(sum, i) { return sum + i.price * i.qty; }, 0);
@@ -593,9 +582,8 @@ async function completeSale() {
 
   saveData();
   playBeep(true);
-  showNotification(currentLang === 'en' ? 'Invoice saved successfully ✅' : 'تم حفظ الفاتورة بنجاح ✅');
+  showNotification(tr('sale_saved_success'));
 
-  // ✅ v7.10.1 — Print Toggle
   try {
     if (typeof shouldPrintReceipt === 'function' && shouldPrintReceipt()) {
       if (state.storeSettings.printType === 'a4') printInvoice(saleObj);
@@ -642,10 +630,9 @@ function renderSales() {
 
   if (filtered.length === 0) { container.innerHTML = '<p class="text-muted">' + tr('empty_invoices') + '</p>'; return; }
 
-  const en = currentLang === 'en';
-  const payLabels = { cash: en ? 'Cash' : 'نقدي', visa: en ? 'Visa' : 'فيزا', transfer: en ? 'Transfer' : 'تحويل', card: en ? 'Card' : 'بطاقة' };
+  const payLabels = { cash: tr('cash_label'), visa: tr('th_visa_sales'), transfer: tr('th_bank_transfers'), card: tr('card_label') };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_invoice_number">رقم الفاتورة</th><th data-i18n="th_date">التاريخ</th><th data-i18n="th_customer">العميل</th><th data-i18n="th_total">الإجمالي</th><th data-i18n="th_paid">المدفوع</th><th data-i18n="th_remaining">المتبقي</th><th data-i18n="th_payment_method">طريقة الدفع</th><th data-i18n="th_action">إجراء</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_invoice_number') + '</th><th>' + tr('th_date') + '</th><th>' + tr('th_customer') + '</th><th>' + tr('th_total') + '</th><th>' + tr('th_paid') + '</th><th>' + tr('th_remaining') + '</th><th>' + tr('th_payment_method') + '</th><th>' + tr('th_action') + '</th></tr></thead><tbody>';
   filtered.forEach(function(s) {
     const custId = s.customer_id || s.customerId;
     const cust = state.customers.find(function(c) { return c.id === custId; });
@@ -654,19 +641,19 @@ function renderSales() {
     html += '<tr>' +
       '<td>' + escapeHTML(s.id) + '</td>' +
       '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
-      '<td>' + (cust ? escapeHTML(cust.name) : tr('cash_label')) + '</td>' +
+      '<td>' + (cust ? escapeHTML(cust.name) : tr('cash_customer')) + '</td>' +
       '<td>' + (Number(s.total) || 0).toFixed(2) + '</td>' +
       '<td>' + (Number(s.paid) || 0).toFixed(2) + '</td>' +
       '<td class="' + (Number(s.remaining) > 0 ? 'red-text' : '') + '">' + (Number(s.remaining) || 0).toFixed(2) + '</td>' +
       '<td>' + escapeHTML(payText) + '</td>' +
       '<td style="white-space: nowrap;">' +
-        '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="' + (currentLang === 'en' ? 'Print' : 'طباعة') + '">🧾</button>' +
+        '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="' + tr('sales_print_title') + '">🧾</button>' +
         '<div class="action-dropdown">' +
-          '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="' + (currentLang === 'en' ? 'Options' : 'خيارات') + '">⋮</button>' +
+          '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="' + tr('sales_options_title') + '">⋮</button>' +
           '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
-            '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 ' + (currentLang === 'en' ? 'Send WhatsApp' : 'إرسال واتساب') + '</button>' +
+            '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 ' + tr('sales_send_whatsapp') + '</button>' +
             '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 ' + tr('tab_returns') + '</button>' +
-            '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ ' + (currentLang === 'en' ? 'Delete Invoice' : 'حذف الفاتورة') + '</button>' +
+            '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ ' + tr('sales_delete_invoice') + '</button>' +
           '</div>' +
         '</div>' +
       '</td>' +
@@ -735,9 +722,8 @@ function clearTableLog(logType) {
   renderAll();
   showNotification(tr('log_cleared'));
 }
-
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Held Invoices
+   v7.10.1 — Held Invoices
    ════════════════════════════════════════════════════════════ */
 function updateHeldBadge() {
   const badge = document.getElementById('heldCountBadge');
@@ -811,7 +797,7 @@ function renderHeldInvoicesList() {
     const timeStr = new Date(item.time).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG');
     const itemCount = (item.cart || []).reduce((s, i) => s + (Number(i.qty) || 0), 0);
     const total = (item.cart || []).reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 0), 0);
-    const custName = item.customer_name || tr('cash_customer');
+    const custName = item.customer_name || item.customerName || tr('cash_customer');
     return '<div class="held-item">' +
       '<div class="held-item-header">' +
         '<span class="held-item-title">' + escapeHTML(custName) + '</span>' +
@@ -875,7 +861,7 @@ async function deleteHeldSale(heldId) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Drawer Expense
+   v7.10.1 — Drawer Expense
    ════════════════════════════════════════════════════════════ */
 function _canDrawerExpense() {
   if (state.role === 'manager') return true;
@@ -915,10 +901,10 @@ function updateDrawerExpenseWarning() {
   if (amt <= 0) { w.style.display = 'none'; return; }
   if (amt < 20) {
     w.className = 'drawer-expense-warning level-info';
-    w.textContent = '✅ سيُسجَّل تلقائياً في تقرير الوردية.';
+    w.textContent = tr('drawer_warning_auto');
   } else {
     w.className = 'drawer-expense-warning level-warn';
-    w.textContent = '⚠️ سيُعلَّم هذا المصروف للمراجعة من المدير عند إغلاق الوردية.';
+    w.textContent = tr('drawer_warning_review');
   }
   w.style.display = 'block';
 }
@@ -965,7 +951,7 @@ async function saveDrawerExpense() {
   if (typeof renderExpenses === 'function') renderExpenses();
   if (typeof renderDashboard === 'function') renderDashboard();
   if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
-  showNotification(tr('expense_saved'), 'success');
+  showNotification(tr('drawer_expense_success'), 'success');
 }
 
 function bindDrawerExpenseListeners() {
@@ -977,7 +963,7 @@ function bindDrawerExpenseListeners() {
 }
 
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Customer Search
+   v7.10.1 — Customer Search
    ════════════════════════════════════════════════════════════ */
 let _custSearchTimer = null;
 let _activeCustIndex = -1;
@@ -994,7 +980,7 @@ function renderCustomerDropdown(query) {
   _activeCustIndex = -1;
 
   if (filtered.length === 0) {
-    dd.innerHTML = '<div class="customer-dropdown-empty">' + (q ? 'لا توجد نتائج' : 'لا يوجد عملاء') + '</div>';
+    dd.innerHTML = '<div class="customer-dropdown-empty">' + (q ? tr('customer_dropdown_no_results') : tr('customer_dropdown_no_customers')) + '</div>';
     dd.style.display = 'block';
     return;
   }
@@ -1073,7 +1059,7 @@ function bindCustomerSearch() {
 }
 
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — More Menu (Mobile)
+   v7.10.1 — More Menu
    ════════════════════════════════════════════════════════════ */
 function toggleMoreMenu(e) {
   if (e) e.stopPropagation();
@@ -1091,7 +1077,7 @@ function toggleMoreMenu(e) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Hotkeys (Alt+H / Alt+L / Alt+D)
+   v7.10.1 — Hotkeys
    ════════════════════════════════════════════════════════════ */
 function bindV7101Hotkeys() {
   if (document._v7101HotkeysBound) return;
@@ -1110,16 +1096,13 @@ function bindV7101Hotkeys() {
   });
 }
 
-/* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Print Toggle Helper
-   ════════════════════════════════════════════════════════════ */
 function shouldPrintReceipt() {
   const toggle = document.getElementById('salePrintToggle');
   return toggle ? toggle.checked : true;
 }
 
 /* ════════════════════════════════════════════════════════════
-   ✅ v7.10 — Mobile Cart Bottom Sheet
+   v7.10 — Mobile Cart Bottom Sheet + Resize + Init
    ════════════════════════════════════════════════════════════ */
 let _mcbTouchStartY = 0;
 let _mcbTouchCurrentY = 0;
@@ -1198,14 +1181,10 @@ function initResizeHandler() {
   });
 }
 
-/* ════════════════════════════════════════════════════════════
-   ✅ v7.10.1 — Init (مُحدّث)
-   ════════════════════════════════════════════════════════════ */
 function initSalesWorkspaceV710() {
   try { bindProductSearch(); } catch (e) { console.warn('bindProductSearch:', e); }
   try { bindMobileCartSwipe(); } catch (e) { console.warn('bindMobileCartSwipe:', e); }
   try { initResizeHandler(); } catch (e) { console.warn('initResizeHandler:', e); }
-  // ✅ v7.10.1
   try { bindCustomerSearch(); } catch (e) { console.warn('bindCustomerSearch:', e); }
   try { bindDrawerExpenseListeners(); } catch (e) { console.warn('bindDrawerExpenseListeners:', e); }
   try { bindV7101Hotkeys(); } catch (e) { console.warn('bindV7101Hotkeys:', e); }
@@ -1215,11 +1194,9 @@ function initSalesWorkspaceV710() {
     try { populateSalesDropdowns(); } catch (e) { console.warn('populate:', e); }
   }
 
-  // ✅ v7.10.1 — Sync UI
   try { updateHeldBadge(); } catch (e) {}
   try { updateDrawerExpenseButton(); } catch (e) {}
 
-  // Customer change (خلفي)
   const custSel = document.getElementById('saleCustomer');
   if (custSel && !custSel._v710Bound) {
     custSel._v710Bound = true;
