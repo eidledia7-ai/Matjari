@@ -5,7 +5,6 @@ function _getAllTimeStart() {
 }
 
 function _getTodayStr() {
-  // ✅ [إصلاح] استخدام التوقيت المحلي بدلاً من UTC
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -14,7 +13,6 @@ function _getTodayStr() {
 }
 
 function _getCurrentMonthRange() {
-  // ✅ [إصلاح] استخدام التوقيت المحلي بدلاً من UTC
   const now = new Date();
   const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
   const endDate = now;
@@ -30,15 +28,9 @@ function _getCurrentMonthRange() {
   return { start: `${sy}-${sm}-${sd}`, end: `${ey}-${em}-${ed}` };
 }
 
-/**
- * غلاف آمن لاستدعاء financeCore.calcPeriodSummary
- */
 function _safeCalcPeriodSummary(from, to) {
   try {
-    if (typeof financeCore === 'undefined' ||
-        typeof financeCore.calcPeriodSummary !== 'function') {
-      return null;
-    }
+    if (typeof financeCore === 'undefined' || typeof financeCore.calcPeriodSummary !== 'function') return null;
     const s = financeCore.calcPeriodSummary(from, to);
     if (!s || typeof s !== 'object') return null;
     return s;
@@ -48,13 +40,9 @@ function _safeCalcPeriodSummary(from, to) {
   }
 }
 
-/**
- * ✅ غلاف آمن لاستدعاء financeCore.calcCustomerBalance / calcSupplierBalance
- */
 function _safeCustomerBalance(custId) {
   try {
-    if (typeof financeCore === 'undefined' ||
-        typeof financeCore.calcCustomerBalance !== 'function') return null;
+    if (typeof financeCore === 'undefined' || typeof financeCore.calcCustomerBalance !== 'function') return null;
     const v = financeCore.calcCustomerBalance(custId);
     return Number.isFinite(Number(v)) ? Number(v) : 0;
   } catch (e) {
@@ -65,8 +53,7 @@ function _safeCustomerBalance(custId) {
 
 function _safeSupplierBalance(supId) {
   try {
-    if (typeof financeCore === 'undefined' ||
-        typeof financeCore.calcSupplierBalance !== 'function') return null;
+    if (typeof financeCore === 'undefined' || typeof financeCore.calcSupplierBalance !== 'function') return null;
     const v = financeCore.calcSupplierBalance(supId);
     return Number.isFinite(Number(v)) ? Number(v) : 0;
   } catch (e) {
@@ -93,7 +80,6 @@ function renderDashboard() {
     expensesTotal = Number(summary.expenses_total) || 0;
     netProfit     = Number(summary.net_profit)     || 0;
   } else {
-    // Fallback: الحساب اليدوي القديم
     const totalSales = state.sales.reduce(function(sum, s) {
       return sum + (Number(s.total) || 0);
     }, 0);
@@ -114,24 +100,17 @@ function renderDashboard() {
     netProfit = totalSales - totalCost - expensesTotal;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ✅ customerDebt / supplierDue: من financeCore (الدين الحقيقي)
-  // ══════════════════════════════════════════════════════════════
   const customerDebt = state.customers.reduce(function(sum, c) {
     const isCash = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
     if (isCash) return sum;
     const bal = _safeCustomerBalance(c.id);
-    if (bal === null) {
-      return sum + (Number(c.openingDebt ?? c.opening_debt) || 0);
-    }
+    if (bal === null) return sum + (Number(c.openingDebt ?? c.opening_debt) || 0);
     return sum + Math.max(0, bal);
   }, 0);
 
   const supplierDue = state.suppliers.reduce(function(sum, s) {
     const bal = _safeSupplierBalance(s.id);
-    if (bal === null) {
-      return sum + (Number(s.openingDebt ?? s.opening_debt) || 0);
-    }
+    if (bal === null) return sum + (Number(s.openingDebt ?? s.opening_debt) || 0);
     return sum + Math.max(0, bal);
   }, 0);
 
@@ -145,7 +124,6 @@ function renderDashboard() {
     return (Number(p.stock) || 0) <= min;
   }).length;
 
-  // ===== بطاقات الصف الأول =====
   const cardsEl = document.getElementById('dashboardCards');
   if (cardsEl) {
     cardsEl.innerHTML =
@@ -158,7 +136,6 @@ function renderDashboard() {
       '<div class="stat-card"><h3>' + tr('dash_cost') + '</h3><p>' + cogs.toFixed(2) + ' ' + cur + '</p></div>';
   }
 
-  // ===== بطاقات الصف الثاني =====
   const otherCards = document.getElementById('dashboardOtherCards');
   if (otherCards) {
     otherCards.innerHTML =
@@ -173,6 +150,49 @@ function renderDashboard() {
   renderSmartAlerts();
   renderMonthlyGoal();
   renderSalesChart();
+  renderDashboardTopProducts(); // ✅ v7.9.2 - إضافة الأكثر مبيعاً للرئيسية
+}
+
+// ✅ v7.9.2 - دالة عرض الأكثر مبيعاً (صافي الكمية) في الصفحة الرئيسية
+function renderDashboardTopProducts() {
+  const container = document.getElementById('topProductsReport');
+  if (!container) return;
+
+  const allTimeFrom = _getAllTimeStart();
+  const allTimeTo = _getTodayStr();
+
+  let top = [];
+  if (typeof financeCore !== 'undefined' && typeof financeCore.calcProductProfitReport === 'function') {
+    const allProfitData = financeCore.calcProductProfitReport(allTimeFrom, allTimeTo);
+    top = allProfitData
+      .filter(p => Number(p.net_qty) > 0)
+      .sort((a, b) => Number(b.net_qty) - Number(a.net_qty))
+      .slice(0, 5);
+  }
+
+  if (top.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
+    return;
+  }
+
+  const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>#</th>' +
+    '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
+    '<th>' + tr('profit_net_qty') + '</th>' +
+    '<th>' + tr('profit_net_revenue') + '</th>' +
+    '</tr></thead><tbody>';
+  top.forEach(function(t, i) {
+    html += '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + escapeHTML(t.product_name) + '</td>' +
+      '<td><b>' + t.net_qty + '</b></td>' +
+      '<td>' + fmt(t.net_revenue_ex_vat) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
 }
 
 function renderSmartAlerts() {
@@ -259,7 +279,6 @@ function renderSalesChart() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    // ✅ [إصلاح] بناء التاريخ محلياً
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');

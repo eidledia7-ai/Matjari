@@ -222,31 +222,37 @@ if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
   }
 
   const topContainer = document.getElementById('topProductsReportFinance');
-  if (topContainer) {
-    const salesByProduct = {};
-
-    filteredSales.forEach(function(s) {
-      if (!s.items || !Array.isArray(s.items)) return;
-      s.items.forEach(function(i) {
-        if (!salesByProduct[i.name]) salesByProduct[i.name] = { name: i.name, qty: 0, total: 0 };
-        salesByProduct[i.name].qty += Number(i.qty || 0);
-        salesByProduct[i.name].total += Number(i.price || 0) * Number(i.qty || 0);
-      });
-    });
-
-    const top = Object.values(salesByProduct).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 10);
-
-    if (top.length === 0) {
-      topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
-    } else {
-      let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>#</th><th data-i18n="th_product">المنتج</th><th data-i18n="th_quantity">الكمية</th><th data-i18n="th_value">القيمة</th></tr></thead><tbody>';
-      top.forEach(function(t, i) {
-        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHTML(t.name) + '</td><td><b>' + t.qty + '</b></td><td>' + fmt(t.total) + '</td></tr>';
-      });
-      html += '</tbody></table></div>';
-      topContainer.innerHTML = html;
-    }
+if (topContainer) {
+  let top = [];
+  if (typeof financeCore !== 'undefined' && typeof financeCore.calcProductProfitReport === 'function') {
+    const allProfitData = financeCore.calcProductProfitReport(startDate, endDate);
+    top = allProfitData
+      .filter(p => Number(p.net_qty) > 0)
+      .sort((a, b) => Number(b.net_qty) - Number(a.net_qty))
+      .slice(0, 10);
   }
+
+  if (top.length === 0) {
+    topContainer.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">' + tr('no_period_sales') + '</p>';
+  } else {
+    let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>#</th>' +
+      '<th data-i18n="th_product">' + tr('th_product') + '</th>' +
+      '<th>' + tr('profit_net_qty') + '</th>' +
+      '<th>' + tr('profit_net_revenue') + '</th>' +
+      '</tr></thead><tbody>';
+    top.forEach(function(t, i) {
+      html += '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + escapeHTML(t.product_name) + '</td>' +
+        '<td><b>' + t.net_qty + '</b></td>' +
+        '<td>' + fmt(t.net_revenue_ex_vat) + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    topContainer.innerHTML = html;
+  }
+}
 
   // ✅ v7.4 — تقرير أرباح المنتجات (Product Profit Report)
   const profitContainer = document.getElementById('productProfitReport');
