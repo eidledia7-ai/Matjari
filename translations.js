@@ -874,7 +874,7 @@ landing_signup_fill_info: "املأ بياناتك ثم اضغط \"✨ إنشا�
   audit_unknown_user: "مستخدم غير معروف",
   audit_role_manager: "مدير",
   audit_role_employee: "موظف",
-
+error_video_element_missing: "عنصر الفيديو غير موجود",
   // ═══════════════════════════════════════════════════════════
   // ==== AUDIT — ACTION LABELS (33) ====
   // ═══════════════════════════════════════════════════════════
@@ -1095,7 +1095,7 @@ en: {
   auth_logout_fail: "Logout failed",
   auth_welcome_set_pass: "Welcome! Set your password",
   back_btn: "← Back",
-
+error_video_element_missing: "Video element not found",
   // ═══════════════════════════════════════════════════════════
   // ==== NAV / MENU ====
   // ═══════════════════════════════════════════════════════════

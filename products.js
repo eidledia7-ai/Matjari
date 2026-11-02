@@ -48,7 +48,8 @@ function processBarcodeNow(code) {
 
   if (!product) {
     playBeep(false);
-    showNotification('الباركود غير مطابق لأي منتج', 'error');
+    // ✅ v7.10.2 — ترجمة
+    showNotification(tr('barcode_manual_error'), 'error');
     return;
   }
 
@@ -68,7 +69,8 @@ function processBarcodeNow(code) {
     if (existing) {
       if ((Number(existing.qty) || 0) + 1 > stockNum) {
         playBeep(false);
-        showNotification('الكمية تتجاوز المخزون!', 'error');
+        // ✅ v7.10.2 — ترجمة
+        showNotification(tr('barcode_qty_exceeds'), 'error');
         return;
       }
       existing.qty = (Number(existing.qty) || 0) + 1;
@@ -79,7 +81,8 @@ function processBarcodeNow(code) {
     renderCart();
   }
   
-  showNotification('تمت إضافة: ' + product.name, 'success');
+  // ✅ v7.10.2 — ترجمة
+  showNotification(tr('barcode_added_prefix') + product.name, 'success');
   
   // ✅ v7.10 — تحديث الشبكة بعد الباركود
   if (typeof renderProductGrid === 'function') {
@@ -108,7 +111,8 @@ async function openBarcodeScanner() {
     } catch (e) { supported = formats; }
 
     const usableFormats = formats.filter(function(f) { return supported.indexOf(f) !== -1; });
-    if (!usableFormats.length) throw new Error('لا توجد صيغ مدعومة');
+    // ✅ v7.10.2 — ترجمة
+    if (!usableFormats.length) throw new Error(tr('barcode_no_formats'));
 
     barcodeDetector = new BarcodeDetector({ formats: usableFormats });
     barcodeStream = await navigator.mediaDevices.getUserMedia({
@@ -117,7 +121,8 @@ async function openBarcodeScanner() {
     });
 
     const video = document.getElementById('barcodeVideo');
-    if (!video) throw new Error('عنصر الفيديو غير موجود');
+    // ✅ v7.10.2 — ترجمة
+    if (!video) throw new Error(tr('error_video_element_missing'));
     video.srcObject = barcodeStream;
     await video.play();
 
@@ -136,7 +141,8 @@ async function openBarcodeScanner() {
     };
     scan();
   } catch (e) {
-    showNotification('تعذر تشغيل الكاميرا: ' + (e.message || ''), 'error');
+    // ✅ v7.10.2 — ترجمة
+    showNotification(tr('barcode_camera_error') + (e.message || ''), 'error');
     closeBarcodeScanner();
   }
 }

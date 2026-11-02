@@ -1,6 +1,7 @@
 /* ============ طباعة الباركود ============ */
 function openBarcodePrintModal() {
-  if (state.role !== 'manager') return showNotification('هذه العملية للمدير فقط', 'warning');
+  // ✅ v7.10.2 — ترجمة
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   if (state.products.length === 0) return showNotification(tr('notify_no_products'), 'warning');
 
   const modal = document.getElementById('barcodePrintModal');
@@ -8,9 +9,10 @@ function openBarcodePrintModal() {
   const list = document.getElementById('barcodeProductList');
   let html = '';
   state.products.forEach(p => {
+    // ✅ v7.10.2 — ترجمة (بدون باركود)
     html += '<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #e9eef2;cursor:pointer">' +
       '<input type="checkbox" class="barcode-product-cb" value="' + p.id + '" checked>' +
-      '<span><b>' + escapeHTML(p.name) + '</b> — ' + escapeHTML(p.barcode || 'بدون باركود') + '</span></label>';
+      '<span><b>' + escapeHTML(p.name) + '</b> — ' + escapeHTML(p.barcode || tr('barcode_no_code')) + '</span></label>';
   });
   list.innerHTML = html;
   modal.style.display = 'flex';
@@ -36,13 +38,15 @@ async function printBarcodeLabels() {
   const selectedProducts = state.products.filter(p => selectedIds.includes(p.id));
   const totalLabels = selectedProducts.length * copies;
   if (totalLabels > 300) {
-    if (!confirm('عدد الملصقات كبير (' + totalLabels + ' ملصق). هل تريد المتابعة؟')) return;
+    // ✅ v7.10.2 — ترجمة + template
+    if (!confirm(tr('barcode_too_many_confirm_template').replace('{count}', totalLabels))) return;
   }
 
   closeBarcodePrintModal();
 
   const printWindow = window.open('', '_blank', 'width=800,height=600');
-  if (!printWindow) return showNotification('يرجى السماح بالنوافذ المنبثقة للطباعة', 'warning');
+  // ✅ v7.10.2 — ترجمة
+  if (!printWindow) return showNotification(tr('allow_popups_print'), 'warning');
 
   let labelsHtml = '';
 
@@ -104,7 +108,7 @@ async function printBarcodeLabels() {
 
   printWindow.document.write(
     '<!DOCTYPE html><html lang="' + (currentLang === 'ar' ? 'ar' : 'en') + '" dir="' + (currentLang === 'ar' ? 'rtl' : 'ltr') + '">' +
-    '<head><meta charset="UTF-8"><title>' + (currentLang === 'en' ? 'Barcode Labels' : 'ملصقات الباركود') + '</title>' +
+    '<head><meta charset="UTF-8"><title>' + tr('barcode_labels_title') + '</title>' +
     '<link rel="stylesheet" href="' + cssUrl + '">' +
     '<style>body{margin:0;padding:10px;background:#fff}@media print{body{padding:0}@page{margin:8mm}}</style></head>' +
     '<body><div class="barcode-sheet size-' + size + '">' + labelsHtml + '</div>' +

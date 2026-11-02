@@ -1,6 +1,9 @@
 let currentLang = localStorage.getItem('matjari_lang') || 'ar';
 
-function tr(key) { const dict = translations[currentLang] || translations.ar; return dict[key] || translations.ar[key] || key; }
+function tr(key) {
+  const dict = translations[currentLang] || translations.ar;
+  return dict[key] || translations.ar[key] || translations.en[key] || key;
+}
 
 function setLanguage(lang) {
   currentLang = lang;
@@ -23,6 +26,10 @@ function setLanguage(lang) {
     const key = el.getAttribute('data-i18n-html');
     if (dict[key]) el.innerHTML = dict[key];
   });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+  const key = el.getAttribute('data-i18n-title');
+  if (dict[key]) el.title = dict[key];
+});
 
   const langDisp = document.getElementById('currentLangDisplay');
   if (langDisp) langDisp.textContent = lang === 'ar' ? 'العربية (Arabic)' : 'English';

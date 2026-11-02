@@ -1,21 +1,26 @@
 /* ============ تحديثات التطبيق ============ */
 async function checkForUpdates() {
   if (!('serviceWorker' in navigator)) {
-    return showNotification(currentLang === 'en' ? 'This browser does not support auto-update.' : 'المتصفح لا يدعم التحديث التلقائي', 'info');
+    // ✅ v7.10.2 — ترجمة
+    return showNotification(tr('update_browser_unsupported'), 'info');
   }
   try {
     const reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) return showNotification(currentLang === 'en' ? 'No service worker registered.' : 'لا يوجد Service Worker مسجّل', 'warning');
+    // ✅ v7.10.2 — ترجمة
+    if (!reg) return showNotification(tr('update_no_sw'), 'warning');
     await reg.update();
     if (reg.waiting) {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
-      showNotification(currentLang === 'en' ? 'Update ready, reloading...' : 'التحديث جاهز، جارٍ إعادة التحميل...', 'info');
+      // ✅ v7.10.2 — ترجمة
+      showNotification(tr('update_ready_reloading'), 'info');
     } else {
-      showNotification(currentLang === 'en' ? '✅ App is up to date' : '✅ التطبيق محدّث');
+      // ✅ v7.10.2 — ترجمة
+      showNotification(tr('update_up_to_date'));
     }
   } catch (e) {
-    showNotification(currentLang === 'en' ? 'Update failed' : 'تعذر التحديث', 'error');
+    // ✅ v7.10.2 — ترجمة
+    showNotification(tr('update_failed'), 'error');
   }
 }
 
@@ -43,4 +48,3 @@ async function clearAppCache() {
   }
   location.reload();
 }
-
