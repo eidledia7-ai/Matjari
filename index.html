@@ -222,122 +222,118 @@
 
     <!-- 2. نقطة البيع -->
     <div id="sales" class="page">
-      <h2 data-i18n="page_sales_title">المبيعات وفواتير البيع</h2>
-      <div class="card">
-        <h3 data-i18n="add_sale_items">إضافة أصناف للفاتورة</h3>
-        <div class="form-grid">
-          <div class="form-group">
-            <label data-i18n="select_product">اختر المنتج</label>
-            <select id="saleProduct"></select>
-          </div>
-          <div class="form-group">
-            <label data-i18n="barcode_label">الباركود (يضاف فوراً 📷)</label>
-            <div style="display:flex;gap:5px">
-              <input type="text" id="saleBarcode" placeholder="امسح/اكتب الباركود..." data-i18n-placeholder="barcode_placeholder" autocomplete="off">
-              <button type="button" class="btn primary small-btn" onclick="openBarcodeScanner()" title="مسح بالكاميرا">📷</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label data-i18n="qty_label">الكمية</label>
-            <input type="number" id="saleQty" value="1" min="1">
-          </div>
-          <div class="form-group">
-            <label data-i18n="unit_price">سعر الوحدة</label>
-            <input type="number" id="saleUnitPrice" placeholder="يضاف تلقائياً" data-i18n-placeholder="auto_added_placeholder">
-          </div>
-          <div class="form-group span-2">
-            <label data-i18n="customer_label">العميل</label>
-            <select id="saleCustomer"></select>
-          </div>
-        </div>
-<!-- كروت أو استيكرات الإضافة السريعة -->
-<div class="sticker-grid mt-15">
-  <button type="button" class="sticker-btn" onclick="addToCartManual()">
-    <span class="sticker-icon">🛒</span>
-    <span class="sticker-text" data-i18n="add_manual_btn">إضافة يدوية</span>
-  </button>
-  
-  <button type="button" class="sticker-btn" onclick="openBarcodeScanner()">
-    <span class="sticker-icon">📷</span>
-    <span class="sticker-text">مسح كاميرا</span>
-  </button>
-</div>
+  <div id="salesWorkspace" class="sales-workspace">
 
-        <div id="cartTable" class="mt-20"></div>
-
-        <div class="form-grid mt-20">
-          <div class="form-group">
-            <label data-i18n="paid_now">المدفوع الآن</label>
-            <input type="number" id="salePaid" value="0" min="0" step="any">
+    <!-- ─── Column 1: Products (70%) ─── -->
+    <div id="productGridArea" class="product-grid-area">
+      <div class="sales-topbar">
+        <div class="sales-topbar-row">
+          <div class="input-with-icon" style="flex:2;">
+            <span class="input-icon">🔍</span>
+            <input type="text" id="saleBarcode" placeholder="امسح الباركود أو ابحث..." autocomplete="off" />
           </div>
-          <div class="form-group">
-            <label data-i18n="discount_label">الخصم 🏷️</label>
-            <div style="display: flex; gap: 5px;">
-              <input type="number" id="saleDiscount" value="0" min="0" step="any" placeholder="0.00">
-              <select id="saleDiscountType" style="width: 85px;">
-                <option value="fixed" data-i18n="opt_discount_fixed">ج.م</option>
-                <option value="percent" data-i18n="opt_discount_percent">%</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label data-i18n="pay_method">طريقة الدفع</label>
-            <select id="salePayMethod">
-              <option value="cash" data-i18n="pay_cash">💵 كاش</option>
-              <option value="visa" data-i18n="pay_visa">💳 فيزا / شبكة</option>
-              <option value="transfer" data-i18n="pay_transfer">📲 تحويل بنكي</option>
-            </select>
-          </div>
-          <div class="form-group span-3">
-            <label data-i18n="notes_label">ملاحظات</label>
-            <input type="text" id="saleNotes" placeholder="ملاحظات الفاتورة...">
-          </div>
-          <div class="form-group span-3" id="pointsRedeemGroup" style="display:none; background: var(--primary-light); padding: 10px; border-radius: 8px; border: 1px solid var(--primary);">
-  <label style="color: var(--primary);">💎 استبدال نقاط العميل (المتاح: <span id="custAvailPoints" style="font-weight:900;">0</span> نقطة)</label>
-  <input type="number" id="salePointsUsed" value="0" min="0" step="1" onchange="renderCart()">
-</div>
+          <input type="number" id="saleQty" value="1" min="1" style="max-width:80px;" title="الكمية" />
+          <select id="saleCustomer" style="flex:1;min-width:140px;"></select>
         </div>
 
-     <div class="btn-group mt-15" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-  <button class="btn green" onclick="completeSale()" style="grid-column: span 2; font-size: 18px; padding: 15px;" data-i18n="complete_sale_btn">تأكيد الحفظ وطباعة الفاتورة (F9)</button>
-  
-  <button class="btn orange small-btn" onclick="holdCurrentSale()">⏸️ تعليق</button>
-  <button class="btn primary small-btn" onclick="openHeldCartsModal()" style="background:#4f46e5;">📋 المعلقة (<span id="heldCartsCount">0</span>)</button>
-  
-  <button class="btn red small-btn" onclick="openDrawerExpenseModal()" style="background:#dc2626;">💸 مصروف درج</button>
-  <button class="btn grey small-btn" onclick="clearCart()" data-i18n="clear_cart_btn">تفريغ (F8)</button>
-</div>
-       
+        <div class="sales-topbar-row">
+          <input type="text" id="productSearchInput" placeholder="🔎 بحث سريع بالاسم أو التصنيف..." style="flex:1;" />
+        </div>
 
-        <div id="cartTotal" class="total-box mt-15">إجمالي الفاتورة: 0.00 ج.م</div>
+        <select id="saleProduct" hidden></select>
       </div>
 
-      <div class="card mt-20">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <h3 style="margin:0" data-i18n="sales_log">سجل المبيعات</h3>
-          <div class="btn-group">
-            <button class="btn red small-btn" onclick="clearTableLog('sales')" data-i18n="clear_log">🗑️ تصفير السجل</button>
-            <button class="btn secondary small-btn" onclick="openExportModal('sales')" data-i18n="export_print_btn">🖨️ / 📊 / 💬 خيارات</button>
-          </div>
-        </div>
-        <div class="form-grid mt-15">
-          <div class="form-group">
-            <label data-i18n="search_sales">بحث في المبيعات</label>
-            <input type="text" id="salesSearch" placeholder="برقم الفاتورة أو اسم العميل..." oninput="renderSales()">
-          </div>
-          <div class="form-group">
-            <label data-i18n="from_date">من تاريخ</label>
-            <input type="date" id="salesFrom" onchange="renderSales()">
-          </div>
-          <div class="form-group">
-            <label data-i18n="to_date">إلى تاريخ</label>
-            <input type="date" id="salesTo" onchange="renderSales()">
-          </div>
-        </div>
-        <div id="salesTable" class="mt-15"></div>
+      <div id="productCategoriesBar" class="product-categories-bar">
+        <button class="cat-chip active" data-cat="">كل المنتجات</button>
+      </div>
+
+      <div id="productGrid" class="product-grid">
+        <div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div>
+        <div class="product-card skeleton"></div>
+      </div>
+
+      <div id="productGridEmpty" class="empty-state" style="display:none;">
+        <div class="empty-icon">📦</div>
+        <h3>لا توجد منتجات</h3>
+        <p>أضف منتجات من شاشة المخزون للبدء.</p>
       </div>
     </div>
 
+    <!-- ─── Column 2: Cart (30%) ─── -->
+    <aside id="cartArea" class="cart-area">
+      <header class="cart-header">
+        <h2>🛒 السلة</h2>
+        <span id="cartItemCount" class="cart-count">0 صنف</span>
+        <button class="cart-close-btn" onclick="closeMobileCart()" title="إغلاق">✕</button>
+      </header>
+
+      <div class="cart-body">
+        <div id="cartTable" class="cart-table-wrap">
+          <div class="empty-state cart-empty-state">
+            <div class="empty-icon">🛒</div>
+            <h3>السلة فاضية</h3>
+            <p>اضغط على منتج لإضافته.</p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="cart-footer">
+        <div class="cart-row">
+          <label>الخصم</label>
+          <div style="display:flex;gap:6px;">
+            <input type="number" id="saleDiscount" value="0" min="0" step="0.01" style="width:90px;" />
+            <select id="saleDiscountType" style="width:80px;">
+              <option value="fixed">ج.م</option>
+              <option value="percent">%</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="pointsRedeemGroup" class="cart-row" style="display:none;">
+          <label>استخدام نقاط (<span id="custAvailPoints">0</span>)</label>
+          <input type="number" id="salePointsUsed" value="0" min="0" style="width:90px;" />
+        </div>
+
+        <div class="cart-total-row">
+          <span>الإجمالي</span>
+          <strong id="cartTotal">0.00 ج.م</strong>
+        </div>
+
+        <div class="cart-row">
+          <label>المدفوع</label>
+          <input type="number" id="salePaid" value="0" min="0" step="0.01" style="width:110px;" />
+        </div>
+
+        <div class="cart-row">
+          <label>طريقة الدفع</label>
+          <select id="salePayMethod">
+            <option value="cash">نقدي</option>
+            <option value="visa">فيزا</option>
+            <option value="transfer">تحويل</option>
+          </select>
+        </div>
+
+        <input type="text" id="saleNotes" placeholder="ملاحظات (اختياري)" style="margin-top:6px;" />
+
+        <div class="cart-actions">
+          <button class="btn-clear" onclick="clearCart()" title="تفريغ السلة">🗑️</button>
+          <button class="btn-complete" onclick="completeSale()">✅ إتمام البيع</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+
+  <div id="mobileCartBar" class="mobile-cart-bar" onclick="openMobileCart()">
+    <span class="mcb-count">🛒 <b id="mobileCartCount">0</b> صنف</span>
+    <span class="mcb-total" id="mobileCartTotal">0.00 ج.م</span>
+    <button class="mcb-open">عرض السلة ▸</button>
+  </div>
+  <div id="mobileCartBackdrop" class="mobile-cart-backdrop" onclick="closeMobileCart()"></div>
+</div>
     <!-- 3. المخزون - المنتجات -->
     <div id="invProducts" class="page">
       <h2 data-i18n="tab_products">📦 قائمة المنتجات</h2>

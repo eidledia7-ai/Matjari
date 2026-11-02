@@ -59,28 +59,32 @@ function processBarcodeNow(code) {
     return;
   }
 
-  const existing = state.cart.find(function(item) { return item.id === product.id; });
-  if (existing) {
-    // [إصلاح] Number() متسق
-    if ((Number(existing.qty) || 0) + 1 > stockNum) {
-      playBeep(false);
-      showNotification('الكمية تتجاوز المخزون!', 'error');
-      return;
-    }
-    existing.qty = (Number(existing.qty) || 0) + 1;
+  // ✅ v7.10 — إضافة موحدة عبر addToCartById
+  if (typeof addToCartById === 'function') {
+    addToCartById(product.id, 1);
   } else {
-    state.cart.push({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      cost: product.cost,
-      qty: 1
-    });
+    // Fallback
+    const existing = state.cart.find(function(item) { return item.id === product.id; });
+    if (existing) {
+      if ((Number(existing.qty) || 0) + 1 > stockNum) {
+        playBeep(false);
+        showNotification('الكمية تتجاوز المخزون!', 'error');
+        return;
+      }
+      existing.qty = (Number(existing.qty) || 0) + 1;
+    } else {
+      state.cart.push({ id: product.id, name: product.name, price: product.price, cost: product.cost, qty: 1 });
+    }
+    playBeep(true);
+    renderCart();
   }
-
-  playBeep(true);
-  renderCart();
+  
   showNotification('تمت إضافة: ' + product.name, 'success');
+  
+  // ✅ v7.10 — تحديث الشبكة بعد الباركود
+  if (typeof renderProductGrid === 'function') {
+    try { renderProductGrid(); } catch (e) {}
+  }
 }
 
 async function openBarcodeScanner() {

@@ -276,6 +276,7 @@ function showPage(pageId) {
   if (pageId === 'home') renderDashboard();
   if (pageId === 'sales') {
     populateSalesDropdowns();
+    setTimeout(() => { if (typeof initSalesWorkspaceV710 === 'function') initSalesWorkspaceV710(); }, 100);
     const bc = document.getElementById('saleBarcode');
     if (bc) bc.focus();
   }
