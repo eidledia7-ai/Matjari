@@ -1,5 +1,5 @@
 /* ============================================================
-   connection-banner.js — v7.8
+   connection-banner.js — v7.9.1
    Persistent Banner لحالة الاتصال + عدد العمليات المعلقة
    ============================================================ */
 
@@ -25,9 +25,7 @@ function _getBannerState() {
     return { cls: 'pending', icon: '🟡', textKey: 'conn_pending', count: queue.pending };
   }
   if (neg > 0 || conflicts > 0) {
-  return { cls: 'warn', icon: '⚠️', textKey: 'conn_stock_conflict', count: neg + conflicts };
-}
-    return { cls: 'warn', icon: '⚠️', textKey: 'conn_stock_conflict', count: neg };
+    return { cls: 'warn', icon: '⚠️', textKey: 'conn_stock_conflict', count: neg + conflicts };
   }
   return { cls: 'online', icon: '🟢', textKey: 'conn_online', count: 0 };
 }
@@ -55,12 +53,15 @@ function _applyBannerState(st) {
     text = tr(st.textKey);
   }
 
+  // ✅ v7.9.1 — تعديل الزرار
+  const btnHtml = (st.cls === 'failed' || st.cls === 'warn')
+    ? '<button class="banner-btn" onclick="openOperationsCenter()">' + tr('conn_review') + '</button>'
+    : '';
+
   el.innerHTML =
     '<span class="banner-icon">' + st.icon + '</span>' +
     '<span class="banner-text">' + text + '</span>' +
-    (st.cls === 'failed' || st.cls === 'warn'
-  ? '<button class="banner-btn" onclick="openOperationsCenter()">' + tr('conn_review') + '</button>'
-  : '');
+    btnHtml;
 }
 
 function renderConnectionBanner() {

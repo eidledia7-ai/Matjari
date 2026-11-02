@@ -280,6 +280,7 @@ function renderStockMoves() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+
 /* ============ المرتجعات ============ */
 function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
@@ -389,19 +390,19 @@ async function saveReturn() {
     customer_id: customerId,
     customerId: customerId,
     reason: reason || tr('return_reason_default'),
-    date: new Date().toISOString()
-    _pendingUpload: true
+    date: new Date().toISOString(),
+    _pendingUpload: true // ✅ v7.9.1
   };
 
-  // ✅ v7.8
-enqueueSyncOperation('insert_return', {
-  id: newReturn.id, sale_id: newReturn.sale_id,
-  product_id: newReturn.product_id, product_name: newReturn.product_name,
-  qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
-  vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
-  shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
-  reason: newReturn.reason, date: newReturn.date
-}, newReturn.id);
+  // ✅ v7.8 — إدخال للـ Queue (يعمل Online/Offline)
+  enqueueSyncOperation('insert_return', {
+    id: newReturn.id, sale_id: newReturn.sale_id,
+    product_id: newReturn.product_id, product_name: newReturn.product_name,
+    qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
+    vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
+    shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
+    reason: newReturn.reason, date: newReturn.date
+  }, newReturn.id);
 
   state.returns.unshift(newReturn);
 
