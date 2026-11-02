@@ -9,6 +9,7 @@ function _getBannerState() {
   const online = navigator.onLine;
   const queue = (typeof getSyncQueueCounts === 'function') ? getSyncQueueCounts() : { pending: 0, failed: 0 };
   const neg = Number(state._negativeStockCount) || 0;
+  const conflicts = Number(state._stockConflictCount) || 0;
 
   if (!online) {
     return { cls: 'offline', icon: '🔴', textKey: 'conn_offline', count: queue.pending };
@@ -23,7 +24,9 @@ function _getBannerState() {
   if (queue.pending > 0) {
     return { cls: 'pending', icon: '🟡', textKey: 'conn_pending', count: queue.pending };
   }
-  if (neg > 0) {
+  if (neg > 0 || conflicts > 0) {
+  return { cls: 'warn', icon: '⚠️', textKey: 'conn_stock_conflict', count: neg + conflicts };
+}
     return { cls: 'warn', icon: '⚠️', textKey: 'conn_stock_conflict', count: neg };
   }
   return { cls: 'online', icon: '🟢', textKey: 'conn_online', count: 0 };
@@ -55,9 +58,9 @@ function _applyBannerState(st) {
   el.innerHTML =
     '<span class="banner-icon">' + st.icon + '</span>' +
     '<span class="banner-text">' + text + '</span>' +
-    (st.cls === 'failed'
-      ? '<button class="banner-btn" onclick="showNotification(tr(\'conn_failed_help\'),\'info\')">' + tr('conn_review') + '</button>'
-      : '');
+    (st.cls === 'failed' || st.cls === 'warn'
+  ? '<button class="banner-btn" onclick="openOperationsCenter()">' + tr('conn_review') + '</button>'
+  : '');
 }
 
 function renderConnectionBanner() {

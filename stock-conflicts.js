@@ -20,6 +20,15 @@ async function getNegativeStockProducts() {
 async function refreshStockConflictIndicator() {
   const neg = await getNegativeStockProducts();
   state._negativeStockCount = neg.length;
-  try { window.dispatchEvent(new CustomEvent('stockconflicts:changed', { detail: { count: neg.length } })); } catch (e) {}
+  try {
+    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+    if (ownerId && supabaseClient && navigator.onLine) {
+      const { data } = await supabaseClient.rpc('get_flagged_sales', { p_user_id: ownerId });
+      state._stockConflictCount = Array.isArray(data) ? data.length : 0;
+    }
+  } catch (e) {}
+  try { window.dispatchEvent(new CustomEvent('stockconflicts:changed', {
+    detail: { count: neg.length, flagged: state._stockConflictCount || 0 }
+  })); } catch (e) {}
   return neg;
 }

@@ -291,6 +291,7 @@ function showPage(pageId) {
   if (pageId === 'finCompare') { if (typeof onCompareTypeChange === 'function') onCompareTypeChange(); }
   if (pageId === 'finShift') { calcExpectedShiftCash(); renderShifts(); }
   if (pageId === 'settSubscription') renderSubscriptionPage();
+  if (pageId === 'operationsCenter') renderOperationsCenter();
   if (pageId === 'settStore') loadStoreSettings();
   if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
 }

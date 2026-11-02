@@ -1010,3 +1010,43 @@ body.dark-mode .skeleton {
 
 /* تأمين عدم تغطية الـ modal */
 #hotkeysHelpModal { bottom: 40px !important; }
+/* ✅ v7.9 — Operations Center */
+
+/* Badge على القائمة الجانبية */
+.nav-badge {
+  display: inline-block;
+  background: #c62828;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-inline-start: 6px;
+  vertical-align: middle;
+  min-width: 20px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* تمييز صفوف الفاشلة */
+#failedOpsTable tr { transition: background-color 120ms ease; }
+#failedOpsTable tr:hover { background: #f8fafb; }
+
+/* جدول تعارضات المخزون */
+#stockConflictsTable tr { transition: background-color 120ms ease; }
+#stockConflictsTable tr:hover { background: #fff8e1; }
+
+/* زر Void Sale */
+.small-btn.orange {
+  background: #e65100;
+  color: #fff;
+  border: 0;
+}
+.small-btn.orange:hover { background: #bf4400; }
+
+/* متجاوب */
+@media (max-width: 768px) {
+  #operationsCenterPage .table-wrap { overflow-x: auto; }
+  #operationsCenterPage table { min-width: 600px; font-size: 12px; }
+  #opDetailsModal > div { padding: 16px; }
+}

@@ -390,6 +390,7 @@ async function saveReturn() {
     customerId: customerId,
     reason: reason || tr('return_reason_default'),
     date: new Date().toISOString()
+    _pendingUpload: true
   };
 
   // ✅ v7.8

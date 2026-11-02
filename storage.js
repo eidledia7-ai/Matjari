@@ -7,9 +7,12 @@ const SYNC_DAYS          = 30;
 const SYNC_AUDIT_LIMIT   = 100;
 const SYNC_MOVES_LIMIT   = 500;
 const SYNC_ITEMS_CHUNK   = 200;
-
 async function syncDown(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
+
+  // ✅ v7.9 — حماية الفواتير والمرتجعات المعلقة من المسح
+  const _protectedSales = (state.sales || []).filter(s => s._pendingUpload === true);
+  const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload === true);
 
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
@@ -41,6 +44,19 @@ async function syncDown(ownerId) {
     }));
     state.salesDataLimited = (data || []).length >= SYNC_SALES_LIMIT;
     state.salesDataFromDate = cutoffDate;
+
+    // ✅ v7.9 — دمج الفواتير المعلقة
+    {
+      const pendingIds = (typeof getPendingSaleIdsFromQueue === 'function') ? getPendingSaleIdsFromQueue() : new Set();
+      const existing = new Set(state.sales.map(s => s.id));
+      _protectedSales.forEach(ps => {
+        if (!existing.has(ps.id) || pendingIds.has(ps.id)) {
+          const localIdx = state.sales.findIndex(s => s.id === ps.id);
+          if (localIdx === -1) state.sales.unshift(ps);
+          else state.sales[localIdx]._pendingUpload = true;
+        }
+      });
+    }
   } catch (err) {
     console.warn('SyncDown sales failed:', err.message);
   }
@@ -72,6 +88,14 @@ async function syncDown(ownerId) {
       vat_amount: Number(row.vat_amount) || 0, vatAmount: Number(row.vat_amount) || 0
     }));
     state.returnsDataLimited = (data || []).length >= SYNC_RETURNS_LIMIT;
+
+    // ✅ v7.9 — دمج المرتجعات المعلقة
+    {
+      const existing = new Set(state.returns.map(r => r.id));
+      _protectedReturns.forEach(pr => {
+        if (!existing.has(pr.id)) state.returns.unshift(pr);
+      });
+    }
   } catch (err) {
     console.warn('SyncDown returns failed:', err.message);
   }
@@ -148,7 +172,6 @@ async function syncDown(ownerId) {
             vatEnabled: data.vat_enabled === true,
             vatRate: Number(data.vat_rate) || 0,
             vatMode: data.vat_mode || 'inclusive',
-            // ✅ v7.6 — Auto Backup
             autoBackupEnabled:   data.auto_backup_enabled === true,
             autoBackupInterval:  data.auto_backup_interval || 'daily',
             autoBackupRetention: Number(data.auto_backup_retention) || 7,
@@ -250,10 +273,17 @@ async function syncDown(ownerId) {
     console.warn('syncDown customer balances failed:', err.message);
     if (!state.customerBalances) state.customerBalances = {};
   }
-  // ✅ v7.8
-if (typeof refreshStockConflictIndicator === 'function') refreshStockConflictIndicator().catch(() => {});
-}
 
+  // ═══════════════════════════════════════════════════════
+  // I) ✅ v7.9 — تحديث عدد تعارضات المخزون
+  // ═══════════════════════════════════════════════════════
+  if (navigator.onLine && supabaseClient) {
+    try {
+      const { data: conflicts } = await supabaseClient.rpc('get_flagged_sales', { p_user_id: ownerId });
+      state._stockConflictCount = Array.isArray(conflicts) ? conflicts.length : 0;
+    } catch (e) {}
+  }
+}
 async function syncUp(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
   try {

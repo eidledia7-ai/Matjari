@@ -212,6 +212,14 @@ function enqueueSyncOperation(type, payload, idempotencyKey) {
   };
 
   queue.push(op);
+  if (type === 'insert_sale' && payload && payload.id) {
+  const s = (state.sales || []).find(x => x.id === payload.id);
+  if (s) s._pendingUpload = true;
+}
+if (type === 'insert_return' && payload && payload.id) {
+  const r = (state.returns || []).find(x => x.id === payload.id);
+  if (r) r._pendingUpload = true;
+}
 
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
@@ -250,6 +258,8 @@ async function _executeOp(op, ownerId) {
       }));
       const { error: e2 } = await c.from('sale_items').upsert(items, { onConflict: 'sale_id,product_id' });
       if (e2) throw e2;
+      const idx = (state.sales || []).findIndex(s => s.id === p.id);
+if (idx !== -1) delete state.sales[idx]._pendingUpload;
     }
     return;
   }
@@ -263,6 +273,8 @@ async function _executeOp(op, ownerId) {
       customer_id: p.customer_id, reason: p.reason, date: p.date
     }, { onConflict: 'id' });
     if (error) throw error;
+    const idxR = (state.returns || []).findIndex(r => r.id === p.id);
+if (idxR !== -1) delete state.returns[idxR]._pendingUpload;
     return;
   }
 
@@ -417,4 +429,12 @@ function clearSyncQueue() {
     localStorage.removeItem(SYNC_QUEUE_COUNTS_PREFIX + oid);
   } catch (e) {}
   _broadcastQueueChange();
+}
+function getPendingSaleIdsFromQueue() {
+  const q = _loadQueue();
+  return new Set(q.filter(o => o.type === 'insert_sale' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
+}
+function getPendingReturnIdsFromQueue() {
+  const q = _loadQueue();
+  return new Set(q.filter(o => o.type === 'insert_return' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
 }
