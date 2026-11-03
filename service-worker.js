@@ -58,7 +58,7 @@ self.addEventListener('fetch', function (event) {
   
   if (!url.protocol.startsWith('http')) return;
 
-  const CDN_ALLOWLIST = ['cdn.jsdelivr.net'];
+  const CDN_ALLOWLIST = ['cdnjs.cloudflare.com'];
   if (url.origin !== self.location.origin && !CDN_ALLOWLIST.includes(url.hostname)) return;
 
   if (url.href.includes('supabase.co')) return;
