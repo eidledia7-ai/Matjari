@@ -2,10 +2,8 @@
 function enforceSubscriptionBlock() {
   const existing = document.getElementById('subscriptionBlock');
   if (existing) existing.remove();
-
   const oldBanner = document.getElementById('readOnlyBanner');
   if (oldBanner) oldBanner.remove();
-
   document.body.style.overflow = '';
 
   const sub = state.subscription || {};
@@ -15,170 +13,20 @@ function enforceSubscriptionBlock() {
 
   const now = Date.now();
   const isActive = sub.status === 'active' && (!endDate || endDate > now);
-
   window.isReadOnlyMode = !isActive;
 
-  if (isActive) {
-    document.body.style.paddingTop = '0';
-    return;
-  }
+  if (isActive) { document.body.style.paddingTop = '0'; return; }
 
-  const en = currentLang === 'en';
   const banner = document.createElement('div');
   banner.id = 'readOnlyBanner';
   banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#ef4444; color:#fff; text-align:center; padding:12px; z-index:99999; font-weight:bold; font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;';
-
   banner.innerHTML = `
-    <span>⚠️ ${en ? 'Subscription expired. Read-Only mode.' : 'اشتراكك منتهي. أنت الآن في وضع القراءة فقط (لا يمكنك البيع أو التعديل).'}</span>
-    <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">
-      ${en ? 'Renew Now' : 'جدد الآن'}
-    </button>
+    <span>⚠️ ${tr('sub_expired_banner')}</span>
+    <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">${tr('sub_renew_now_btn')}</button>
     <button onclick="this.parentElement.remove(); document.body.style.paddingTop='0';" style="background:transparent; border:none; color:#fff; cursor:pointer; font-size:18px; padding:0 5px;">✕</button>
   `;
-
   document.body.prepend(banner);
   document.body.style.paddingTop = '50px';
-}
-
-/* ============ نظام تعليق الفواتير (Hold Sale) ============ */
-function updateHeldCartsCount() {
-  const badge = document.getElementById('heldCartsCount');
-  if (badge) badge.innerText = state.heldCarts ? state.heldCarts.length : 0;
-}
-
-async function holdCurrentSale() {
-  if (state.cart.length === 0) {
-    return showNotification(tr('hold_empty'), 'warning');
-  }
-
-  const custId = document.getElementById('saleCustomer').value;
-  const cust = state.customers.find(c => c.id === custId);
-
-  const currentShiftId = state.currentShift ? state.currentShift.id : null;
-
-  const heldSale = {
-    id: uid('HOLD'),
-    time: new Date().toISOString(),
-    cart: JSON.parse(JSON.stringify(state.cart)),
-    customerId: custId,
-    customerName: cust ? cust.name : tr('cash_customer'),
-    discount: document.getElementById('saleDiscount').value || 0,
-    discountType: document.getElementById('saleDiscountType').value,
-    notes: document.getElementById('saleNotes').value || '',
-    shiftId: currentShiftId
-  };
-
-  if (!state.heldCarts) state.heldCarts = [];
-  state.heldCarts.unshift(heldSale);
-
-  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-  if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('held_carts').insert({
-      id: heldSale.id, user_id: ownerId, cart_data: heldSale.cart,
-      customer_id: heldSale.customerId, customer_name: heldSale.customerName,
-      discount: heldSale.discount, discount_type: heldSale.discountType,
-      notes: heldSale.notes, time: heldSale.time,
-      shift_id: heldSale.shiftId
-    });
-  }
-
-  clearCart();
-  updateHeldCartsCount();
-  saveData();
-  showNotification(tr('hold_success'), 'success');
-}
-
-function openHeldCartsModal() {
-  const modal = document.getElementById('heldCartsModal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-  renderHeldCartsList();
-}
-
-function closeHeldCartsModal() {
-  const modal = document.getElementById('heldCartsModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function renderHeldCartsList() {
-  const container = document.getElementById('heldCartsList');
-  if (!container) return;
-
-  if (!state.heldCarts || state.heldCarts.length === 0) {
-    container.innerHTML = '<p class="text-muted text-center">' + (currentLang === 'en' ? 'No held invoices currently.' : 'لا توجد فواتير معلقة حالياً.') + '</p>';
-    return;
-  }
-
-  let html = '';
-  state.heldCarts.forEach(sale => {
-    const date = new Date(sale.time).toLocaleTimeString(currentLang === 'en' ? 'en-US' : 'ar-EG');
-    const total = sale.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const itemsLabel = currentLang === 'en' ? 'Items' : 'أصناف';
-    const totalLabel = currentLang === 'en' ? 'Total' : 'الإجمالي';
-    const resumeLabel = currentLang === 'en' ? 'Resume' : 'استرجاع';
-    const deleteLabel = currentLang === 'en' ? 'Delete' : 'حذف';
-
-    html += `
-      <div style="background:var(--bg-body); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-        <div>
-          <div style="font-weight:bold; color:var(--text-main);">${escapeHTML(sale.customerName)} <span style="font-size:12px; color:var(--text-muted);">(${date})</span></div>
-          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">${sale.cart.length} ${itemsLabel} - ${totalLabel}: <b>${total.toFixed(2)} ${state.storeSettings.currency}</b></div>
-        </div>
-        <div style="display:flex; gap:5px;">
-          <button class="small-btn green" onclick="resumeHeldSale('${sale.id}')">${resumeLabel}</button>
-          <button class="small-btn red" onclick="deleteHeldSale('${sale.id}')">${deleteLabel}</button>
-        </div>
-      </div>
-    `;
-  });
-  container.innerHTML = html;
-}
-
-function resumeHeldSale(id) {
-  if (state.cart.length > 0) {
-    if (!confirm(tr('hold_resume_confirm'))) {
-      return;
-    }
-    holdCurrentSale();
-  }
-
-  const index = state.heldCarts.findIndex(s => s.id === id);
-  if (index === -1) return;
-
-  const sale = state.heldCarts[index];
-
-  state.cart = sale.cart;
-  document.getElementById('saleCustomer').value = sale.customerId;
-  document.getElementById('saleDiscount').value = sale.discount;
-  document.getElementById('saleDiscountType').value = sale.discountType;
-  document.getElementById('saleNotes').value = sale.notes;
-
-  state.heldCarts.splice(index, 1);
-
-  if (navigator.onLine && supabaseClient) {
-    supabaseClient.from('held_carts').delete().eq('id', id);
-  }
-
-  closeHeldCartsModal();
-  renderCart();
-  updateHeldCartsCount();
-  saveData();
-  showNotification(tr('hold_resume_success'), 'success');
-}
-
-async function deleteHeldSale(id) {
-  if (!confirm(tr('hold_delete_confirm'))) return;
-
-  state.heldCarts = state.heldCarts.filter(s => s.id !== id);
-
-  if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('held_carts').delete().eq('id', id);
-  }
-
-  renderHeldCartsList();
-  updateHeldCartsCount();
-  saveData();
-  showNotification(tr('hold_deleted'), 'info');
 }
 
 /* ============ إضافة كمية سريعة للمخزون ============ */
@@ -189,19 +37,14 @@ async function quickAddStock(id) {
   const prod = state.products.find(p => p.id === id);
   if (!prod) return;
 
-  const promptMsg = tr('quick_add_prompt') + ' "' + prod.name + '"\n\n' + (currentLang === 'en' ? 'Current stock: ' : 'المخزون الحالي: ') + prod.stock + '\n\n' + (currentLang === 'en' ? 'Enter qty to add (e.g. 10):' : 'أدخل الكمية اللي هتضيفها (مثال: 10):');
+  const promptMsg = tr('quick_add_prompt_template').replace('{name}', prod.name).replace('{stock}', prod.stock);
   const qtyInput = prompt(promptMsg);
-
   if (qtyInput === null) return;
   const qty = parseInt(qtyInput);
-
-  if (isNaN(qty) || qty <= 0) {
-    return showNotification(tr('invalid_qty_zero'), 'error');
-  }
+  if (isNaN(qty) || qty <= 0) return showNotification(tr('invalid_qty_zero'), 'error');
 
   const oldStock = prod.stock;
   prod.stock += qty;
-
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
   if (navigator.onLine && supabaseClient) {
@@ -228,93 +71,7 @@ async function quickAddStock(id) {
   renderStockMoves();
   renderDashboard();
   updateStockBadge();
-  showNotification((currentLang === 'en' ? 'Added ' + qty + ' to stock of "' + prod.name + '" ✅' : 'تم إضافة ' + qty + ' قطعة لمخزون "' + prod.name + '" ✅'), 'success');
-}
-
-/* ============ مصروفات الدرج ============ */
-function openDrawerExpenseModal() {
-  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
-
-  const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
-
-  if (!openShift && !state.currentShift) {
-    return showNotification(tr('no_open_shift_err'), 'warning');
-  }
-  document.getElementById('drawerExpenseAmount').value = '';
-  document.getElementById('drawerExpenseReason').value = '';
-  document.getElementById('drawerExpenseModal').style.display = 'flex';
-}
-
-async function saveDrawerExpense() {
-  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
-  if (!state.currentUser) return showNotification(currentLang === 'en' ? 'Sign in first' : 'سجّل الدخول أولاً', 'error');
-
-  const amount = parseFloat(document.getElementById('drawerExpenseAmount').value);
-  const reason = document.getElementById('drawerExpenseReason').value.trim();
-
-  if (isNaN(amount) || amount <= 0 || !reason) {
-    return showNotification(tr('invalid_amount_reason'), 'error');
-  }
-
-  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-
-  let currentShiftId = null;
-  if (state.currentShift) {
-    currentShiftId = state.currentShift.id;
-  } else {
-    const openShift = (state.shifts || []).find(s => !s.end_time && !s.endTime);
-    if (openShift) currentShiftId = openShift.id;
-  }
-
-  const newExpense = {
-    id: uid('EXP'),
-    user_id: ownerId,
-    name: tr('drawer_expense_prefix') + reason,
-    amount: amount,
-    date: new Date().toISOString(),
-    notes: tr('drawer_expense_notes'),
-    shift_id: currentShiftId,
-    pay_method: 'cash'
-  };
-
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('expenses').insert(newExpense);
-    if (error) {
-      console.warn('Drawer expense upload failed:', error);
-      return showNotification(tr('expense_save_fail') + error.message, 'error');
-    }
-  }
-
-  state.expenses.unshift({
-    id: newExpense.id,
-    name: newExpense.name,
-    amount: newExpense.amount,
-    date: newExpense.date,
-    notes: newExpense.notes,
-    shift_id: newExpense.shift_id,
-    shiftId: newExpense.shift_id,
-    pay_method: newExpense.pay_method,
-    payMethod: newExpense.pay_method
-  });
-
-  if (state.currentShift) {
-    if (!state.currentShift.drawerExpenses) state.currentShift.drawerExpenses = [];
-    state.currentShift.drawerExpenses.push({ amount: amount, reason: reason, time: new Date().toISOString() });
-  }
-
-  if (typeof addAuditLog === 'function') {
-    addAuditLog('drawer_expense', { expenseId: newExpense.id, amount: amount, reason: reason }, newExpense.id);
-  }
-
-  if (typeof calcExpectedShiftCash === 'function') {
-    calcExpectedShiftCash();
-  }
-
-  saveData();
-
-  if (typeof renderExpenses === 'function') renderExpenses();
-  document.getElementById('drawerExpenseModal').style.display = 'none';
-  showNotification(tr('drawer_expense_success'), 'success');
+  showNotification(tr('quick_add_success_template').replace('{qty}', qty).replace('{name}', prod.name), 'success');
 }
 
 /* ============ تذكير العملاء بالديون ============ */
@@ -333,22 +90,20 @@ function sendDebtReminder(customerId) {
     debt = Number(cust.opening_debt ?? cust.openingDebt) || 0;
   }
 
-  if (debt <= 0) {
-    return showNotification(currentLang === 'en' ? 'This customer has no debts.' : 'هذا العميل ليس عليه أي ديون', 'info');
-  }
+  if (debt <= 0) return showNotification(tr('debt_no_debts_message'), 'info');
 
-  const storeName = state.storeSettings.name || (currentLang === 'en' ? 'My Store' : 'متجري');
-  const currency = state.storeSettings.currency || (currentLang === 'en' ? 'EGP' : 'ج.م');
-  const en = currentLang === 'en';
+  const storeName = state.storeSettings.name || 'متجري';
+  const currency = state.storeSettings.currency || 'ج.م';
 
-  const message = en 
-    ? `Hello ${cust.name},\n\nFriendly reminder regarding your account with us at "${storeName}".\nRemaining balance: ${debt.toFixed(2)} ${currency}.\n\nThank you for your business! 🌟`
-    : `أهلاً ${cust.name}،\n\nتذكير ودود بخصوص حسابكم معنا في "${storeName}".\nالمبلغ المتبقي: ${debt.toFixed(2)} ${currency}.\n\nشاكرين تعاملكم معنا، ونتمنى لكم يوماً سعيداً! 🌟`;
+  const message = tr('debt_reminder_template')
+    .replace('{name}', cust.name)
+    .replace('{store}', storeName)
+    .replace('{amount}', debt.toFixed(2))
+    .replace('{currency}', currency);
 
   const countryCode = state.storeSettings.countryCode || '20';
   const phone = cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
   const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
-
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
 }
@@ -361,31 +116,25 @@ function getStatementData(custId) {
   if (!cust) return null;
 
   let transactions = [];
-
   state.sales.filter(s => (s.customer_id === custId || s.customerId === custId)).forEach(s => {
     if (Number(s.remaining) > 0) {
       transactions.push({ date: s.date, desc: tr('invoice_hash') + s.id, debit: Number(s.remaining), credit: 0 });
     }
   });
-
   state.customerPayments.filter(p => (p.customer_id === custId || p.customerId === custId)).forEach(p => {
     transactions.push({ date: p.date, desc: tr('collection_payment'), debit: 0, credit: Number(p.amount) });
   });
-
   (state.returns || []).filter(r => (r.customer_id === custId || r.customerId === custId) && r.refund_method === 'credit').forEach(r => {
     transactions.push({ date: r.date, desc: tr('return_hash') + r.id, debit: 0, credit: Number(r.total) || 0 });
   });
 
   transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
-
   let totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
   let totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
   const opening = Number(cust.opening_debt ?? cust.openingDebt) || 0;
-
-  let initialBalance = opening;
   let currentDebt = opening + totalDebit - totalCredit;
 
-  return { cust, transactions, initialBalance, currentDebt };
+  return { cust, transactions, initialBalance: opening, currentDebt };
 }
 
 function showCustomerStatement(custId) {
@@ -394,12 +143,11 @@ function showCustomerStatement(custId) {
   if (!data) return;
 
   const { cust, transactions, initialBalance, currentDebt } = data;
-  const cur = state.storeSettings.currency || (currentLang === 'en' ? 'EGP' : 'ج.م');
-  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
 
   document.getElementById('statementCustName').innerText = cust.name;
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + (en ? 'Description' : 'البيان') + '</th><th>' + (en ? 'Debit' : 'عليه (مدين)') + '</th><th>' + (en ? 'Credit' : 'له (دائن)') + '</th><th>' + tr('th_balance') + '</th></tr></thead><tbody>';
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + tr('statement_description_label') + '</th><th>' + tr('statement_debit_label') + '</th><th>' + tr('statement_credit_label') + '</th><th>' + tr('th_balance') + '</th></tr></thead><tbody>';
 
   let runningBalance = initialBalance;
   html += `<tr><td>-</td><td>${tr('prev_balance')}</td><td>-</td><td>-</td><td><b>${runningBalance.toFixed(2)}</b></td></tr>`;
@@ -407,13 +155,7 @@ function showCustomerStatement(custId) {
   transactions.forEach(t => {
     runningBalance += t.debit;
     runningBalance -= t.credit;
-    html += `<tr>
-      <td>${new Date(t.date).toLocaleDateString(en ? 'en-US' : 'ar-EG')}</td>
-      <td>${escapeHTML(t.desc)}</td>
-      <td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td>
-      <td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td>
-      <td><b>${runningBalance.toFixed(2)}</b></td>
-    </tr>`;
+    html += `<tr><td>${new Date(t.date).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG')}</td><td>${escapeHTML(t.desc)}</td><td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td><td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td><td><b>${runningBalance.toFixed(2)}</b></td></tr>`;
   });
 
   html += `<tr style="background:#fef2f2;"><td colspan="4" style="text-align:left;"><b>${tr('final_balance')}</b></td><td><b class="red-text">${currentDebt.toFixed(2)} ${cur}</b></td></tr>`;
@@ -422,18 +164,19 @@ function showCustomerStatement(custId) {
   document.getElementById('statementContent').innerHTML = html;
   document.getElementById('customerStatementModal').style.display = 'flex';
 }
+
 function printCustomerStatement() {
   if (!activeStatementCustomerId) return;
   const data = getStatementData(activeStatementCustomerId);
   if (!data) return;
 
   const { cust, transactions, initialBalance, currentDebt } = data;
-  const cur = state.storeSettings.currency || (currentLang === 'en' ? 'EGP' : 'ج.م');
-  const storeName = state.storeSettings.name || (currentLang === 'en' ? 'My Store' : 'متجري');
+  const cur = state.storeSettings.currency || 'ج.م';
+  const storeName = state.storeSettings.name || 'متجري';
   const en = currentLang === 'en';
 
   const win = window.open('', '_blank');
-  if (!win) return showNotification(currentLang === 'en' ? 'Allow pop-ups to print.' : 'اسمح بالنوافذ المنبثقة للطباعة', 'warning');
+  if (!win) return showNotification(tr('allow_popups'), 'warning');
 
   let rows = '';
   let runningBalance = initialBalance;
@@ -442,13 +185,7 @@ function printCustomerStatement() {
   transactions.forEach(t => {
     runningBalance += t.debit;
     runningBalance -= t.credit;
-    rows += `<tr>
-      <td>${new Date(t.date).toLocaleDateString(en ? 'en-US' : 'ar-EG')}</td>
-      <td>${escapeHTML(t.desc)}</td>
-      <td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td>
-      <td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td>
-      <td>${runningBalance.toFixed(2)}</td>
-    </tr>`;
+    rows += `<tr><td>${new Date(t.date).toLocaleDateString(en ? 'en-US' : 'ar-EG')}</td><td>${escapeHTML(t.desc)}</td><td>${t.debit > 0 ? t.debit.toFixed(2) : '-'}</td><td>${t.credit > 0 ? t.credit.toFixed(2) : '-'}</td><td>${runningBalance.toFixed(2)}</td></tr>`;
   });
 
   win.document.write(`
@@ -457,7 +194,7 @@ function printCustomerStatement() {
     </head><body>
     <h1>${escapeHTML(storeName)}</h1>
     <h2>${tr('statement_title')} ${escapeHTML(cust.name)}</h2>
-    <table><thead><tr><th>${tr('th_date')}</th><th>${en ? 'Description' : 'البيان'}</th><th>${en ? 'Debit' : 'عليه (مدين)'}</th><th>${en ? 'Credit' : 'له (دائن)'}</th><th>${tr('th_balance')}</th></tr></thead>
+    <table><thead><tr><th>${tr('th_date')}</th><th>${tr('statement_description_label')}</th><th>${tr('statement_debit_label')}</th><th>${tr('statement_credit_label')}</th><th>${tr('th_balance')}</th></tr></thead>
     <tbody>${rows}<tr class="total"><td colspan="4" style="text-align:${en ? 'right' : 'left'};">${tr('final_balance')}</td><td>${currentDebt.toFixed(2)} ${cur}</td></tr></tbody></table>
     <script>window.onload=function(){setTimeout(function(){window.print()},300)};<\/script>
     </body></html>
@@ -471,32 +208,31 @@ function sendCustomerStatementWhatsApp() {
   if (!data) return;
 
   const { cust, transactions, initialBalance, currentDebt } = data;
-  const cur = state.storeSettings.currency || (currentLang === 'en' ? 'EGP' : 'ج.م');
-  const storeName = state.storeSettings.name || (currentLang === 'en' ? 'My Store' : 'متجري');
-  const en = currentLang === 'en';
+  const cur = state.storeSettings.currency || 'ج.م';
+  const storeName = state.storeSettings.name || 'متجري';
 
-  let message = en ? `Hello ${cust.name},\n` : `أهلاً ${cust.name}،\n`;
-  message += en ? `Your statement in "${storeName}":\n\n` : `كشف حسابكم في "${storeName}":\n\n`;
-
-  if (initialBalance !== 0) {
-    message += en ? `🔹 Previous balance: ${initialBalance.toFixed(2)} ${cur}\n` : `🔹 رصيد سابق: ${initialBalance.toFixed(2)} ${cur}\n`;
-  }
-
-  message += en ? `🔹 Recent transactions:\n` : `🔹 الحركات الأخيرة:\n`;
+  const prevBalanceBlock = initialBalance !== 0
+    ? tr('wa_statement_prev_balance').replace('{amount}', initialBalance.toFixed(2)).replace('{currency}', cur) + '\n'
+    : '';
 
   const recentTransactions = transactions.slice(-5).reverse();
-  recentTransactions.forEach(t => {
-    if (t.debit > 0) message += en ? `- Invoice: ${t.debit.toFixed(2)} ${cur}\n` : `- فاتورة بـ ${t.debit.toFixed(2)} ${cur}\n`;
-    if (t.credit > 0) message += en ? `- Payment: ${t.credit.toFixed(2)} ${cur}\n` : `- دفعة بـ ${t.credit.toFixed(2)} ${cur}\n`;
-  });
+  const transactionsText = recentTransactions.map(t => {
+    if (t.debit > 0) return tr('wa_statement_invoice_line').replace('{amount}', t.debit.toFixed(2)).replace('{currency}', cur);
+    if (t.credit > 0) return tr('wa_statement_payment_line').replace('{amount}', t.credit.toFixed(2)).replace('{currency}', cur);
+    return '';
+  }).filter(Boolean).join('\n');
 
-  message += en ? `\n💰 Current remaining balance: *${currentDebt.toFixed(2)} ${cur}*\n\n` : `\n💰 الرصيد الحالي المتبقي: *${currentDebt.toFixed(2)} ${cur}*\n\n`;
-  message += en ? `Thank you for your business! 🌟` : `شاكرين تعاملكم معنا! 🌟`;
+  const message = tr('wa_statement_template')
+    .replace('{name}', cust.name)
+    .replace('{store}', storeName)
+    .replace('{prev_balance_block}', prevBalanceBlock)
+    .replace('{transactions}', transactionsText)
+    .replace('{current}', currentDebt.toFixed(2))
+    .replace('{currency}', cur);
 
   const countryCode = state.storeSettings.countryCode || '20';
   const phone = cust.phone && cust.phone !== '-' ? cust.phone.replace(/\D/g, '') : '';
   const finalPhone = phone.startsWith('0') ? countryCode + phone.substring(1) : phone;
-
   const whatsappUrl = phone ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(whatsappUrl, '_blank');
 }
@@ -505,7 +241,6 @@ function sendCustomerStatementWhatsApp() {
 async function importProductsCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
-
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'error');
 
   const reader = new FileReader();
@@ -518,7 +253,6 @@ async function importProductsCSV(event) {
 
     lines.forEach((line, index) => {
       if (index === 0 || !line.trim()) return;
-
       const cols = line.split(',');
       if (cols.length >= 5) {
         const name = cols[0].trim();
@@ -526,7 +260,6 @@ async function importProductsCSV(event) {
         const price = parseFloat(cols[2]) || 0;
         const cost = parseFloat(cols[3]) || 0;
         const stock = parseInt(cols[4]) || 0;
-
         if (name) {
           const newProd = {
             id: uid('PRD'), user_id: ownerId, name: name, barcode: barcode,
@@ -547,9 +280,7 @@ async function importProductsCSV(event) {
       if (navigator.onLine && supabaseClient) {
         await supabaseClient.from('products').insert(newProductsToUpload);
       }
-      if (typeof addAuditLog === 'function') {
-        addAuditLog('import_products_csv', { count: addedCount });
-      }
+      if (typeof addAuditLog === 'function') addAuditLog('import_products_csv', { count: addedCount });
       saveData();
       renderProducts();
       showNotification(tr('csv_success') + addedCount + tr('csv_success_end'));
@@ -567,9 +298,7 @@ function toggleActionMenu(event, id) {
   const menu = document.getElementById('menu-' + id);
   if (!menu) return;
   const isShowing = menu.classList.contains('show');
-
   document.querySelectorAll('.action-dropdown-menu').forEach(m => m.classList.remove('show'));
-
   if (!isShowing) menu.classList.add('show');
 }
 
@@ -604,7 +333,6 @@ function showCustomConfirm(title, message, onConfirm) {
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
-
   document.getElementById('confirmBtn').onclick = () => {
     document.getElementById('customConfirmModal').remove();
     onConfirm();
