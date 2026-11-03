@@ -2,7 +2,7 @@
    متجري v7.10.1 - Service Worker
    ========================================================== */
 
-const CACHE_NAME = 'matjari-cache-v7.10.1'; 
+const CACHE_NAME = 'matjari-cache-v7.10.2'; 
 
 const ASSETS = [
   './index.html', './style.css', './manifest.json', './icon-192.png', './icon-512.png',
