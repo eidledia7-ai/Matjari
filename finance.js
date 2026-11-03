@@ -349,7 +349,7 @@ function renderShiftCashBreakdown(shiftId, expectedTotalFromCore) {
   if (!container) return;
   if (!shiftId) { container.style.display = 'none'; container.innerHTML = ''; return; }
 
-  const cur = state.storeSettings.currency || 'ج.م';
+  const cur = currencyLabel();
   const shift = (state.shifts || []).find(s => s.id === shiftId);
   const openingCash = Number(shift?.opening_cash ?? shift?.openingCash) || 0;
 

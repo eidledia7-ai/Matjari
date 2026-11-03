@@ -4,6 +4,11 @@ function tr(key) {
   const dict = translations[currentLang] || translations.ar;
   return dict[key] || translations.ar[key] || translations.en[key] || key;
 }
+function currencyLabel() {
+  const raw = String((state.storeSettings && state.storeSettings.currency) || 'ج.م').trim();
+  if (currentLang === 'en' && raw === 'ج.م') return 'EGP';
+  return raw;
+}
 
 function setLanguage(lang) {
   currentLang = lang;
@@ -44,6 +49,7 @@ function setLanguage(lang) {
 function toggleLanguage() {
   setLanguage(currentLang === 'ar' ? 'en' : 'ar');
   renderAll();
+  setLanguage(currentLang); // إعادة تطبيق بعد renderAll
 }
 
 /* ============ القوائم الفرعية المنسدلة ============ */
@@ -132,7 +138,7 @@ function today() {
 }
 
 function money(n) {
-  const cur = String((state.storeSettings && state.storeSettings.currency) || 'ج.م').trim();
+  const cur = currencyLabel();
   const decimals = 2;
   return (Number(n) || 0).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + cur;
 }
@@ -302,6 +308,8 @@ function showPage(pageId) {
   if (pageId === 'operationsCenter') renderOperationsCenter();
   if (pageId === 'settStore') loadStoreSettings();
   if (pageId === 'settStaff') { loadStaffList(); renderAuditLogs(); }
+    // ✅ v7.10.2 — ترجمة كل data-i18n عند عرض الصفحة
+  if (typeof setLanguage === 'function') setLanguage(currentLang);
 }
 
 /* ============ دوال الكاشير الجديدة (v7.7) ============ */
@@ -348,4 +356,8 @@ if (navigator.storage && navigator.storage.persist) {
   if (navigator.onLine && typeof refreshStockConflictIndicator === 'function') {
     setTimeout(() => refreshStockConflictIndicator().catch(() => {}), 3000);
   }
+}
+function toggleDarkMode() {
+  document.body.classList.toggle('dark-mode');
+  localStorage.setItem('matjari_dark', document.body.classList.contains('dark-mode') ? '1' : '0');
 }

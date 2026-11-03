@@ -1037,6 +1037,9 @@ auth_data_load_fail_prefix: "تعذر تحميل البيانات: ",
   ops_load_error: "خطأ في التحميل",
   op_type_sale: "بيع",
   op_type_return: "مرتجع",
+  contact_whatsapp_btn: "واتساب: 01224764296",search_sales: "بحث في المبيعات",
+contact_email_btn: "إيميل: Info@matjari.com",
+contact_facebook_btn: "صفحة فيسبوك",
   op_type_expense: "مصروف",
   op_type_payment: "دفعة عميل",
   op_type_delete_sale: "حذف فاتورة",
@@ -1362,6 +1365,13 @@ export_modal_desc: "Choose the records scope:",
   sync_now: "🔄 Sync Now",
   sync_success: "Sync completed successfully ✅",
   sync_failed: "Sync failed",
+  
+  sales_log: "📋 Sales Log",
+show_report: "📊 Show Report",
+search_sales: "Search Sales",
+contact_whatsapp_btn: "WhatsApp: 01224764296",
+contact_email_btn: "Email: Info@matjari.com",
+contact_facebook_btn: "Facebook Page",
   // ═══════════════════════════════════════════════════════════
 // ==== TABLE HEADERS (shared) ====
 // ═══════════════════════════════════════════════════════════
@@ -2199,13 +2209,32 @@ const PLANS = [
 
 /* ============ مميزات كل باقة ============ */
 const PLAN_FEATURES = [
-  { key: 'products',  label_ar: 'عدد المنتجات',        label_en: 'Products',          values: { starter: '500 منتج',    growth: '3,000 منتج', pro: 'غير محدود' } },
-  { key: 'users',     label_ar: 'عدد المستخدمين',       label_en: 'Users',             values: { starter: 'مستخدم واحد', growth: '3 مستخدمين', pro: 'غير محدود' } },
-  { key: 'whatsapp',  label_ar: 'إرسال الفواتير واتساب', label_en: 'WhatsApp Invoices', values: { starter: false,         growth: true,         pro: true } },
-  { key: 'compare',   label_ar: 'مقارنة الفترات',       label_en: 'Compare Periods',   values: { starter: false,         growth: true,         pro: true } },
-  { key: 'reports',   label_ar: 'تقارير مالية متقدمة',   label_en: 'Advanced Reports',  values: { starter: true,          growth: true,         pro: true } },
-  { key: 'export',    label_ar: 'تصدير Excel / CSV',    label_en: 'Excel Export',      values: { starter: true,          growth: true,         pro: true } },
-  { key: 'support',   label_ar: 'الدعم الفني',          label_en: 'Support',           values: { starter: 'واتساب',      growth: 'أولوية',     pro: 'مدير حساب' } }
+  { key: 'products', label_ar: 'عدد المنتجات', label_en: 'Products',
+    values: {
+      starter: { ar: '500 منتج', en: '500 products' },
+      growth:  { ar: '3,000 منتج', en: '3,000 products' },
+      pro:     { ar: 'غير محدود', en: 'Unlimited' }
+    } },
+  { key: 'users', label_ar: 'عدد المستخدمين', label_en: 'Users',
+    values: {
+      starter: { ar: 'مستخدم واحد', en: '1 user' },
+      growth:  { ar: '3 مستخدمين', en: '3 users' },
+      pro:     { ar: 'غير محدود', en: 'Unlimited' }
+    } },
+  { key: 'whatsapp', label_ar: 'إرسال الفواتير واتساب', label_en: 'WhatsApp Invoices',
+    values: { starter: false, growth: true, pro: true } },
+  { key: 'compare', label_ar: 'مقارنة الفترات', label_en: 'Compare Periods',
+    values: { starter: false, growth: true, pro: true } },
+  { key: 'reports', label_ar: 'تقارير مالية متقدمة', label_en: 'Advanced Reports',
+    values: { starter: true, growth: true, pro: true } },
+  { key: 'export', label_ar: 'تصدير Excel / CSV', label_en: 'Excel Export',
+    values: { starter: true, growth: true, pro: true } },
+  { key: 'support', label_ar: 'الدعم الفني', label_en: 'Support',
+    values: {
+      starter: { ar: 'واتساب', en: 'WhatsApp' },
+      growth:  { ar: 'أولوية', en: 'Priority' },
+      pro:     { ar: 'مدير حساب', en: 'Account Manager' }
+    } }
 ];
 
 /* ============ حدود كل باقة ============ */

@@ -4,7 +4,7 @@ function renderSubscriptionPage() {
   if (!container) return;
 
   const sub = state.subscription || {};
-  const cur = state.storeSettings.currency || 'ج.م';
+  const cur = currencyLabel();
 
   let endDate = null;
   if (sub.plan === 'trial' && sub.trial_ends_at) endDate = new Date(sub.trial_ends_at).getTime();
@@ -83,6 +83,7 @@ function buildPlanFeaturesList(planId, en) {
     const label = en ? f.label_en : f.label_ar;
     if (val === true) features.push(label);
     else if (val === false) return;
+    else if (val && typeof val === 'object') features.push(label + ': ' + (en ? val.en : val.ar));
     else features.push(label + ': ' + val);
   });
   return features;
@@ -172,7 +173,7 @@ function showPlanDetail(planId, context) {
   const plan = PLANS.find(p => p.id === planId);
   if (!plan) return;
 
-  const cur = state.storeSettings.currency || 'ج.م';
+  const cur = currencyLabel();
 
   const old = document.getElementById('planDetailModal');
   if (old) old.remove();

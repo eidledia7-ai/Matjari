@@ -63,7 +63,7 @@ function _safeSupplierBalance(supId) {
 }
 
 function renderDashboard() {
-  const cur = state.storeSettings.currency;
+  const cur = currencyLabel();
 
   const allTimeFrom = _getAllTimeStart();
   const allTimeTo   = _getTodayStr();

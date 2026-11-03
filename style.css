@@ -418,7 +418,7 @@ body.auth-locked .app-header, body.auth-locked .sidebar, body.auth-locked .sideb
 
 /* ============ التنبيهات الذكية والهدف الشهري ============ */
 .smart-alert {
-  display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px;
   border-radius: var(--radius-md); margin-bottom: 16px; font-size: 14px; font-weight: 600;
   animation: slideInRight 0.3s ease; border: 1px solid;
 }
@@ -430,6 +430,7 @@ body.auth-locked .app-header, body.auth-locked .sidebar, body.auth-locked .sideb
 .smart-alert .alert-title { font-size: 15px; margin-bottom: 4px; font-weight: 800; }
 .smart-alert .alert-subtitle { font-size: 13px; font-weight: 500; opacity: 0.8; }
 .smart-alert .alert-action { padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; background: #fff; border: 1px solid currentColor; box-shadow: none; }
+.smart-alert .alert-action { flex-shrink: 0; }
 .smart-alert .alert-action:hover { background: rgba(255,255,255,0.5); }
 @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
@@ -2019,4 +2020,9 @@ body.dark-mode .skeleton {
 /* ─── Accessibility ─── */
 @media (prefers-reduced-motion: reduce) {
   .sw-modal, .sw-modal-box { animation: none !important; }
+}
+@media (max-width: 500px) {
+  .smart-alert { flex-direction: column; align-items: stretch; }
+  .smart-alert > div { width: 100%; }
+  .smart-alert .alert-action { width: 100%; margin-top: 8px; }
 }
