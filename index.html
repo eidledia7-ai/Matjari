@@ -41,6 +41,9 @@
   <script src="auto-backup.js" defer></script>
   <script src="cashier-hotkeys.js" defer></script>
   <script src="main.js" defer></script>
+  <!-- v7.11a — Import Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
 <body class="auth-locked">
 
@@ -429,7 +432,12 @@
       <div class="btn-group">
         <button class="btn orange small-btn" onclick="openBarcodePrintModal()" data-i18n="print_barcode">🏷️ طباعة باركود</button>
         <button class="btn secondary small-btn" onclick="openExportModal('products')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
-        <label class="btn green small-btn" style="cursor:pointer; margin:0;">📥 <span data-i18n="import_csv_btn">استيراد Excel</span><input type="file" accept=".csv" onchange="importProductsCSV(event)" style="display:none;"></label>
+      <div id="importDropZone" style="display:inline-block;">
+  <label class="btn green small-btn" style="cursor:pointer;margin:0;">
+    📥 <span data-i18n="import_file_btn">استيراد منتجات</span>
+    <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,.fods,.json" onchange="importProductsFile(event)" style="display:none;">
+  </label>
+</div>
       </div>
     </div>
     <div class="form-group mt-15"><input type="text" id="productSearch" data-i18n-placeholder="product_search_ph" placeholder="بحث..." oninput="renderProducts()"></div>
@@ -1042,11 +1050,48 @@
     </div>
   </div>
 
-  <!-- Scripts -->
+
+<!-- v7.11a — Import Preview Modal -->
+<div id="excelImportModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:900px;width:100%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+      <h3 style="margin:0;">📥 <span data-i18n="import_preview_title">معاينة الاستيراد</span></h3>
+      <button onclick="closeImportModal()" style="background:transparent;border:none;font-size:24px;cursor:pointer;">✕</button>
+    </div>
+
+    <div id="importSummary"></div>
+
+    <div id="importPreviewBody" style="margin:15px 0;"></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid #dce5ec;padding-top:15px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary small-btn" onclick="downloadImportErrors()" data-i18n="import_download_errors">📥 تنزيل الأخطاء</button>
+        <button class="btn secondary small-btn" onclick="downloadImportTemplate()" data-i18n="import_download_template">📋 تحميل نموذج</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn grey" onclick="closeImportModal()" data-i18n="cancel_btn">إلغاء</button>
+        <button class="btn green" id="importExecuteBtn" onclick="executeImport()" data-i18n="import_execute_btn">✅ استيراد الآن</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const dz = document.getElementById('importDropZone');
+  if (!dz) return;
+  ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.style.opacity = '0.6'; }));
+  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.style.opacity = '1'; }));
+  dz.addEventListener('drop', function(ev) {
+    const f = ev.dataTransfer?.files?.[0];
+    if (f) importProductsFile({ target: { files: [f], value: '' } });
+  });
+});
+</script>
+ <!-- Scripts -->
   <script src="sync-queue.js" defer></script>
   <script src="stock-conflicts.js" defer></script>
   <script src="connection-banner.js" defer></script>
   <script src="operations-center.js" defer></script>
-
+  
 </body>
 </html>

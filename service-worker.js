@@ -1,8 +1,8 @@
 /* ==========================================================
-   متجري v7.10.1 - Service Worker
+   متجري v7.11.0 - Service Worker
    ========================================================== */
 
-const CACHE_NAME = 'matjari-cache-v7.10.2'; 
+const CACHE_NAME = 'matjari-cache-v7.11.0'; 
 
 const ASSETS = [
   './index.html', './style.css', './manifest.json', './icon-192.png', './icon-512.png',
@@ -14,7 +14,10 @@ const ASSETS = [
   './finance-core.js', './cashier-hotkeys.js', './auto-backup.js', './sync-queue.js',
   './stock-conflicts.js', './connection-banner.js', './operations-center.js',
   /* الخطوط */
-  './cairo-regular.ttf', './cairo-semibold.ttf', './cairo-bold.ttf', './cairo-extrabold.ttf', './cairo-black.ttf'
+  './cairo-regular.ttf', './cairo-semibold.ttf', './cairo-bold.ttf', './cairo-extrabold.ttf', './cairo-black.ttf',
+  /* v7.11a — CDN Libraries */
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js'
 ];
 
 self.addEventListener('install', function (event) {
@@ -54,10 +57,13 @@ self.addEventListener('fetch', function (event) {
   const url = new URL(request.url);
   
   if (!url.protocol.startsWith('http')) return;
-  if (url.origin !== self.location.origin) return;
+
+  const CDN_ALLOWLIST = ['cdn.jsdelivr.net'];
+  if (url.origin !== self.location.origin && !CDN_ALLOWLIST.includes(url.hostname)) return;
+
   if (url.href.includes('supabase.co')) return;
 
-  const isStaticAsset = ASSETS.some(asset => url.pathname.endsWith(asset.replace('./', '')));
+  const isStaticAsset = ASSETS.some(asset => url.href === asset || url.pathname.endsWith(asset.replace('./', '')));
 
   if (isStaticAsset || request.mode === 'navigate') {
     event.respondWith(networkFirst(request));

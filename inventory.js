@@ -514,3 +514,193 @@ function renderReturns() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+/* ============ v7.11a — Excel/CSV/JSON Import (Professional) ============ */
+let _importState = { rows: [], valid: 0, skipped: 0, errors: 0, fileName: '' };
+
+async function importProductsFile(event) {
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  const file = event.target.files[0]; if (!file) return;
+  event.target.value = '';
+
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const allowed = ['xlsx','xls','xlsm','xlsb','ods','fods','csv','tsv','txt','json'];
+  if (!allowed.includes(ext)) return showNotification(tr('import_unsupported_ext'), 'error');
+  if (file.size > 5 * 1024 * 1024) return showNotification(tr('import_file_too_large'), 'error');
+
+  showLoading(tr('import_reading'));
+  try {
+    const rows = await _readImportFile(file, ext);
+    if (!rows || !rows.length) { hideLoading(); return showNotification(tr('import_no_data'), 'warning'); }
+    if (rows.length > 1000) { hideLoading(); return showNotification(tr('import_too_many_rows'), 'error'); }
+    _importState = { rows, valid: 0, skipped: 0, errors: 0, fileName: file.name };
+    _validateImportRows();
+    hideLoading();
+    _openImportModal();
+  } catch (e) { hideLoading(); showNotification(tr('import_read_fail') + ' ' + e.message, 'error'); }
+}
+
+async function _readImportFile(file, ext) {
+  if (ext === 'json') {
+    const txt = await file.text();
+    const parsed = JSON.parse(txt);
+    if (!Array.isArray(parsed)) throw new Error(tr('import_json_not_array'));
+    return parsed.map((o, i) => _sanitizeJsonRow(o, i));
+  }
+  if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
+    const txt = await file.text();
+    const delim = ext === 'tsv' ? '\t' : ',';
+    const res = Papa.parse(txt, { header: true, skipEmptyLines: true, delimiter: delim });
+    if (res.errors?.length) console.warn('CSV warnings:', res.errors);
+    return res.data || [];
+  }
+  // Excel / ODS / FODS
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+
+function _sanitizeJsonRow(obj, idx) {
+  const allowed = ['name','barcode','category','price','cost','stock','min_stock'];
+  const out = {};
+  allowed.forEach(k => { if (obj && Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k]; });
+  return out;
+}
+
+function _validateImportRows() {
+  const seen = new Set();
+  const existing = new Set((state.products || []).map(p => normalizeBarcode(p.barcode)).filter(Boolean));
+  _importState.valid = 0; _importState.skipped = 0; _importState.errors = 0;
+  _importState.rows = _importState.rows.map((raw, i) => {
+    const name = String(raw.name || '').trim();
+    const barcode = String(raw.barcode || '').trim();
+    const category = String(raw.category || '').trim() || tr('general_cat');
+    const price = Number(raw.price) || 0;
+    const cost = Number(raw.cost) || 0;
+    const stock = Number(raw.stock) || 0;
+    const min_stock = Number(raw.min_stock) || 5;
+    const nb = normalizeBarcode(barcode);
+    let status = 'new', reason = '';
+
+    if (!name || name.length < 2 || name.length > 100) { status = 'error'; reason = tr('import_err_name'); }
+    else if (price < 0 || cost < 0 || stock < 0 || min_stock < 0) { status = 'error'; reason = tr('import_err_negative'); }
+    else if (nb && existing.has(nb)) { status = 'skipped'; reason = tr('import_err_dup_db'); }
+    else if (nb && seen.has(nb)) { status = 'skipped'; reason = tr('import_err_dup_file'); }
+    else { seen.add(nb); }
+
+    if (status === 'new') _importState.valid++;
+    else if (status === 'skipped') _importState.skipped++;
+    else _importState.errors++;
+
+    return { rowNum: i + 2, name, barcode, category, price, cost, stock, min_stock, status, reason };
+  });
+}
+
+function _openImportModal() {
+  const m = document.getElementById('excelImportModal');
+  const body = document.getElementById('importPreviewBody');
+  const summary = document.getElementById('importSummary');
+  if (!m || !body || !summary) return;
+
+  summary.innerHTML =
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
+      '<span class="badge" style="background:#dcfce7;color:#166534;">✅ ' + _importState.valid + ' ' + tr('import_new') + '</span>' +
+      '<span class="badge" style="background:#fef3c7;color:#92400e;">⏭️ ' + _importState.skipped + ' ' + tr('import_skipped') + '</span>' +
+      '<span class="badge" style="background:#fee2e2;color:#991b1b;">❌ ' + _importState.errors + ' ' + tr('import_errors') + '</span>' +
+    '</div>';
+
+  const rowsToShow = _importState.rows.slice(0, 200);
+  let html = '<div class="table-wrap" style="max-height:400px;overflow:auto;"><table class="data-table"><thead><tr>' +
+    '<th>#</th><th>' + tr('th_name') + '</th><th>' + tr('th_barcode') + '</th><th>' + tr('th_price') + '</th><th>' + tr('th_stock') + '</th><th>' + tr('th_status') + '</th></tr></thead><tbody>';
+  rowsToShow.forEach(r => {
+    const color = r.status === 'new' ? '#dcfce7' : r.status === 'skipped' ? '#fef3c7' : '#fee2e2';
+    const icon = r.status === 'new' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
+    html += '<tr style="background:' + color + '20;"><td>' + r.rowNum + '</td><td>' + escapeHTML(r.name || '—') + '</td><td>' + escapeHTML(r.barcode || '—') + '</td><td>' + r.price + '</td><td>' + r.stock + '</td><td>' + icon + ' ' + (r.reason ? escapeHTML(r.reason) : tr('import_' + r.status)) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  if (_importState.rows.length > 200) html += '<p class="text-muted" style="text-align:center;padding:8px;">' + tr('import_showing_200') + '</p>';
+  body.innerHTML = html;
+
+  const btn = document.getElementById('importExecuteBtn');
+  if (btn) btn.disabled = _importState.valid === 0;
+  m.style.display = 'flex';
+}
+
+function closeImportModal() { const m = document.getElementById('excelImportModal'); if (m) m.style.display = 'none'; }
+
+async function executeImport() {
+  if (_importState.valid === 0) return;
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+
+  const lim = checkLimit('products', (state.products.length || 0) + _importState.valid);
+  if (!lim.allowed) { closeImportModal(); return showNotification(tr('import_limit_exceeded'), 'error'); }
+
+  const toInsert = _importState.rows.filter(r => r.status === 'new');
+  const ownerId = state.currentUser.id;
+  const productsBatch = toInsert.map(r => ({
+    id: uid('PRD'), user_id: ownerId, name: r.name, barcode: r.barcode,
+    category: r.category, price: r.price, cost: r.cost, stock: r.stock, min_stock: r.min_stock
+  }));
+  const movesBatch = productsBatch.filter(p => Number(p.stock) > 0).map(p => ({
+    id: uid('SM'), user_id: ownerId, product_id: p.id, product_name: p.name,
+    type: 'in', qty: p.stock, old_stock: 0, new_stock: p.stock,
+    reason: tr('import_reason_excel'), date: new Date().toISOString()
+  }));
+
+  const rollback = () => {
+    state.products = state.products.filter(p => !productsBatch.find(b => b.id === p.id));
+  };
+
+  try {
+    // محلي أولاً
+    productsBatch.forEach(p => state.products.push({ id: p.id, name: p.name, barcode: p.barcode, category: p.category, price: p.price, cost: p.cost, stock: p.stock, min_stock: p.min_stock, minStock: p.min_stock }));
+    movesBatch.forEach(m => state.stockMoves.unshift({ ...m, productId: m.product_id, productName: m.product_name, oldStock: 0, newStock: m.new_stock }));
+
+    if (navigator.onLine && supabaseClient) {
+      const { error: e1 } = await supabaseClient.from('products').insert(productsBatch);
+      if (e1) throw e1;
+      if (movesBatch.length) {
+        const { error: e2 } = await supabaseClient.from('stock_moves').insert(movesBatch);
+        if (e2) throw e2;
+      }
+    }
+
+    if (typeof addAuditLog === 'function') addAuditLog('import_products_excel', { count: productsBatch.length, skipped: _importState.skipped, errors: _importState.errors, file: _importState.fileName });
+
+    saveData();
+    renderProducts(); renderStockMoves(); renderDashboard(); updateStockBadge();
+    closeImportModal();
+    showNotification(tr('import_success').replace('{n}', productsBatch.length), 'success');
+    _importState = { rows: [], valid: 0, skipped: 0, errors: 0, fileName: '' };
+  } catch (err) {
+    rollback();
+    closeImportModal();
+    showNotification(tr('import_fail') + ' ' + (err.message || ''), 'error');
+  }
+}
+
+function downloadImportErrors() {
+  const bad = _importState.rows.filter(r => r.status !== 'new');
+  if (!bad.length) return showNotification(tr('import_no_errors'), 'info');
+  let csv = '\uFEFF' + '"' + tr('import_errors_report') + '"\r\n\r\n';
+  csv += ['#','Name','Barcode','Reason'].map(h => '"' + h + '"').join(',') + '\r\n';
+  bad.forEach(r => { csv += [r.rowNum, '"' + (r.name||'').replace(/"/g,'""') + '"', '"' + (r.barcode||'').replace(/"/g,'""') + '"', '"' + (r.reason||'').replace(/"/g,'""') + '"'].join(',') + '\r\n'; });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'import-errors-' + today() + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function downloadImportTemplate() {
+  const csv = '\uFEFF' + '"name","barcode","category","price","cost","stock","min_stock"\r\n' +
+    '"منتج نموذج 1","6221030101010","عام","15.00","10.00","50","5"\r\n' +
+    '"منتج نموذج 2","","مشروبات","8.00","5.00","100","10"\r\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'products-template.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
