@@ -81,7 +81,14 @@ function addToCartById(prodId, qty) {
   const activeId = document.activeElement ? document.activeElement.id : '';
   if (activeId !== 'productSearchInput') {
     refocusCashierInput && refocusCashierInput();
-  }
+if (state.storeSettings && (state.storeSettings.autoPrintOnScan || state.storeSettings.auto_print_on_scan)) {
+  setTimeout(() => {
+    if (typeof completeSale === 'function' && state.cart.length === 1) {
+      completeSale();
+    }
+  }, 200);
+}
+    }
 }
 
 function addToCartManual() {
@@ -103,6 +110,7 @@ function renderProductGrid() {
   const search = (searchEl ? searchEl.value : '').trim().toLowerCase();
 
   const filtered = (state.products || []).filter(function(p) {
+  
     if (_activeCategory) {
       const cat = (p.category || '').trim();
       if (cat !== _activeCategory) return false;
@@ -112,6 +120,11 @@ function renderProductGrid() {
         || (p.barcode && String(p.barcode).indexOf(search) !== -1)
         || (p.category && p.category.toLowerCase().indexOf(search) !== -1);
   });
+  filtered.sort((a, b) => {
+  const aPin = (a.is_pinned === true || a.isPinned === true) ? 1 : 0;
+  const bPin = (b.is_pinned === true || b.isPinned === true) ? 1 : 0;
+  return bPin - aPin; // المثبت أولاً
+});
 
   if (filtered.length === 0) {
     grid.innerHTML = '';
@@ -321,6 +334,7 @@ function renderCart() {
   const base = Math.max(0, subtotal - discountAmount - pointsDiscount);
   const vat = financeCore.calcVatForSale(base);
   const finalTotal = vat.total;
+  state._lastCartTotal = finalTotal;
 
   const t = document.getElementById('cartTotal');
   if (t) {
@@ -1027,27 +1041,50 @@ function bindCustomerSearch() {
   });
   searchInput.addEventListener('focus', function() { renderCustomerDropdown(searchInput.value); });
   searchInput.addEventListener('keydown', function(e) {
-    const dd = document.getElementById('saleCustomerDropdown');
-    if (!dd || dd.style.display === 'none') return;
-    const items = dd.querySelectorAll('.customer-dropdown-item');
-    if (items.length === 0) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      _activeCustIndex = Math.min(_activeCustIndex + 1, items.length - 1);
-      items.forEach((it, i) => it.classList.toggle('active', i === _activeCustIndex));
-      items[_activeCustIndex].scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      _activeCustIndex = Math.max(_activeCustIndex - 1, 0);
-      items.forEach((it, i) => it.classList.toggle('active', i === _activeCustIndex));
-      items[_activeCustIndex].scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'Enter' && _activeCustIndex >= 0) {
-      e.preventDefault();
+  const dd = document.getElementById('saleCustomerDropdown');
+  if (!dd) return;
+  const isVisible = dd.style.display !== 'none';
+  const items = isVisible ? dd.querySelectorAll('.customer-dropdown-item') : [];
+  
+  if (e.key === 'ArrowDown' && isVisible) {
+    e.preventDefault();
+    _activeCustIndex = Math.min(_activeCustIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.classList.toggle('active', i === _activeCustIndex));
+    if (items[_activeCustIndex]) items[_activeCustIndex].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp' && isVisible) {
+    e.preventDefault();
+    _activeCustIndex = Math.max(_activeCustIndex - 1, 0);
+    items.forEach((it, i) => it.classList.toggle('active', i === _activeCustIndex));
+    if (items[_activeCustIndex]) items[_activeCustIndex].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (isVisible && _activeCustIndex >= 0 && items[_activeCustIndex]) {
       items[_activeCustIndex].click();
-    } else if (e.key === 'Escape') {
-      dd.style.display = 'none';
+    } else {
+      const query = searchInput.value.trim();
+      if (!query) return;
+      const existing = state.customers.find(c => c.name === query || c.phone === query);
+      if (existing) {
+        selectCustomerFromDropdown(existing.id);
+      } else {
+        const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+        const newCustId = uid('CUST');
+        const isPhone = /^[0-9+\-\s]+$/.test(query);
+        const newCust = { id: newCustId, user_id: ownerId, name: isPhone ? 'عميل ' + query : query, phone: isPhone ? query : '', opening_debt: 0, points: 0 };
+        state.customers.push({ id: newCustId, name: newCust.name, phone: newCust.phone, openingDebt: 0, opening_debt: 0, points: 0 });
+        if (navigator.onLine && supabaseClient) {
+          supabaseClient.from('customers').insert(newCust).then(() => {}).catch(() => {});
+        }
+        saveData();
+        selectCustomerFromDropdown(newCustId);
+        showNotification(tr('customer_saved'), 'success');
+      }
     }
-  });
+    dd.style.display = 'none';
+  } else if (e.key === 'Escape') {
+    dd.style.display = 'none';
+  }
+});
 
   if (!document._v7101CustClickBound) {
     document._v7101CustClickBound = true;
@@ -1224,4 +1261,15 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() { setTimeout(initSalesWorkspaceV710, 400); });
 } else {
   setTimeout(initSalesWorkspaceV710, 400);
+}
+function setQuickPaid(amount) {
+  const paidInput = document.getElementById('salePaid');
+  if (!paidInput) return;
+  if (amount === 'exact') {
+    paidInput.value = (state._lastCartTotal || 0).toFixed(2);
+  } else {
+    paidInput.value = amount;
+  }
+  paidInput.dispatchEvent(new Event('input', { bubbles: true }));
+  paidInput.dispatchEvent(new Event('change', { bubbles: true }));
 }

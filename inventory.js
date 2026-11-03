@@ -60,6 +60,21 @@ async function saveProduct() {
   showNotification(tr('product_saved'));
 }
 
+async function togglePinProduct(id) {
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  const prod = state.products.find(p => p.id === id);
+  if (!prod) return;
+  const newVal = !(prod.is_pinned === true || prod.isPinned === true);
+  prod.is_pinned = newVal;
+  prod.isPinned = newVal;
+  
+  if (navigator.onLine && supabaseClient) {
+    await supabaseClient.from('products').update({ is_pinned: newVal }).eq('id', id);
+  }
+  saveData();
+  renderProducts();
+  showNotification(newVal ? tr('pin_product') : tr('unpin_product'), 'success');
+}
 function clearProductForm() {
   ['productId', 'productName', 'productBarcode', 'productCategory', 'productPrice', 'productCost', 'productStock'].forEach(function(id) {
     const el = document.getElementById(id);
@@ -104,6 +119,16 @@ function renderProducts() {
       '<td>' + (Number(p.price) || 0) + '</td>' +
       '<td>' + (Number(p.cost) || 0) + '</td>' +
       '<td><b>' + (Number(p.stock) || 0) + '</b></td>' +
+      // داخل حلقة forEach
+const isPinned = p.is_pinned === true || p.isPinned === true;
+const pinIcon = isPinned ? '📌' : '📍';
+const pinTitle = isPinned ? tr('unpin_product') : tr('pin_product');
+
+// في سطر الأزرار <td>:
+'<td>' +
+  '<button class="small-btn ' + (isPinned ? 'orange' : 'grey') + '" onclick="togglePinProduct(\'' + p.id + '\')" title="' + pinTitle + '">' + pinIcon + '</button>' +
+  '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
+  // ... باقي الأزرار
       '<td>' +
        '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
 '<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">' + editBtn + '</button>' +

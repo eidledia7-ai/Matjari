@@ -26,6 +26,8 @@ function loadStoreSettings() {
   
   const printTypeEl = document.getElementById('storePrintType');
   if (printTypeEl) printTypeEl.value = s.printType || 'thermal';
+  const autoPrintEl = document.getElementById('autoPrintOnScan');
+if (autoPrintEl) autoPrintEl.checked = !!(s.autoPrintOnScan || s.auto_print_on_scan);
 
   const vatEnabledVal = (s.vatEnabled ?? s.vat_enabled ?? false) === true;
   const vatRateVal = Number(s.vatRate ?? s.vat_rate ?? 0) || 0;
@@ -104,7 +106,9 @@ async function saveStoreSettings() {
     pointsRate: parseFloat(document.getElementById('storePointsRate').value) || 0,
     pointValue: parseFloat(document.getElementById('storePointValue').value) || 0,
     printType: document.getElementById('storePrintType') ? document.getElementById('storePrintType').value : 'thermal',
-    vatEnabled: vatEnabledEl ? !!vatEnabledEl.checked : false,
+  autoPrintOnScan: document.getElementById('autoPrintOnScan') ? !!document.getElementById('autoPrintOnScan').checked : false,
+    
+        vatEnabled: vatEnabledEl ? !!vatEnabledEl.checked : false,
     vatRate: vatRateEl ? (parseFloat(vatRateEl.value) || 0) : 0,
     vatMode: vatModeEl ? (vatModeEl.value || 'inclusive') : 'inclusive',
     autoBackupEnabled:   abEnabledEl ? !!abEnabledEl.checked : false,
@@ -138,6 +142,7 @@ async function saveStoreSettings() {
       points_rate: newSettings.pointsRate,
       point_value: newSettings.pointValue,
       print_type: newSettings.printType,
+      auto_print_on_scan: newSettings.autoPrintOnScan,
       permissions: newSettings.permissions,
       vat_enabled: newSettings.vatEnabled,
       vat_rate: newSettings.vatRate,

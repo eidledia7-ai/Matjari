@@ -168,6 +168,7 @@ async function syncDown(ownerId) {
             taxNumber: data.tax_number, currency: data.currency, logo: data.logo,
             monthlyGoal: data.monthly_goal, pointsRate: data.points_rate,
             pointValue: data.point_value, printType: data.print_type,
+            autoPrintOnScan: data.auto_print_on_scan === true,
             permissions: data.permissions || {},
             vatEnabled: data.vat_enabled === true,
             vatRate: Number(data.vat_rate) || 0,
