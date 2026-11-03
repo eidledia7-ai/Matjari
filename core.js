@@ -252,7 +252,7 @@ function toggleSidebar(show) {
 }
 
 function showPage(pageId) {
-  if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'invReturns' && pageId !== 'home') {
+  if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'salesLog' && pageId !== 'invReturns' && pageId !== 'home') {
     showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
     pageId = 'sales';
   }
@@ -290,7 +290,7 @@ function showPage(pageId) {
   if (pageId === 'invProducts') renderProducts();
   if (pageId === 'invMoves') { populateAdjustDropdown(); renderStockMoves(); }
   if (pageId === 'invReturns') { populateReturnDropdowns(); renderReturns(); }
-  
+  if (pageId === 'salesLog') renderSales();
   if (pageId === 'partCustomers') { renderCustomers(); renderCustomerPayments(); }
   if (pageId === 'partSuppliers') { renderSuppliers(); renderPurchases(); renderSupplierPayments(); }
 

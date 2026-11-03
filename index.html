@@ -104,6 +104,9 @@
     
     <button data-page="home" onclick="showPage('home')" data-i18n="menu_home">🏠 الرئيسية</button>
     <button data-page="sales" onclick="showPage('sales')" data-i18n="menu_sales">🛒 نقطة البيع</button>
+    
+    <button data-page="salesLog" onclick="showPage('salesLog')" data-i18n="sales_log">📋 سجل المبيعات</button>
+    
     <button data-page="invReturns" onclick="showPage('invReturns')" data-i18n="tab_returns">🔄 المرتجعات</button>
 
     <div class="nav-group">
@@ -372,7 +375,34 @@
   </div>
 </div>
 
-
+<!-- 2b. سجل المبيعات -->
+<div id="salesLog" class="page">
+  <h2 data-i18n="sales_log">سجل المبيعات</h2>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0" data-i18n="sales_log">سجل المبيعات</h3>
+      <div class="btn-group">
+        <button class="btn red small-btn" onclick="clearTableLog('sales')" data-i18n="clear_log">🗑️ تصفير السجل</button>
+        <button class="btn secondary small-btn" onclick="openExportModal('sales')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+      </div>
+    </div>
+    <div class="form-grid mt-15">
+      <div class="form-group">
+        <label data-i18n="search_sales">بحث في المبيعات</label>
+        <input type="text" id="salesSearch" data-i18n-placeholder="search_placeholder" placeholder="بحث..." oninput="renderSales()">
+      </div>
+      <div class="form-group">
+        <label data-i18n="from_date">من تاريخ</label>
+        <input type="date" id="salesFrom" onchange="renderSales()">
+      </div>
+      <div class="form-group">
+        <label data-i18n="to_date">إلى تاريخ</label>
+        <input type="date" id="salesTo" onchange="renderSales()">
+      </div>
+    </div>
+    <div id="salesTable" class="mt-15"></div>
+  </div>
+</div>
 <!-- 2. المخزون - المنتجات -->
 <div id="invProducts" class="page">
   <h2 data-i18n="tab_products">📦 قائمة المنتجات</h2>
