@@ -205,11 +205,11 @@ function renderSalesChart() {
     }
   });
 }
+
 function renderDashboard() {
   const cur = currencyLabel();
   const todayStr = _getTodayStr();
   
-  // حساب إمبارح للمقارنة
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
@@ -226,7 +226,6 @@ function renderDashboard() {
   const ySummary = _safeCalcPeriodSummary(yesterdayStr, yesterdayStr);
   if (ySummary) yesterdaySales = Number(ySummary.net_sales) || 0;
 
-  // حساب نسبة النمو
   let trendHtml = '';
   if (yesterdaySales > 0) {
     const diff = ((todaySales - yesterdaySales) / yesterdaySales) * 100;
@@ -239,7 +238,6 @@ function renderDashboard() {
     }
   }
 
-  // الرقم الكبير
   const bigEl = document.getElementById('homeBigNumber');
   if (bigEl) {
     bigEl.innerHTML = `
@@ -252,7 +250,6 @@ function renderDashboard() {
     `;
   }
 
-  // الكروت القابلة للنقر
   const customerDebt = state.customers.reduce((sum, c) => {
     if (c.name === 'عميل نقدي عام' || c.name === 'Cash Customer') return sum;
     const bal = _safeCustomerBalance(c.id);
@@ -271,29 +268,26 @@ function renderDashboard() {
     const cardStyle = 'padding:14px; cursor:pointer; transition:transform 0.1s; display:flex; flex-direction:column; justify-content:space-between;';
     const activeEffect = `onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'"`;
     
+    // شيلنا الكلام الإنجليزي من تحت الأرقام
     otherCards.innerHTML = `
       <div class="stat-card" style="${cardStyle}" onclick="showPage('partCustomers')" ${activeEffect}>
         <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_customer_debt')} <span>⬅️</span></h3>
         <p style="font-size:18px;color:#c0392b;margin:5px 0 0 0;">${customerDebt.toFixed(2)}</p>
-        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('customer_label')}</span>
       </div>
       
       <div class="stat-card" style="${cardStyle}" onclick="showPage('partSuppliers')" ${activeEffect}>
         <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_supplier_due')} <span>⬅️</span></h3>
         <p style="font-size:18px;color:#198754;margin:5px 0 0 0;">${supplierDue.toFixed(2)}</p>
-        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('supplier_label')}</span>
       </div>
       
       <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
         <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_stock_alerts')} <span>⬅️</span></h3>
         <p style="font-size:18px;color:${lowStockCount>0?'#c62828':'#17643a'};margin:5px 0 0 0;">${lowStockCount}</p>
-        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('tab_products')}</span>
       </div>
       
       <div class="stat-card" style="${cardStyle}" onclick="showPage('salesLog')" ${activeEffect}>
         <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_today_invoices')} <span>⬅️</span></h3>
         <p style="font-size:18px;color:#176b70;margin:5px 0 0 0;">${todayInvoices}</p>
-        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('sales_log')}</span>
       </div>
     `;
   }
@@ -310,13 +304,13 @@ function renderSmartAlerts() {
 
   let alerts = [];
   
-  // 1. تنبيه المخزون المنخفض
   const lowStock = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5));
   if (lowStock.length > 0) {
-    const word = lowStock.length === 1 ? tr('low_stock_singular') : tr('low_stock_plural');
+    // إصلاح اللغة
+    const word = lowStock.length === 1 ? "منتج قارب على النفاذ" : "منتجات قاربت على النفاذ";
     alerts.push({
       type: 'danger', icon: '📦',
-      title: `⚠️ ${lowStock.length} ${word} وصلت لحد التنبيه`,
+      title: `⚠️ يوجد ${lowStock.length} ${word}`,
       subtitle: tr('review_inventory'),
       actionText: tr('view_inventory'),
       actionPage: 'invProducts',
@@ -324,7 +318,6 @@ function renderSmartAlerts() {
     });
   }
 
-  // 2. تنبيه ديون العملاء
   const totalDebt = state.customers.reduce((sum, c) => sum + Math.max(0, _safeCustomerBalance(c.id) || 0), 0);
   if (totalDebt > 0) {
     alerts.push({
@@ -337,7 +330,6 @@ function renderSmartAlerts() {
     });
   }
 
-  // 3. تنبيه الوردية المفتوحة
   if (state.currentShift) {
     alerts.push({
       type: 'info', icon: '🕒',
@@ -354,18 +346,18 @@ function renderSmartAlerts() {
     return;
   }
 
-  let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+  let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
   alerts.forEach(function(a) {
     html += `
-      <div class="smart-alert" style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:${a.bg}; border-radius:12px; border-right:4px solid ${a.color}; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,0.02);">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span style="font-size:22px;">${a.icon}</span>
+      <div class="smart-alert" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:${a.bg}; border-radius:10px; border-right:4px solid ${a.color}; gap:10px; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
+        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+          <span style="font-size:20px;">${a.icon}</span>
           <div>
-            <div style="font-weight:800; color:${a.color}; font-size:13px;">${a.title}</div>
-            <div style="font-size:11px; color:#64748b; margin-top:2px;">${a.subtitle}</div>
+            <div style="font-weight:800; color:${a.color}; font-size:12px; line-height:1.3;">${a.title}</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">${a.subtitle}</div>
           </div>
         </div>
-        <button style="display:inline-flex; align-items:center; justify-content:center; padding:6px 14px; font-size:12px; font-weight:bold; color:#fff; background:${a.color}; border:none; border-radius:6px; cursor:pointer; white-space:nowrap; flex-shrink:0;" onclick="showPage('${a.actionPage}')">${a.actionText}</button>
+        <button class="alert-action" style="display:inline-flex; align-items:center; justify-content:center; padding:6px 12px; font-size:11px; font-weight:bold; color:#fff; background:${a.color}; border:none; border-radius:6px; cursor:pointer; white-space:nowrap; flex-shrink:0;" onclick="showPage('${a.actionPage}')">${a.actionText}</button>
       </div>
     `;
   });
