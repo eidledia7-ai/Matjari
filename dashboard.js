@@ -207,10 +207,16 @@ function renderSmartAlerts() {
 
   let html = '<div class="card"><h3>' + tr('smart_alerts') + '</h3>';
   alerts.forEach(function(a) {
-    html += '<div class="smart-alert ' + a.type + '">' +
-      '<span class="alert-icon">' + a.icon + '</span>' +
-      '<div class="alert-content"><div class="alert-title">' + a.title + '</div><div class="alert-subtitle">' + a.subtitle + '</div></div>' +
-      '<button class="alert-action" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>' +
+    // تنسيقات مباشرة (Inline) لضمان ظهور الزرار بشكل سليم وعدم اختفائه
+    const btnStyle = 'display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:110px; padding:8px 16px; font-size:13px; font-weight:bold; color:#fff; background:#176b70; border:none; border-radius:8px; cursor:pointer; white-space:nowrap; flex-shrink:0; margin-top:8px;';
+    
+    html += '<div class="smart-alert ' + a.type + '" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px; background:#fef2f2; border-radius:12px; border-right:4px solid #c0392b;">' +
+      '<div style="display:flex; align-items:center; gap:12px; flex:1; min-width:200px;">' +
+        '<span style="font-size:24px;">' + a.icon + '</span>' +
+        '<div><div style="font-weight:bold; color:#991b1b; font-size:14px;">' + a.title + '</div>' +
+        '<div style="font-size:12px; color:#687b8b; margin-top:2px;">' + a.subtitle + '</div></div>' +
+      '</div>' +
+      '<button style="' + btnStyle + '" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>' +
       '</div>';
   });
   html += '</div>';
