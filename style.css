@@ -2052,7 +2052,7 @@ body.dark-mode .skeleton {
 .qa-btn.warning { background: #e58a16; }
 .qa-btn.info { background: #1769aa; }
 .qa-btn.success { background: #2e7d32; }
-
+white-space: nowrap; /* يمنع تقطيع الكلام */
 /* شبكة الوصول السريع */
 .app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .app-grid-btn {
