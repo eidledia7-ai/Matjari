@@ -57,14 +57,36 @@ function renderExpenses() {
   const container = document.getElementById('expensesTable');
   if (!container) return;
   if (state.expenses.length === 0) {
-    container.innerHTML = '<p class="text-muted">' + tr('no_expenses') + '</p>';
+    container.innerHTML = '<p class="text-muted text-center" style="padding:20px;">' + tr('no_expenses') + '</p>';
     return;
   }
+  
   const delErrBtn = tr('delete_err_btn');
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + tr('th_item_name') + '</th><th>' + tr('th_amount') + '</th><th>' + tr('th_notes') + '</th><th>' + tr('th_action') + '</th></tr></thead><tbody>';
+  const en = currentLang === 'en';
+  
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>' + tr('th_date') + '</th>' +
+    '<th>' + tr('th_item_name') + '</th>' +
+    '<th>' + tr('th_amount') + '</th>' +
+    '<th>' + tr('th_notes') + '</th>' +
+    '<th>' + tr('th_action') + '</th>' +
+    '</tr></thead><tbody>';
+    
   state.expenses.forEach(function(e) {
-    html += '<tr><td>' + escapeHTML(e.date) + '</td><td>' + escapeHTML(e.name) + '</td><td><b>' + Number(e.amount || 0).toFixed(2) + '</b></td><td>' + escapeHTML(e.notes || '-') + '</td><td><button class="small-btn red" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td></tr>';
+    // إصلاح التاريخ عشان يظهر بشكل مفهوم
+    const dateObj = new Date(e.date);
+    const dateStr = dateObj.toLocaleDateString(en ? 'en-US' : 'ar-EG', { month: 'short', day: 'numeric' });
+    const timeStr = dateObj.toLocaleTimeString(en ? 'en-US' : 'ar-EG', { hour: '2-digit', minute: '2-digit' });
+    
+    html += '<tr>' +
+      '<td style="white-space:nowrap; font-size:12px;">' + dateStr + '<br><span style="color:#888;font-size:10px;">' + timeStr + '</span></td>' +
+      '<td><b>' + escapeHTML(e.name) + '</b></td>' +
+      '<td><b style="color:#c0392b; direction:ltr;">' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
+      '<td style="font-size:12px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + escapeHTML(e.notes||'') + '">' + escapeHTML(e.notes || '-') + '</td>' +
+      '<td><button class="small-btn red" style="padding:4px 8px;" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td>' +
+      '</tr>';
   });
+  
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
@@ -337,8 +359,13 @@ async function calcExpectedShiftCash() {
   }
   if (expectedCash === null) expectedCash = financeCore.calcShiftExpectedCash(currentShift.id);
 
-  const el = document.getElementById('shiftExpectedCash');
-  if (el) el.value = expectedCash.toFixed(2) + ' ' + state.storeSettings.currency;
+  const nameInput = document.getElementById('shiftCashierName');
+if (nameInput && !nameInput.value && state.currentUser && state.currentUser.email) {
+  nameInput.value = state.currentUser.email.split('@')[0];
+}
+
+const el = document.getElementById('shiftExpectedCash');
+if (el) el.value = expectedCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + state.storeSettings.currency;
 
   calculateShiftDiff();
   try { renderShiftCashBreakdown(currentShift.id, expectedCash); }
@@ -898,6 +925,19 @@ function switchShiftTab(tabId) {
   const btn = document.querySelector('#finShift .tab-btn[data-tab="' + tabId + '"]');
   if (btn) btn.classList.add('active');
 
-  if (tabId === 'shift-close') { calcExpectedShiftCash(); }
-  if (tabId === 'shift-log') { renderShifts(); }
+  if (tabId === 'shift-close') { 
+  calcExpectedShiftCash(); 
+  setTimeout(() => { const el = document.getElementById('shiftActualCash'); if(el) el.focus(); }, 150);
+}
+}
+function fillShiftCash(amount) {
+  const input = document.getElementById('shiftActualCash');
+  if (!input) return;
+  if (amount === 'exact') {
+    const expVal = document.getElementById('shiftExpectedCash').value.replace(/[^\d.]/g, '');
+    input.value = parseFloat(expVal).toFixed(2);
+  } else {
+    input.value = amount;
+  }
+  calculateShiftDiff();
 }
