@@ -553,106 +553,142 @@
 <!-- 4. الشركاء - العملاء -->
 <div id="partCustomers" class="page">
   <h2 data-i18n="tab_customers">👥 العملاء والتحصيلات</h2>
-  <div class="card">
-    <h3 data-i18n="add_customer">إضافة عميل</h3>
-    <input type="hidden" id="customerId">
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="cust_name">اسم العميل *</label><input type="text" id="customerName" data-i18n-placeholder="customer_name_ph" placeholder="اسم العميل"></div>
-      <div class="form-group"><label data-i18n="phone_label">الهاتف</label><input type="text" id="customerPhone" data-i18n-placeholder="customer_phone_ph" placeholder="01xxxxxxxxx"></div>
-      <div class="form-group"><label data-i18n="opening_debt">رصيد افتتاحي</label><input type="number" id="customerOpeningDebt" value="0" min="0" step="any"></div>
-    </div>
-    <div class="btn-group mt-15"><button class="btn primary" onclick="saveCustomer()" data-i18n="save_cust">حفظ العميل</button></div>
-  </div>
-  <div class="card mt-20">
-    <h3 data-i18n="record_collection">تسجيل تحصيل</h3>
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="customer_label">العميل *</label><select id="customerPaymentCustomer"></select></div>
-      <div class="form-group"><label data-i18n="amount_label">المبلغ *</label><input type="number" id="customerPaymentAmount" placeholder="0.00" min="0" step="any"></div>
-      <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="customerPaymentDate"></div>
-      <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="customerPaymentNotes"></div>
-    </div>
-    <div class="btn-group mt-15"><button class="btn green" onclick="recordCustomerPayment()" data-i18n="save_collection">تسجيل التحصيل</button></div>
-  </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="customers_list">قائمة العملاء</h3>
-      <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('customers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
-    </div>
-    <input type="text" id="customerSearch" data-i18n-placeholder="search_placeholder" placeholder="بحث..." oninput="renderCustomers()" class="mt-15">
-    <div id="customersTable" class="mt-15"></div>
-  </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="collections_log">سجل التحصيلات</h3>
-      <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('customerPayments')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
-    </div>
-    <div id="customerPaymentsTable" class="mt-15"></div>
-  </div>
-</div>
 
-<!-- 4. الشركاء - الموردون -->
-<div id="partSuppliers" class="page">
-  <h2 data-i18n="tab_suppliers">🏭 الموردون والمشتريات</h2>
-  <div class="card">
-    <h3 id="supplierFormTitle" data-i18n="add_supplier">إضافة مورد</h3>
-    <input type="hidden" id="supplierId">
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="supp_name">اسم المورد *</label><input type="text" id="supplierName"></div>
-      <div class="form-group"><label data-i18n="phone_label">الهاتف</label><input type="text" id="supplierPhone"></div>
-      <div class="form-group"><label data-i18n="opening_due">رصيد افتتاحي (مستحق له)</label><input type="number" id="supplierOpeningDebt" value="0" min="0" step="any"></div>
-    </div>
-    <div class="btn-group mt-15">
-      <button class="btn primary" onclick="saveSupplier()" data-i18n="save_supp">حفظ المورد</button>
-      <button class="btn grey" onclick="clearSupplierForm()" data-i18n="cancel_btn">إلغاء</button>
+  <div class="tabs-container">
+    <button class="tab-btn active" data-tab="cust-list" onclick="switchCustomerTab('cust-list')">📋 <span data-i18n="tab_cust_list">قائمة العملاء</span></button>
+    <button class="tab-btn" data-tab="cust-add" onclick="switchCustomerTab('cust-add')">➕ <span data-i18n="tab_cust_add">إضافة عميل</span></button>
+    <button class="tab-btn" data-tab="cust-col" onclick="switchCustomerTab('cust-col')">💰 <span data-i18n="tab_cust_collections">التحصيلات</span></button>
+  </div>
+
+  <!-- تاب قائمة العملاء -->
+  <div id="tab-cust-list" class="tab-content active">
+    <div class="card mt-15">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0" data-i18n="customers_list">قائمة العملاء</h3>
+        <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('customers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
+      </div>
+      <input type="text" id="customerSearch" placeholder="بحث..." oninput="renderCustomers()" class="mt-15">
+      <div id="customersTable" class="mt-15"></div>
     </div>
   </div>
-  <div class="card mt-20">
-    <h3 data-i18n="record_purchase">تسجيل فاتورة مشتريات</h3>
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="supplier_label">المورد *</label><select id="purchaseSupplier"></select></div>
-      <div class="form-group"><label data-i18n="existing_prod">منتج موجود</label><select id="purchaseProduct"></select></div>
-      <div class="form-group"><label data-i18n="new_prod_name">أو منتج جديد</label><input type="text" id="purchaseNewName" data-i18n-placeholder="new_prod_name_ph" placeholder="اسم منتج جديد"></div>
-      <div class="form-group"><label data-i18n="qty_label">الكمية *</label><input type="number" id="purchaseQty" value="1" min="1" oninput="calcPurchaseTotal()"></div>
-      <div class="form-group"><label data-i18n="cost_price">التكلفة *</label><input type="number" id="purchaseCost" min="0" step="any" placeholder="0.00" oninput="calcPurchaseTotal()"></div>
-      <div class="form-group"><label data-i18n="purchase_sale_price">سعر البيع للوحدة</label><input type="number" id="purchasePrice" min="0" step="any" placeholder="0.00"></div>
-      <div class="form-group"><label data-i18n="purchase_total_field">الإجمالي (تلقائي)</label><input type="text" id="purchaseTotal" readonly value="0.00" style="background:#f0f4f7;font-weight:bold;"></div>
-      <div class="form-group"><label data-i18n="paid_label">المدفوع</label><input type="number" id="purchasePaid" value="0" min="0" step="any"></div>
-    </div>
-    <div class="btn-group mt-15"><button class="btn primary" onclick="savePurchase()" data-i18n="save_purchase">تسجيل المشتريات</button></div>
-  </div>
-  <div class="card mt-20">
-    <h3 data-i18n="record_supp_payment">تسجيل سداد مبلغ لمورد</h3>
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="supplier_label">المورد *</label><select id="supplierPaymentSupplier"></select></div>
-      <div class="form-group"><label data-i18n="amount_label">المبلغ المدفوع *</label><input type="number" id="supplierPaymentAmount" placeholder="0.00" min="0" step="any"></div>
-      <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="supplierPaymentDate"></div>
-      <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="supplierPaymentNotes" data-i18n-placeholder="supplier_payment_notes_ph" placeholder="تفاصيل السداد..."></div>
-    </div>
-    <div class="btn-group mt-15"><button class="btn green" onclick="recordSupplierPayment()" data-i18n="save_supp_payment">تسجيل السداد للمورد</button></div>
-  </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="suppliers_list">قائمة الموردين</h3>
-      <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('suppliers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
-    </div>
-    <div id="suppliersTable" class="mt-15"></div>
-  </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="purchases_log">سجل المشتريات</h3>
-      <div class="btn-group">
-        <button class="btn red small-btn" onclick="clearTableLog('purchases')" data-i18n="clear_log">🗑️ تصفير السجل</button>
-        <button class="btn secondary small-btn" onclick="openExportModal('purchases')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+
+  <!-- تاب إضافة عميل -->
+  <div id="tab-cust-add" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="add_customer">إضافة عميل</h3>
+      <input type="hidden" id="customerId">
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="cust_name">اسم العميل *</label><input type="text" id="customerName" placeholder="اسم العميل"></div>
+        <div class="form-group"><label data-i18n="phone_label">الهاتف</label><input type="text" id="customerPhone" placeholder="01xxxxxxxxx"></div>
+        <div class="form-group"><label data-i18n="opening_debt">رصيد افتتاحي</label><input type="number" id="customerOpeningDebt" value="0" min="0" step="any"></div>
+      </div>
+      <div class="btn-group mt-15">
+        <button class="btn primary" onclick="saveCustomer()" data-i18n="save_cust">حفظ العميل</button>
+        <button class="btn grey" onclick="switchCustomerTab('cust-list')" data-i18n="cancel_btn">إلغاء</button>
       </div>
     </div>
-    <div id="purchasesTable" class="mt-15"></div>
   </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="supp_payments_log">سجل مدفوعات الموردين</h3>
-      <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('supplierPayments')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
+
+  <!-- تاب التحصيلات -->
+  <div id="tab-cust-col" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="record_collection">تسجيل تحصيل</h3>
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="customer_label">العميل *</label><select id="customerPaymentCustomer"></select></div>
+        <div class="form-group"><label data-i18n="amount_label">المبلغ *</label><input type="number" id="customerPaymentAmount" placeholder="0.00" min="0" step="any"></div>
+        <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="customerPaymentDate"></div>
+        <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="customerPaymentNotes"></div>
+      </div>
+      <div class="btn-group mt-15"><button class="btn green" onclick="recordCustomerPayment()" data-i18n="save_collection">تسجيل التحصيل</button></div>
     </div>
-    <div id="supplierPaymentsTable" class="mt-15"></div>
+    <div class="card mt-20">
+      <h3 data-i18n="collections_log">سجل التحصيلات</h3>
+      <div id="customerPaymentsTable" class="mt-15"></div>
+    </div>
+  </div>
+</div>
+<div id="partSuppliers" class="page">
+  <h2 data-i18n="tab_suppliers">🏭 الموردون والمشتريات</h2>
+
+  <div class="tabs-container">
+    <button class="tab-btn active" data-tab="supp-list" onclick="switchSupplierTab('supp-list')">📋 <span data-i18n="tab_supp_list">قائمة الموردين</span></button>
+    <button class="tab-btn" data-tab="supp-add" onclick="switchSupplierTab('supp-add')">➕ <span data-i18n="tab_supp_add">إضافة مورد</span></button>
+    <button class="tab-btn" data-tab="supp-purchases" onclick="switchSupplierTab('supp-purchases')">📦 <span data-i18n="tab_supp_purchases">المشتريات</span></button>
+    <button class="tab-btn" data-tab="supp-payments" onclick="switchSupplierTab('supp-payments')">💳 <span data-i18n="tab_supp_payments">المدفوعات</span></button>
+  </div>
+
+  <!-- تاب قائمة الموردين -->
+  <div id="tab-supp-list" class="tab-content active">
+    <div class="card mt-15">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0" data-i18n="suppliers_list">قائمة الموردين</h3>
+        <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('suppliers')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
+      </div>
+      <div id="suppliersTable" class="mt-15"></div>
+    </div>
+  </div>
+
+  <!-- تاب إضافة مورد -->
+  <div id="tab-supp-add" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 id="supplierFormTitle" data-i18n="add_supplier">إضافة مورد</h3>
+      <input type="hidden" id="supplierId">
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="supp_name">اسم المورد *</label><input type="text" id="supplierName"></div>
+        <div class="form-group"><label data-i18n="phone_label">الهاتف</label><input type="text" id="supplierPhone"></div>
+        <div class="form-group"><label data-i18n="opening_due">رصيد افتتاحي (مستحق له)</label><input type="number" id="supplierOpeningDebt" value="0" min="0" step="any"></div>
+      </div>
+      <div class="btn-group mt-15">
+        <button class="btn primary" onclick="saveSupplier()" data-i18n="save_supp">حفظ المورد</button>
+        <button class="btn grey" onclick="switchSupplierTab('supp-list'); clearSupplierForm();" data-i18n="cancel_btn">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- تاب المشتريات -->
+  <div id="tab-supp-purchases" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="record_purchase">تسجيل فاتورة مشتريات</h3>
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="supplier_label">المورد *</label><select id="purchaseSupplier"></select></div>
+        <div class="form-group"><label data-i18n="existing_prod">منتج موجود</label><select id="purchaseProduct"></select></div>
+        <div class="form-group"><label data-i18n="new_prod_name">أو منتج جديد</label><input type="text" id="purchaseNewName" placeholder="اسم منتج جديد"></div>
+        <div class="form-group"><label data-i18n="qty_label">الكمية *</label><input type="number" id="purchaseQty" value="1" min="1" oninput="calcPurchaseTotal()"></div>
+        <div class="form-group"><label data-i18n="cost_price">التكلفة *</label><input type="number" id="purchaseCost" min="0" step="any" placeholder="0.00" oninput="calcPurchaseTotal()"></div>
+        <div class="form-group"><label data-i18n="purchase_sale_price">سعر البيع للوحدة</label><input type="number" id="purchasePrice" min="0" step="any" placeholder="0.00"></div>
+        <div class="form-group"><label data-i18n="purchase_total_field">الإجمالي (تلقائي)</label><input type="text" id="purchaseTotal" readonly value="0.00" style="background:#f0f4f7;font-weight:bold;"></div>
+        <div class="form-group"><label data-i18n="paid_label">المدفوع</label><input type="number" id="purchasePaid" value="0" min="0" step="any"></div>
+      </div>
+      <div class="btn-group mt-15"><button class="btn primary" onclick="savePurchase()" data-i18n="save_purchase">تسجيل المشتريات</button></div>
+    </div>
+    <div class="card mt-20">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0" data-i18n="purchases_log">سجل المشتريات</h3>
+        <div class="btn-group">
+          <button class="btn red small-btn" onclick="clearTableLog('purchases')" data-i18n="clear_log">🗑️ تصفير السجل</button>
+          <button class="btn secondary small-btn" onclick="openExportModal('purchases')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+        </div>
+      </div>
+      <div id="purchasesTable" class="mt-15"></div>
+    </div>
+  </div>
+
+  <!-- تاب المدفوعات -->
+  <div id="tab-supp-payments" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="record_supp_payment">تسجيل سداد مبلغ لمورد</h3>
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="supplier_label">المورد *</label><select id="supplierPaymentSupplier"></select></div>
+        <div class="form-group"><label data-i18n="amount_label">المبلغ المدفوع *</label><input type="number" id="supplierPaymentAmount" placeholder="0.00" min="0" step="any"></div>
+        <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="supplierPaymentDate"></div>
+        <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="supplierPaymentNotes" placeholder="تفاصيل السداد..."></div>
+      </div>
+      <div class="btn-group mt-15"><button class="btn green" onclick="recordSupplierPayment()" data-i18n="save_supp_payment">تسجيل السداد للمورد</button></div>
+    </div>
+    <div class="card mt-20">
+      <h3 data-i18n="supp_payments_log">سجل مدفوعات الموردين</h3>
+      <div id="supplierPaymentsTable" class="mt-15"></div>
+    </div>
   </div>
 </div>
 

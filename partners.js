@@ -617,3 +617,32 @@ function renderSupplierPayments() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+/* v7.16 - Partner Tabs Logic */
+function switchCustomerTab(tabId) {
+  document.querySelectorAll('#partCustomers .tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#partCustomers .tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.style.display = 'block';
+  
+  const btn = document.querySelector('#partCustomers .tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  if (tabId === 'cust-list') renderCustomers();
+  if (tabId === 'cust-col') renderCustomerPayments();
+}
+
+function switchSupplierTab(tabId) {
+  document.querySelectorAll('#partSuppliers .tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#partSuppliers .tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.style.display = 'block';
+  
+  const btn = document.querySelector('#partSuppliers .tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  if (tabId === 'supp-list') renderSuppliers();
+  if (tabId === 'supp-purchases') renderPurchases();
+  if (tabId === 'supp-payments') renderSupplierPayments();
+}
