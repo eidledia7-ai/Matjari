@@ -50,6 +50,7 @@ async function saveExpense() {
   renderDashboard();
   if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
   showNotification(tr('expense_saved'));
+  switchExpenseTab('exp-list');
 }
 
 function renderExpenses() {
@@ -505,6 +506,7 @@ async function closeShift() {
   renderShifts();
   renderDashboard();
   showNotification(tr('shift_closed'));
+   switchShiftTab('shift-log');
 
   if (typeof triggerAutoBackup === 'function') {
     setTimeout(() => triggerAutoBackup('shift_close').catch(e => console.warn('shift auto-backup:', e)), 800);
@@ -871,4 +873,31 @@ function printReportSummary() {
     </body></html>
   `);
   w.document.close();
+}
+/* v7.17 - Finance Tabs Logic */
+function switchExpenseTab(tabId) {
+  document.querySelectorAll('#finExpenses .tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#finExpenses .tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.style.display = 'block';
+  
+  const btn = document.querySelector('#finExpenses .tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  if (tabId === 'exp-list') renderExpenses();
+}
+
+function switchShiftTab(tabId) {
+  document.querySelectorAll('#finShift .tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#finShift .tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.style.display = 'block';
+  
+  const btn = document.querySelector('#finShift .tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  if (tabId === 'shift-close') { calcExpectedShiftCash(); }
+  if (tabId === 'shift-log') { renderShifts(); }
 }

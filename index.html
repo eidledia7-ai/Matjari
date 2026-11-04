@@ -695,26 +695,40 @@
 <!-- 5. المالية - المصروفات -->
 <div id="finExpenses" class="page">
   <h2 data-i18n="tab_expenses">💸 المصروفات</h2>
-  <div class="card">
-    <h3 data-i18n="add_expense">إضافة مصروف</h3>
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="expense_item">البند *</label><input type="text" id="expenseName" data-i18n-placeholder="expense_name_ph" placeholder="مثال: كهرباء"></div>
-      <div class="form-group"><label data-i18n="amount_label">المبلغ *</label><input type="number" id="expenseAmount" min="0" step="any"></div>
-      <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="expenseDate"></div>
-      <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="expenseNotes"></div>
-    </div>
-    <div class="btn-group mt-15"><button class="btn primary" onclick="saveExpense()" data-i18n="save_expense">حفظ المصروف</button></div>
+
+  <div class="tabs-container">
+    <button class="tab-btn active" data-tab="exp-list" onclick="switchExpenseTab('exp-list')">📋 <span data-i18n="tab_exp_list">سجل المصروفات</span></button>
+    <button class="tab-btn" data-tab="exp-add" onclick="switchExpenseTab('exp-add')">➕ <span data-i18n="tab_exp_add">إضافة مصروف</span></button>
   </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="expenses_log">سجل المصروفات</h3>
-      <div class="btn-group">
-        <button class="btn red small-btn" onclick="clearTableLog('expenses')" data-i18n="clear_log">🗑️ تصفير السجل</button>
-        <button class="btn green small-btn" onclick="openExpensesDetailReport()" data-i18n="detailed_report">📊 تقرير تفصيلي</button>
-        <button class="btn secondary small-btn" onclick="openExportModal('expenses')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+
+  <div id="tab-exp-list" class="tab-content active">
+    <div class="card mt-15">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:15px;">
+        <h3 style="margin:0" data-i18n="expenses_log">سجل المصروفات</h3>
+        <div class="btn-group">
+          <button class="btn red small-btn" onclick="clearTableLog('expenses')" data-i18n="clear_log">🗑️ تصفير</button>
+          <button class="btn green small-btn" onclick="openExpensesDetailReport()" data-i18n="detailed_report">📊 تقرير</button>
+          <button class="btn secondary small-btn" onclick="openExportModal('expenses')" data-i18n="export_print_btn">🖨️ / 📊</button>
+        </div>
+      </div>
+      <div id="expensesTable"></div>
+    </div>
+  </div>
+
+  <div id="tab-exp-add" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="add_expense">إضافة مصروف</h3>
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="expense_item">البند *</label><input type="text" id="expenseName" placeholder="مثال: كهرباء"></div>
+        <div class="form-group"><label data-i18n="amount_label">المبلغ *</label><input type="number" id="expenseAmount" min="0" step="any"></div>
+        <div class="form-group"><label data-i18n="date_label">التاريخ</label><input type="date" id="expenseDate"></div>
+        <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="expenseNotes"></div>
+      </div>
+      <div class="btn-group mt-15">
+        <button class="btn primary" onclick="saveExpense()" data-i18n="save_expense">حفظ المصروف</button>
+        <button class="btn grey" onclick="switchExpenseTab('exp-list')" data-i18n="cancel_btn">إلغاء</button>
       </div>
     </div>
-    <div id="expensesTable" class="mt-15"></div>
   </div>
 </div>
 
@@ -799,28 +813,39 @@
 <!-- 5. المالية - الوردية -->
 <div id="finShift" class="page">
   <h2 data-i18n="tab_shift">💵 إغلاق الوردية</h2>
-  <div class="card">
-    <h3 data-i18n="shift_close_title">💵 إغلاق الوردية الحالية</h3>
-    <p class="notice info mb-15" data-i18n="shift_note">قم بعدّ النقدية فعلياً وادخلها للمطابقة.</p>
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="cashier_name">اسم الكاشير / الوردية *</label><input type="text" id="shiftCashierName" data-i18n-placeholder="cashier_name_ph" placeholder="مثال: أحمد"></div>
-      <div class="form-group"><label data-i18n="expected_cash">مبيعات الكاش المتوقعة</label><input type="text" id="shiftExpectedCash" readonly style="font-weight: bold; background: #f9f9f9;"></div>
-      <div class="form-group"><label data-i18n="actual_cash">النقدية الفعلية بالدرج *</label><input type="number" id="shiftActualCash" placeholder="0.00" min="0" step="any" oninput="calculateShiftDiff()"></div>
-      <div class="form-group span-2"><label data-i18n="diff_label">الفرق</label><input type="text" id="shiftDifference" readonly style="font-weight: bold;"></div>
-      <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="shiftNotes" data-i18n-placeholder="shift_notes_ph" placeholder="أي ملاحظات..."></div>
-    </div>
-    <div id="shiftCashBreakdown" class="card" style="display:none; margin-top:12px;"></div>
-    <div class="btn-group mt-15">
-      <button class="btn green" onclick="closeShift()" data-i18n="close_shift_btn">🔒 إغلاق الوردية وحفظها</button>
-      <button class="btn secondary" onclick="printShiftReport()" data-i18n="print_report">🖨️ طباعة التقرير</button>
+
+  <div class="tabs-container">
+    <button class="tab-btn active" data-tab="shift-close" onclick="switchShiftTab('shift-close')">🔒 <span data-i18n="shift_close_title">إغلاق الوردية</span></button>
+    <button class="tab-btn" data-tab="shift-log" onclick="switchShiftTab('shift-log')">📋 <span data-i18n="shifts_log">سجل الورديات</span></button>
+  </div>
+
+  <div id="tab-shift-close" class="tab-content active">
+    <div class="card mt-15">
+      <h3 data-i18n="shift_close_title">💵 إغلاق الوردية الحالية</h3>
+      <p class="notice info mb-15" data-i18n="shift_note">قم بعدّ النقدية فعلياً وادخلها للمطابقة.</p>
+      <div class="form-grid">
+        <div class="form-group"><label data-i18n="cashier_name">اسم الكاشير / الوردية *</label><input type="text" id="shiftCashierName" placeholder="مثال: أحمد"></div>
+        <div class="form-group"><label data-i18n="expected_cash">مبيعات الكاش المتوقعة</label><input type="text" id="shiftExpectedCash" readonly style="font-weight: bold; background: #f9f9f9;"></div>
+        <div class="form-group"><label data-i18n="actual_cash">النقدية الفعلية بالدرج *</label><input type="number" id="shiftActualCash" placeholder="0.00" min="0" step="any" oninput="calculateShiftDiff()"></div>
+        <div class="form-group span-2"><label data-i18n="diff_label">الفرق</label><input type="text" id="shiftDifference" readonly style="font-weight: bold;"></div>
+        <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="shiftNotes" placeholder="أي ملاحظات..."></div>
+      </div>
+      <div id="shiftCashBreakdown" class="card" style="display:none; margin-top:12px;"></div>
+      <div class="btn-group mt-15">
+        <button class="btn green" onclick="closeShift()" data-i18n="close_shift_btn">🔒 إغلاق الوردية وحفظها</button>
+        <button class="btn secondary" onclick="printShiftReport()" data-i18n="print_report">🖨️ طباعة التقرير</button>
+      </div>
     </div>
   </div>
-  <div class="card mt-20">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="shifts_log">📋 سجل الورديات</h3>
-      <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('shifts')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
+
+  <div id="tab-shift-log" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:15px;">
+        <h3 style="margin:0" data-i18n="shifts_log">📋 سجل الورديات</h3>
+        <div class="btn-group"><button class="btn secondary small-btn" onclick="openExportModal('shifts')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button></div>
+      </div>
+      <div id="shiftsTable"></div>
     </div>
-    <div id="shiftsTable" class="mt-15"></div>
   </div>
 </div>
 
