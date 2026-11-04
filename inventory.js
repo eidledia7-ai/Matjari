@@ -58,6 +58,7 @@ async function saveProduct() {
   renderDashboard();
   updateStockBadge();
   showNotification(tr('product_saved'));
+  switchProductTab('list'); // العودة للقائمة بعد الحفظ
 }
 
 async function togglePinProduct(id) {
@@ -142,6 +143,7 @@ function editProduct(id) {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const p = state.products.find(function(item) { return item.id === id; });
   if (!p) return;
+  
   document.getElementById('productId').value = p.id;
   document.getElementById('productName').value = p.name || '';
   document.getElementById('productBarcode').value = p.barcode || '';
@@ -150,8 +152,12 @@ function editProduct(id) {
   document.getElementById('productCost').value = p.cost || 0;
   document.getElementById('productStock').value = p.stock || 0;
   document.getElementById('productMin').value = p.minStock || p.min_stock || 5;
+  
   const title = document.getElementById('productFormTitle');
   if (title) title.innerText = tr('edit_btn') + ': ' + p.name;
+  
+  // التعديل الجديد: الانتقال لتاب الفورم فوراً
+  switchProductTab('form');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -726,4 +732,22 @@ function downloadImportTemplate() {
   a.download = 'products-template.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function switchProductTab(tabId) {
+  // إخفاء كل التابات
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  
+  // إظهار التاب المطلوب
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.classList.add('active');
+  
+  // تنشيط الزر
+  const btn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  // لو رجعنا للقائمة، نحدث الجدول
+  if (tabId === 'list') {
+    renderProducts();
+  }
 }

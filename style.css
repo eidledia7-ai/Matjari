@@ -2125,3 +2125,41 @@ body.dark-mode .skeleton {
   border-bottom: none !important;
   margin-top: 10px !important;
 }
+/* v7.14 - Product Page Tabs */
+.tabs-container {
+  display: flex;
+  gap: 5px;
+  border-bottom: 2px solid #dce5ec;
+  margin-bottom: 15px;
+  overflow-x: auto;
+}
+.tab-btn {
+  background: #f1f6f8;
+  border: 1px solid #dce5ec;
+  border-bottom: none;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #687b8b;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.tab-btn.active {
+  background: white;
+  color: #176b70;
+  border-top: 3px solid #176b70;
+  padding-top: 8px;
+}
+.tab-content {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+.tab-content.active {
+  display: block;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
