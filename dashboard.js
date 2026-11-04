@@ -64,91 +64,75 @@ function _safeSupplierBalance(supId) {
 
 function renderDashboard() {
   const cur = currencyLabel();
-
-  const allTimeFrom = _getAllTimeStart();
-  const allTimeTo   = _getTodayStr();
-
-  let netSales        = 0;
-  let cogs            = 0;
-  let expensesTotal   = 0;
-  let netProfit       = 0;
-
-  const summary = _safeCalcPeriodSummary(allTimeFrom, allTimeTo);
+  const todayStr = _getTodayStr();
+  
+  // 1. حساب مبيعات اليوم
+  let todaySales = 0, todayProfit = 0;
+  const summary = _safeCalcPeriodSummary(todayStr, todayStr);
   if (summary) {
-    netSales      = Number(summary.net_sales)      || 0;
-    cogs          = Number(summary.cogs)           || 0;
-    expensesTotal = Number(summary.expenses_total) || 0;
-    netProfit     = Number(summary.net_profit)     || 0;
+    todaySales = Number(summary.net_sales) || 0;
+    todayProfit = Number(summary.net_profit) || 0;
   } else {
-    const totalSales = state.sales.reduce(function(sum, s) {
-      return sum + (Number(s.total) || 0);
-    }, 0);
-    expensesTotal = state.expenses.reduce(function(sum, e) {
-      return sum + (Number(e.amount) || 0);
-    }, 0);
-
-    let totalCost = 0;
-    state.sales.forEach(function(s) {
-      if (!s || !Array.isArray(s.items)) return;
-      s.items.forEach(function(i) {
-        totalCost += (Number(i.cost) || 0) * (Number(i.qty) || 0);
-      });
-    });
-
-    netSales  = totalSales;
-    cogs      = totalCost;
-    netProfit = totalSales - totalCost - expensesTotal;
+    todaySales = state.sales.filter(s => (s.date||'').split('T')[0] === todayStr).reduce((sum, s) => sum + (Number(s.total)||0), 0);
   }
 
-  const customerDebt = state.customers.reduce(function(sum, c) {
-    const isCash = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
-    if (isCash) return sum;
+  // 2. الرقم الكبير (يوجه لسجل المبيعات)
+  const bigEl = document.getElementById('homeBigNumber');
+  if (bigEl) {
+    bigEl.innerHTML = `
+      <div class="big-card" onclick="showPage('salesLog')">
+        <div class="big-title">${tr('dash_net_sales')} (اليوم) <span>➔</span></div>
+        <div class="big-value">${todaySales.toFixed(2)} <span style="font-size:20px;">${cur}</span></div>
+        <div class="big-sub">صافي الربح: ${todayProfit.toFixed(2)} ${cur}</div>
+      </div>
+    `;
+  }
+
+  // 3. حساب الأرقام للإحصائيات السريعة
+  const customerDebt = state.customers.reduce((sum, c) => {
+    if (c.name === 'عميل نقدي عام' || c.name === 'Cash Customer') return sum;
     const bal = _safeCustomerBalance(c.id);
-    if (bal === null) return sum + (Number(c.openingDebt ?? c.opening_debt) || 0);
-    return sum + Math.max(0, bal);
+    return sum + (bal === null ? (Number(c.openingDebt ?? c.opening_debt) || 0) : Math.max(0, bal));
   }, 0);
 
-  const supplierDue = state.suppliers.reduce(function(sum, s) {
+  const supplierDue = state.suppliers.reduce((sum, s) => {
     const bal = _safeSupplierBalance(s.id);
-    if (bal === null) return sum + (Number(s.openingDebt ?? s.opening_debt) || 0);
-    return sum + Math.max(0, bal);
+    return sum + (bal === null ? (Number(s.openingDebt ?? s.opening_debt) || 0) : Math.max(0, bal));
   }, 0);
 
-  const stockValue = state.products.reduce(function(sum, p) {
-    return sum + ((Number(p.stock) || 0) * (Number(p.cost) || 0));
-  }, 0);
+  const totalProducts = state.products.length;
+  const lowStockCount = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5)).length;
 
-  const totalProducts  = state.products.length;
-  const lowStockCount  = state.products.filter(function(p) {
-    const min = Number.isFinite(Number(p.minStock)) ? Number(p.minStock) : 5;
-    return (Number(p.stock) || 0) <= min;
-  }).length;
-
-  const cardsEl = document.getElementById('dashboardCards');
-  if (cardsEl) {
-    // ✅ v7.10.2 — ترجمة (كانت anti-pattern: translations[currentLang] || translations.ar)
-    cardsEl.innerHTML =
-      '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f"><h3>' +
-        tr('dash_net_profit') +
-      '</h3><p style="color:' + (netProfit >= 0 ? '#17643a' : '#c0392b') + '">' +
-        netProfit.toFixed(2) + ' ' + cur +
-      '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_net_sales') + '</h3><p>' + netSales.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_cost') + '</h3><p>' + cogs.toFixed(2) + ' ' + cur + '</p></div>';
-  }
-
+  // 4. الكروت القابلة للنقر
   const otherCards = document.getElementById('dashboardOtherCards');
   if (otherCards) {
-    // ✅ v7.10.2 — ترجمة
-    otherCards.innerHTML =
-      '<div class="stat-card"><h3>' + tr('dash_products') + '</h3><p>' + totalProducts + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + expensesTotal.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_stock_value') + '</h3><p>' + stockValue.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_customer_debt') + '</h3><p style="color:#c0392b">' + customerDebt.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_supplier_due') + '</h3><p style="color:#198754">' + supplierDue.toFixed(2) + ' ' + cur + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_stock_alerts') + '</h3><p style="color:' + (lowStockCount > 0 ? '#c62828' : '#17643a') + '">' + lowStockCount + ' ' + tr('items_word') + '</p></div>';
+    const cardStyle = 'padding:12px; cursor:pointer; transition:transform 0.1s;';
+    const activeEffect = `onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'"`;
+    
+    otherCards.innerHTML = `
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('partCustomers')" ${activeEffect}>
+        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_customer_debt')} <span>➔</span></h3>
+        <p style="font-size:16px;color:#c0392b">${customerDebt.toFixed(2)}</p>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('partSuppliers')" ${activeEffect}>
+        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_supplier_due')} <span>➔</span></h3>
+        <p style="font-size:16px;color:#198754">${supplierDue.toFixed(2)}</p>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
+        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_stock_alerts')} <span>➔</span></h3>
+        <p style="font-size:16px;color:${lowStockCount>0?'#c62828':'#17643a'}">${lowStockCount} ${tr('items_word')}</p>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
+        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_products')} <span>➔</span></h3>
+        <p style="font-size:16px;">${totalProducts}</p>
+      </div>
+    `;
   }
 
+  // 5. استدعاء باقي الدوال القديمة (لم نلمسها)
   renderSmartAlerts();
   renderMonthlyGoal();
   renderSalesChart();
@@ -260,7 +244,6 @@ function renderMonthlyGoal() {
   const remaining = Math.max(0, goal - actualSales);
   const cur       = state.storeSettings.currency;
 
-  // ✅ v7.10.2 — ترجمة كاملة
   container.innerHTML =
     '<div class="goal-card">' +
     '<h3>🎯 ' + tr('monthly_goal_title') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +

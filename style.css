@@ -2026,3 +2026,38 @@ body.dark-mode .skeleton {
   .smart-alert > div { width: 100%; }
   .smart-alert .alert-action { width: 100%; margin-top: 8px; }
 }
+/* v7.13 - Dashboard UX */
+.section-title { font-size: 16px; color: #17364c; margin: 20px 0 10px 0; font-weight: 800; }
+
+/* الرقم الكبير */
+#homeBigNumber .big-card {
+  background: linear-gradient(135deg, #176b70, #0f4a4d);
+  color: white; padding: 25px 15px; border-radius: 16px;
+  text-align: center; box-shadow: 0 8px 20px rgba(23, 107, 112, 0.3);
+  cursor: pointer; transition: transform 0.1s;
+}
+#homeBigNumber .big-card:active { transform: scale(0.98); }
+#homeBigNumber .big-title { font-size: 15px; opacity: 0.9; margin-bottom: 8px; display: flex; justify-content: center; gap: 8px;}
+#homeBigNumber .big-value { font-size: 42px; font-weight: 900; direction: ltr; line-height: 1.1; }
+#homeBigNumber .big-sub { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; font-size: 13px; margin-top: 12px; direction: ltr; }
+
+/* الإجراءات السريعة */
+.quick-actions-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.qa-btn {
+  border: none; border-radius: 12px; padding: 12px 5px; font-size: 13px; font-weight: bold;
+  color: white; cursor: pointer; transition: transform 0.1s; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.qa-btn:active { transform: scale(0.95); }
+.qa-btn.primary { background: #176b70; }
+.qa-btn.warning { background: #e58a16; }
+.qa-btn.info { background: #1769aa; }
+.qa-btn.success { background: #2e7d32; }
+
+/* شبكة الوصول السريع */
+.app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.app-grid-btn {
+  background: white; border: 1px solid #dce5ec; border-radius: 12px; padding: 15px 10px;
+  font-size: 13px; font-weight: 700; color: #17364c; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03); transition: background 0.2s, transform 0.1s;
+}
+.app-grid-btn:active { background: #f1f6f8; transform: scale(0.95); }
