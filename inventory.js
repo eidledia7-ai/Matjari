@@ -75,6 +75,7 @@ async function togglePinProduct(id) {
   renderProducts();
   showNotification(newVal ? tr('pin_product') : tr('unpin_product'), 'success');
 }
+
 function clearProductForm() {
   ['productId', 'productName', 'productBarcode', 'productCategory', 'productPrice', 'productCost', 'productStock'].forEach(function(id) {
     const el = document.getElementById(id);
@@ -104,14 +105,20 @@ function renderProducts() {
     return;
   }
 
-  // ✅ v7.10.2 — ترجمة
   const editBtn = tr('edit_btn');
   const deleteBtn = tr('delete_btn');
   const quickAddTitle = tr('quick_add_btn');
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">' + tr('th_name') + '</th><th data-i18n="th_barcode">' + tr('th_barcode') + '</th><th data-i18n="th_category">' + tr('th_category') + '</th><th data-i18n="th_price">' + tr('th_price') + '</th><th data-i18n="th_cost">' + tr('th_cost') + '</th><th data-i18n="th_stock">' + tr('th_stock') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
+  
   filtered.forEach(function(p) {
     const isLow = Number(p.stock) <= Number(p.minStock || p.min_stock || 5);
+    
+    // كود زرار التثبيت
+    const isPinned = p.is_pinned === true || p.isPinned === true;
+    const pinIcon = isPinned ? '📌' : '📍';
+    const pinTitle = isPinned ? tr('unpin_product') : tr('pin_product');
+
     html += '<tr' + (isLow ? ' style="background:#fff4d9"' : '') + '>' +
       '<td>' + escapeHTML(p.name) + (isLow ? ' ⚠️' : '') + '</td>' +
       '<td>' + escapeHTML(p.barcode || '-') + '</td>' +
@@ -119,20 +126,11 @@ function renderProducts() {
       '<td>' + (Number(p.price) || 0) + '</td>' +
       '<td>' + (Number(p.cost) || 0) + '</td>' +
       '<td><b>' + (Number(p.stock) || 0) + '</b></td>' +
-      // داخل حلقة forEach
-const isPinned = p.is_pinned === true || p.isPinned === true;
-const pinIcon = isPinned ? '📌' : '📍';
-const pinTitle = isPinned ? tr('unpin_product') : tr('pin_product');
-
-// في سطر الأزرار <td>:
-'<td>' +
-  '<button class="small-btn ' + (isPinned ? 'orange' : 'grey') + '" onclick="togglePinProduct(\'' + p.id + '\')" title="' + pinTitle + '">' + pinIcon + '</button>' +
-  '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
-  // ... باقي الأزرار
       '<td>' +
+       '<button class="small-btn ' + (isPinned ? 'orange' : 'grey') + '" onclick="togglePinProduct(\'' + p.id + '\')" title="' + pinTitle + '">' + pinIcon + '</button>' +
        '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
-'<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">' + editBtn + '</button>' +
-'<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">' + deleteBtn + '</button>' +
+       '<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">' + editBtn + '</button>' +
+       '<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">' + deleteBtn + '</button>' +
       '</td>' +
       '</tr>';
   });
