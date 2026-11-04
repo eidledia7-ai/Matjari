@@ -132,14 +132,13 @@ function renderDashboard() {
     `;
   }
 
-  // 5. استدعاء باقي الدوال القديمة (لم نلمسها)
+  // 5. استدعاء باقي الدوال القديمة
   renderSmartAlerts();
   renderMonthlyGoal();
   renderSalesChart();
   renderDashboardTopProducts();
 }
 
-// ✅ v7.9.2 - دالة عرض الأكثر مبيعاً (صافي الكمية) في الصفحة الرئيسية
 function renderDashboardTopProducts() {
   const container = document.getElementById('topProductsReport');
   if (!container) return;
@@ -211,7 +210,7 @@ function renderSmartAlerts() {
     html += '<div class="smart-alert ' + a.type + '">' +
       '<span class="alert-icon">' + a.icon + '</span>' +
       '<div class="alert-content"><div class="alert-title">' + a.title + '</div><div class="alert-subtitle">' + a.subtitle + '</div></div>' +
-    '<button class="btn primary" style="padding: 8px 16px; font-size: 13px; color: white; background: #176b70; border: none; border-radius: 6px; cursor: pointer; width: auto; white-space: nowrap;" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>'  +
+      '<button class="alert-action" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>' +
       '</div>';
   });
   html += '</div>';
