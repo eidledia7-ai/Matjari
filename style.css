@@ -2198,3 +2198,37 @@ body.dark-mode .skeleton {
 @media (max-width: 600px) {
   .products-grid { grid-template-columns: 1fr; }
 }
+/* v7.15 - Compact Dashboard Grid */
+.app-grid { 
+  display: grid; 
+  grid-template-columns: repeat(3, 1fr); 
+  gap: 10px; 
+  margin-bottom: 20px; 
+}
+
+.app-grid-btn {
+  background: white; 
+  border: 1px solid #dce5ec; 
+  border-radius: 12px; 
+  padding: 12px 5px;
+  font-size: 12px; 
+  font-weight: 800; 
+  color: #17364c; 
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03); 
+  transition: background 0.2s, transform 0.1s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap; /* يمنع نزول الكلام سطرين */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-grid-btn br { margin-bottom: 4px; } /* مسافة تحت الأيقونة */
+
+@media (max-width: 400px) {
+  .app-grid-btn { font-size: 11px; padding: 10px 2px; }
+}

@@ -62,83 +62,6 @@ function _safeSupplierBalance(supId) {
   }
 }
 
-function renderDashboard() {
-  const cur = currencyLabel();
-  const todayStr = _getTodayStr();
-  
-  // 1. حساب مبيعات اليوم
-  let todaySales = 0, todayProfit = 0;
-  const summary = _safeCalcPeriodSummary(todayStr, todayStr);
-  if (summary) {
-    todaySales = Number(summary.net_sales) || 0;
-    todayProfit = Number(summary.net_profit) || 0;
-  } else {
-    todaySales = state.sales.filter(s => (s.date||'').split('T')[0] === todayStr).reduce((sum, s) => sum + (Number(s.total)||0), 0);
-  }
-
-  // 2. الرقم الكبير (يوجه لسجل المبيعات)
-  const bigEl = document.getElementById('homeBigNumber');
-  if (bigEl) {
-    bigEl.innerHTML = `
-      <div class="big-card" onclick="showPage('salesLog')">
-        <div class="big-title">${tr('dash_net_sales')} (اليوم) <span>➔</span></div>
-        <div class="big-value">${todaySales.toFixed(2)} <span style="font-size:20px;">${cur}</span></div>
-        <div class="big-sub">صافي الربح: ${todayProfit.toFixed(2)} ${cur}</div>
-      </div>
-    `;
-  }
-
-  // 3. حساب الأرقام للإحصائيات السريعة
-  const customerDebt = state.customers.reduce((sum, c) => {
-    if (c.name === 'عميل نقدي عام' || c.name === 'Cash Customer') return sum;
-    const bal = _safeCustomerBalance(c.id);
-    return sum + (bal === null ? (Number(c.openingDebt ?? c.opening_debt) || 0) : Math.max(0, bal));
-  }, 0);
-
-  const supplierDue = state.suppliers.reduce((sum, s) => {
-    const bal = _safeSupplierBalance(s.id);
-    return sum + (bal === null ? (Number(s.openingDebt ?? s.opening_debt) || 0) : Math.max(0, bal));
-  }, 0);
-
-  const totalProducts = state.products.length;
-  const lowStockCount = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5)).length;
-
-  // 4. الكروت القابلة للنقر
-  const otherCards = document.getElementById('dashboardOtherCards');
-  if (otherCards) {
-    const cardStyle = 'padding:12px; cursor:pointer; transition:transform 0.1s;';
-    const activeEffect = `onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'"`;
-    
-    otherCards.innerHTML = `
-      <div class="stat-card" style="${cardStyle}" onclick="showPage('partCustomers')" ${activeEffect}>
-        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_customer_debt')} <span>➔</span></h3>
-        <p style="font-size:16px;color:#c0392b">${customerDebt.toFixed(2)}</p>
-      </div>
-      
-      <div class="stat-card" style="${cardStyle}" onclick="showPage('partSuppliers')" ${activeEffect}>
-        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_supplier_due')} <span>➔</span></h3>
-        <p style="font-size:16px;color:#198754">${supplierDue.toFixed(2)}</p>
-      </div>
-      
-      <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
-        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_stock_alerts')} <span>➔</span></h3>
-        <p style="font-size:16px;color:${lowStockCount>0?'#c62828':'#17643a'}">${lowStockCount} ${tr('items_word')}</p>
-      </div>
-      
-      <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
-        <h3 style="font-size:12px; display:flex; justify-content:space-between;">${tr('dash_products')} <span>➔</span></h3>
-        <p style="font-size:16px;">${totalProducts}</p>
-      </div>
-    `;
-  }
-
-  // 5. استدعاء باقي الدوال القديمة
-  renderSmartAlerts();
-  renderMonthlyGoal();
-  renderSalesChart();
-  renderDashboardTopProducts();
-}
-
 function renderDashboardTopProducts() {
   const container = document.getElementById('topProductsReport');
   if (!container) return;
@@ -179,50 +102,6 @@ function renderDashboardTopProducts() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
-
-function renderSmartAlerts() {
-  const container = document.getElementById('smartAlerts');
-  if (!container) return;
-
-  let alerts = [];
-  const lowStock = state.products.filter(function(p) {
-    const min = Number.isFinite(Number(p.minStock)) ? Number(p.minStock) : 5;
-    return (Number(p.stock) || 0) <= min;
-  });
-
-  if (lowStock.length > 0) {
-    alerts.push({
-      type: 'danger', icon: '📦',
-      title: tr('low_stock_notif_1') + lowStock.length + tr('low_stock_notif_2'),
-      subtitle: tr('review_inventory'),
-      actionText: tr('view_inventory'),
-      actionPage: 'invProducts'
-    });
-  }
-
-  if (alerts.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-
-  let html = '<div class="card"><h3>' + tr('smart_alerts') + '</h3>';
-  alerts.forEach(function(a) {
-    // تنسيقات مباشرة (Inline) لضمان ظهور الزرار بشكل سليم وعدم اختفائه
-    const btnStyle = 'display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:110px; padding:8px 16px; font-size:13px; font-weight:bold; color:#fff; background:#176b70; border:none; border-radius:8px; cursor:pointer; white-space:nowrap; flex-shrink:0; margin-top:8px;';
-    
-    html += '<div class="smart-alert ' + a.type + '" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px; background:#fef2f2; border-radius:12px; border-right:4px solid #c0392b;">' +
-      '<div style="display:flex; align-items:center; gap:12px; flex:1; min-width:200px;">' +
-        '<span style="font-size:24px;">' + a.icon + '</span>' +
-        '<div><div style="font-weight:bold; color:#991b1b; font-size:14px;">' + a.title + '</div>' +
-        '<div style="font-size:12px; color:#687b8b; margin-top:2px;">' + a.subtitle + '</div></div>' +
-      '</div>' +
-      '<button style="' + btnStyle + '" data-page="' + a.actionPage + '" onclick="showPage(this.dataset.page)">' + a.actionText + '</button>' +
-      '</div>';
-  });
-  html += '</div>';
-  container.innerHTML = html;
-}
-
 function renderMonthlyGoal() {
   const container = document.getElementById('monthlyGoalCard');
   if (!container) return;
@@ -325,4 +204,171 @@ function renderSalesChart() {
       }
     }
   });
+}
+function renderDashboard() {
+  const cur = currencyLabel();
+  const todayStr = _getTodayStr();
+  
+  // حساب إمبارح للمقارنة
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+  let todaySales = 0, todayProfit = 0, todayInvoices = 0;
+  const summary = _safeCalcPeriodSummary(todayStr, todayStr);
+  if (summary) {
+    todaySales = Number(summary.net_sales) || 0;
+    todayProfit = Number(summary.net_profit) || 0;
+    todayInvoices = Number(summary.invoices_count) || 0;
+  }
+
+  let yesterdaySales = 0;
+  const ySummary = _safeCalcPeriodSummary(yesterdayStr, yesterdayStr);
+  if (ySummary) yesterdaySales = Number(ySummary.net_sales) || 0;
+
+  // حساب نسبة النمو
+  let trendHtml = '';
+  if (yesterdaySales > 0) {
+    const diff = ((todaySales - yesterdaySales) / yesterdaySales) * 100;
+    if (diff > 0) {
+      trendHtml = `<div style="font-size:12px; margin-top:8px; color:#a7f3d0;">${tr('dash_trend_higher')} ${diff.toFixed(1)}%</div>`;
+    } else if (diff < 0) {
+      trendHtml = `<div style="font-size:12px; margin-top:8px; color:#fca5a5;">${tr('dash_trend_lower')} ${Math.abs(diff).toFixed(1)}%</div>`;
+    } else {
+      trendHtml = `<div style="font-size:12px; margin-top:8px; color:#cbd5e1;">${tr('dash_trend_same')}</div>`;
+    }
+  }
+
+  // الرقم الكبير
+  const bigEl = document.getElementById('homeBigNumber');
+  if (bigEl) {
+    bigEl.innerHTML = `
+      <div class="big-card" onclick="showPage('salesLog')">
+        <div class="big-title">${tr('dash_net_sales')} (اليوم) <span>⬅️</span></div>
+        <div class="big-value">${todaySales.toFixed(2)} <span style="font-size:20px;">${cur}</span></div>
+        <div class="big-sub">صافي الربح: ${todayProfit.toFixed(2)} ${cur}</div>
+        ${trendHtml}
+      </div>
+    `;
+  }
+
+  // الكروت القابلة للنقر
+  const customerDebt = state.customers.reduce((sum, c) => {
+    if (c.name === 'عميل نقدي عام' || c.name === 'Cash Customer') return sum;
+    const bal = _safeCustomerBalance(c.id);
+    return sum + (bal === null ? (Number(c.openingDebt ?? c.opening_debt) || 0) : Math.max(0, bal));
+  }, 0);
+
+  const supplierDue = state.suppliers.reduce((sum, s) => {
+    const bal = _safeSupplierBalance(s.id);
+    return sum + (bal === null ? (Number(s.openingDebt ?? s.opening_debt) || 0) : Math.max(0, bal));
+  }, 0);
+
+  const lowStockCount = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5)).length;
+
+  const otherCards = document.getElementById('dashboardOtherCards');
+  if (otherCards) {
+    const cardStyle = 'padding:14px; cursor:pointer; transition:transform 0.1s; display:flex; flex-direction:column; justify-content:space-between;';
+    const activeEffect = `onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'"`;
+    
+    otherCards.innerHTML = `
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('partCustomers')" ${activeEffect}>
+        <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_customer_debt')} <span>⬅️</span></h3>
+        <p style="font-size:18px;color:#c0392b;margin:5px 0 0 0;">${customerDebt.toFixed(2)}</p>
+        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('customer_label')}</span>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('partSuppliers')" ${activeEffect}>
+        <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_supplier_due')} <span>⬅️</span></h3>
+        <p style="font-size:18px;color:#198754;margin:5px 0 0 0;">${supplierDue.toFixed(2)}</p>
+        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('supplier_label')}</span>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('invProducts')" ${activeEffect}>
+        <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_stock_alerts')} <span>⬅️</span></h3>
+        <p style="font-size:18px;color:${lowStockCount>0?'#c62828':'#17643a'};margin:5px 0 0 0;">${lowStockCount}</p>
+        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('tab_products')}</span>
+      </div>
+      
+      <div class="stat-card" style="${cardStyle}" onclick="showPage('salesLog')" ${activeEffect}>
+        <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_today_invoices')} <span>⬅️</span></h3>
+        <p style="font-size:18px;color:#176b70;margin:5px 0 0 0;">${todayInvoices}</p>
+        <span style="font-size:10px; color:#94a3b8; margin-top:4px;">${tr('sales_log')}</span>
+      </div>
+    `;
+  }
+
+  renderSmartAlerts();
+  renderMonthlyGoal();
+  renderSalesChart();
+  renderDashboardTopProducts();
+}
+
+function renderSmartAlerts() {
+  const container = document.getElementById('smartAlerts');
+  if (!container) return;
+
+  let alerts = [];
+  
+  // 1. تنبيه المخزون المنخفض
+  const lowStock = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5));
+  if (lowStock.length > 0) {
+    const word = lowStock.length === 1 ? tr('low_stock_singular') : tr('low_stock_plural');
+    alerts.push({
+      type: 'danger', icon: '📦',
+      title: `⚠️ ${lowStock.length} ${word} وصلت لحد التنبيه`,
+      subtitle: tr('review_inventory'),
+      actionText: tr('view_inventory'),
+      actionPage: 'invProducts',
+      color: '#c0392b', bg: '#fef2f2'
+    });
+  }
+
+  // 2. تنبيه ديون العملاء
+  const totalDebt = state.customers.reduce((sum, c) => sum + Math.max(0, _safeCustomerBalance(c.id) || 0), 0);
+  if (totalDebt > 0) {
+    alerts.push({
+      type: 'warning', icon: '💰',
+      title: tr('alert_debts_title'),
+      subtitle: tr('alert_debts_sub'),
+      actionText: tr('alert_debts_btn'),
+      actionPage: 'partCustomers',
+      color: '#d97706', bg: '#fffbeb'
+    });
+  }
+
+  // 3. تنبيه الوردية المفتوحة
+  if (state.currentShift) {
+    alerts.push({
+      type: 'info', icon: '🕒',
+      title: tr('alert_shift_title'),
+      subtitle: tr('alert_shift_sub'),
+      actionText: tr('alert_shift_btn'),
+      actionPage: 'finShift',
+      color: '#2563eb', bg: '#eff6ff'
+    });
+  }
+
+  if (alerts.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+  alerts.forEach(function(a) {
+    html += `
+      <div class="smart-alert" style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:${a.bg}; border-radius:12px; border-right:4px solid ${a.color}; gap:12px; box-shadow:0 2px 6px rgba(0,0,0,0.02);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:22px;">${a.icon}</span>
+          <div>
+            <div style="font-weight:800; color:${a.color}; font-size:13px;">${a.title}</div>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;">${a.subtitle}</div>
+          </div>
+        </div>
+        <button style="display:inline-flex; align-items:center; justify-content:center; padding:6px 14px; font-size:12px; font-weight:bold; color:#fff; background:${a.color}; border:none; border-radius:6px; cursor:pointer; white-space:nowrap; flex-shrink:0;" onclick="showPage('${a.actionPage}')">${a.actionText}</button>
+      </div>
+    `;
+  });
+  html += '</div>';
+  container.innerHTML = html;
 }
