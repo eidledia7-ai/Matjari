@@ -2163,3 +2163,38 @@ body.dark-mode .skeleton {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* تنسيقات شبكة المنتجات (متجاوبة مع كل الأجهزة) */
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); /* أتوماتيك بيتظبط حسب الشاشة */
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.product-item-card {
+  background: #fff;
+  border: 1px solid #dce5ec;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s;
+}
+
+.product-item-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
+
+.pic-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.pic-name { font-weight: bold; font-size: 15px; color: #17364c; }
+.pic-details { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 15px; color: #4a5f70; }
+.pic-price { font-weight: bold; color: #176b70; }
+.pic-actions { display: flex; gap: 8px; justify-content: flex-end; border-top: 1px dashed #eee; padding-top: 10px; margin-top: auto; }
+.text-danger { color: #c0392b; font-weight: bold; }
+.cat-chip { background: #f1f6f8; border: 1px solid #dce5ec; padding: 6px 12px; border-radius: 20px; font-size: 13px; cursor: pointer; white-space: nowrap;}
+.cat-chip.active { background: #176b70; color: #fff; border-color: #176b70; }
+
+/* على الموبايل: كارت واحد في السطر */
+@media (max-width: 600px) {
+  .products-grid { grid-template-columns: 1fr; }
+}

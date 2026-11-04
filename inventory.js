@@ -54,11 +54,8 @@ async function saveProduct() {
 
   saveData();
   clearProductForm();
-  renderProducts();
-  renderDashboard();
-  updateStockBadge();
-  showNotification(tr('product_saved'));
   switchProductTab('list'); // العودة للقائمة بعد الحفظ
+  showNotification(tr('product_saved'));
 }
 
 async function togglePinProduct(id) {
@@ -88,6 +85,25 @@ function clearProductForm() {
   if (title) title.innerText = tr('add_product_title');
 }
 
+let _activeProductCategory = '';
+
+function switchProductTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => { el.style.display = 'none'; el.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) { content.style.display = 'block'; content.classList.add('active'); }
+  
+  const btn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+
+  if (tabId === 'list') {
+    renderProducts();
+  } else if (tabId === 'form') {
+    if (!document.getElementById('productId').value) clearProductForm();
+  }
+}
+
 function renderProducts() {
   const container = document.getElementById('productsTable');
   if (!container) return;
@@ -95,55 +111,84 @@ function renderProducts() {
   const searchEl = document.getElementById('productSearch');
   const search = (searchEl ? searchEl.value : '').toLowerCase();
 
+  const categories = [...new Set(state.products.map(p => p.category).filter(Boolean))];
+  
+  let chipsHtml = '<div class="prod-cats-bar" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:10px;">';
+  chipsHtml += `<button class="cat-chip ${_activeProductCategory === '' ? 'active' : ''}" onclick="filterProductCat('')">${tr('cat_all')}</button>`;
+  categories.forEach(cat => {
+    chipsHtml += `<button class="cat-chip ${_activeProductCategory === cat ? 'active' : ''}" onclick="filterProductCat('${cat}')">${escapeHTML(cat)}</button>`;
+  });
+  chipsHtml += '</div>';
+
   const filtered = state.products.filter(function(p) {
-    return (p.name || '').toLowerCase().indexOf(search) !== -1 ||
-      (p.barcode && String(p.barcode).indexOf(search) !== -1) ||
-      (p.category && p.category.toLowerCase().indexOf(search) !== -1);
+    const matchCat = _activeProductCategory === '' || p.category === _activeProductCategory;
+    const matchSearch = (p.name || '').toLowerCase().includes(search) || (p.barcode && String(p.barcode).includes(search));
+    return matchCat && matchSearch;
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<p class="text-muted">' + tr('empty_products') + '</p>';
+    container.innerHTML = chipsHtml + '<p class="text-muted text-center" style="padding:20px;">' + tr('no_matching_products') + '</p>';
     return;
   }
 
-  const editBtn = tr('edit_btn');
-  const deleteBtn = tr('delete_btn');
-  const quickAddTitle = tr('quick_add_btn');
+  let html = chipsHtml + '<div class="products-grid">';
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_name">' + tr('th_name') + '</th><th data-i18n="th_barcode">' + tr('th_barcode') + '</th><th data-i18n="th_category">' + tr('th_category') + '</th><th data-i18n="th_price">' + tr('th_price') + '</th><th data-i18n="th_cost">' + tr('th_cost') + '</th><th data-i18n="th_stock">' + tr('th_stock') + '</th><th data-i18n="th_action">' + tr('th_action') + '</th></tr></thead><tbody>';
-  
   filtered.forEach(function(p) {
     const isLow = Number(p.stock) <= Number(p.minStock || p.min_stock || 5);
-    
-    // كود زرار التثبيت
     const isPinned = p.is_pinned === true || p.isPinned === true;
-    const pinIcon = isPinned ? '📌' : '📍';
     const pinTitle = isPinned ? tr('unpin_product') : tr('pin_product');
-
-    html += '<tr' + (isLow ? ' style="background:#fff4d9"' : '') + '>' +
-      '<td>' + escapeHTML(p.name) + (isLow ? ' ⚠️' : '') + '</td>' +
-      '<td>' + escapeHTML(p.barcode || '-') + '</td>' +
-      '<td>' + escapeHTML(p.category || '-') + '</td>' +
-      '<td>' + (Number(p.price) || 0) + '</td>' +
-      '<td>' + (Number(p.cost) || 0) + '</td>' +
-      '<td><b>' + (Number(p.stock) || 0) + '</b></td>' +
-      '<td>' +
-       '<button class="small-btn ' + (isPinned ? 'orange' : 'grey') + '" onclick="togglePinProduct(\'' + p.id + '\')" title="' + pinTitle + '">' + pinIcon + '</button>' +
-       '<button class="small-btn green" onclick="quickAddStock(\'' + p.id + '\')" title="' + quickAddTitle + '">+</button>' +
-       '<button class="small-btn primary" onclick="editProduct(\'' + p.id + '\')">' + editBtn + '</button>' +
-       '<button class="small-btn red" onclick="deleteProduct(\'' + p.id + '\')">' + deleteBtn + '</button>' +
-      '</td>' +
-      '</tr>';
+    const cur = state.storeSettings.currency || 'ج.م';
+    
+    html += `
+      <div class="product-item-card">
+        <div class="pic-header">
+          <span class="pic-name">${escapeHTML(p.name)}</span>
+          <button class="small-btn ${isPinned ? 'orange' : 'grey'}" style="padding:4px 8px;" onclick="togglePinProduct('${p.id}')" title="${pinTitle}">${isPinned ? '📌' : '📍'}</button>
+        </div>
+        <div class="pic-details">
+          <span class="pic-price" onclick="quickEditPrice('${p.id}', ${p.price})" style="cursor:pointer; border-bottom:1px dashed #999;">${Number(p.price)} ${cur} ✏️</span>
+          <span class="pic-stock ${isLow ? 'text-danger' : ''}">${isLow ? '⚠️' : ''} ${tr('th_stock')}: ${Number(p.stock)}</span>
+        </div>
+        <div class="pic-actions">
+          <button class="btn primary" style="padding:6px 12px; font-size:12px;" onclick="editProduct('${p.id}')">${tr('edit_btn')}</button>
+          <button class="btn red" style="padding:6px 12px; font-size:12px;" onclick="deleteProduct('${p.id}')">${tr('delete_btn')}</button>
+        </div>
+      </div>
+    `;
   });
-  html += '</tbody></table></div>';
+  
+  html += '</div>';
   container.innerHTML = html;
+}
+
+function filterProductCat(cat) {
+  _activeProductCategory = cat;
+  renderProducts();
+}
+
+function quickEditPrice(id, oldPrice) {
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  const newPrice = prompt(tr('enter_new_price'), oldPrice);
+  if (newPrice === null || newPrice === '') return;
+  const priceNum = parseFloat(newPrice);
+  if (isNaN(priceNum) || priceNum < 0) return showNotification(tr('invalid_price'), 'error');
+
+  const prod = state.products.find(p => p.id === id);
+  if (prod) {
+    prod.price = priceNum;
+    if (navigator.onLine && supabaseClient) {
+      supabaseClient.from('products').update({ price: priceNum }).eq('id', id).then(() => {});
+    }
+    saveData();
+    renderProducts();
+    showNotification(tr('price_updated'), 'success');
+  }
 }
 
 function editProduct(id) {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const p = state.products.find(function(item) { return item.id === id; });
   if (!p) return;
-  
   document.getElementById('productId').value = p.id;
   document.getElementById('productName').value = p.name || '';
   document.getElementById('productBarcode').value = p.barcode || '';
@@ -152,11 +197,8 @@ function editProduct(id) {
   document.getElementById('productCost').value = p.cost || 0;
   document.getElementById('productStock').value = p.stock || 0;
   document.getElementById('productMin').value = p.minStock || p.min_stock || 5;
-  
   const title = document.getElementById('productFormTitle');
   if (title) title.innerText = tr('edit_btn') + ': ' + p.name;
-  
-  // التعديل الجديد: الانتقال لتاب الفورم فوراً
   switchProductTab('form');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -193,12 +235,10 @@ async function deleteProduct(id) {
   updateStockBadge();
   showNotification(tr('product_deleted'));
 }
-
 function populateAdjustDropdown() {
   const sel = document.getElementById('adjustProduct');
   if (!sel) return;
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
-  // ✅ v7.10.2 — ترجمة
   const availableLabel = tr('opt_available_label');
   state.products.forEach(function(p) {
     sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + availableLabel + (Number(p.stock) || 0) + ')</option>';
@@ -282,7 +322,6 @@ function renderStockMoves() {
     return;
   }
 
-  // ✅ v7.10.2 — ترجمة كل أنواع الحركات
   const typeLabels = {
     'in':          tr('stock_movement_in'),
     'out':         tr('stock_movement_out'),
@@ -317,7 +356,6 @@ function populateReturnDropdowns() {
   const saleSel = document.getElementById('returnSale');
   if (!saleSel) return;
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
-  // ✅ v7.10.2 — ترجمة
   const invLabel = tr('opt_invoice_label');
   state.sales.forEach(function(s) {
     saleSel.innerHTML += '<option value="' + s.id + '">' + invLabel + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
@@ -342,7 +380,6 @@ function updateReturnProducts() {
       .reduce(function(sum, r) { return sum + (Number(r.qty) || 0); }, 0);
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
-      // ✅ v7.10.2 — ترجمة
       const remLabel = tr('opt_remaining_label');
       prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + remLabel + remaining + ')</option>';
     }
@@ -382,13 +419,10 @@ async function saveReturn() {
   try {
     shiftId = await ensureOpenShift();
   } catch (e) {
-    // ✅ v7.10.2 — ترجمة
     return showNotification(tr('shift_open_failed_prefix') + (e.message || ''), 'error');
   }
 
-  if (!shiftId) {
-    return showNotification(tr('shift_create_fail'), 'error');
-  }
+  if (!shiftId) return showNotification(tr('shift_create_fail'), 'error');
 
   const refundMethod = askRefundMethod(sale, item, qty);
   if (refundMethod === null) return;
@@ -405,45 +439,23 @@ async function saveReturn() {
   const customerId = sale.customer_id || sale.customerId || null;
 
   const newReturn = {
-    id: uid('RET'),
-    user_id: ownerId,
-    sale_id: saleId,
-    saleId: saleId,
-    product_id: prodId,
-    productId: prodId,
-    product_name: item.name,
-    productName: item.name,
-    qty: qty,
-    price: unitPrice,
-    total: returnValue,
-    vat_amount: returnVat,
-    refund_method: refundMethod,
-    refundMethod: refundMethod,
-    shift_id: shiftId,
-    shiftId: shiftId,
-    customer_id: customerId,
-    customerId: customerId,
-    reason: reason || tr('return_reason_default'),
-    date: new Date().toISOString()
+    id: uid('RET'), user_id: ownerId, sale_id: saleId, saleId: saleId,
+    product_id: prodId, productId: prodId, product_name: item.name, productName: item.name,
+    qty: qty, price: unitPrice, total: returnValue, vat_amount: returnVat,
+    refund_method: refundMethod, refundMethod: refundMethod,
+    shift_id: shiftId, shiftId: shiftId, customer_id: customerId, customerId: customerId,
+    reason: reason || tr('return_reason_default'), date: new Date().toISOString()
   };
 
   if (navigator.onLine && supabaseClient) {
     try {
       const { error: retErr } = await supabaseClient.from('returns').insert({
-        id: newReturn.id,
-        user_id: ownerId,
-        sale_id: newReturn.sale_id,
-        product_id: newReturn.product_id,
-        product_name: newReturn.product_name,
-        qty: newReturn.qty,
-        price: newReturn.price,
-        total: newReturn.total,
-        vat_amount: newReturn.vat_amount,
-        refund_method: newReturn.refund_method,
-        shift_id: newReturn.shift_id,
-        customer_id: newReturn.customer_id,
-        reason: newReturn.reason,
-        date: newReturn.date
+        id: newReturn.id, user_id: ownerId, sale_id: newReturn.sale_id,
+        product_id: newReturn.product_id, product_name: newReturn.product_name,
+        qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
+        vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
+        shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
+        reason: newReturn.reason, date: newReturn.date
       });
       if (retErr) throw retErr;
     } catch (err) {
@@ -461,7 +473,6 @@ async function saveReturn() {
     sale.netTotal = sale.net_total;
   }
 
-  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش
   if (refundMethod === 'credit' && customerId) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - returnValue;
@@ -471,40 +482,23 @@ async function saveReturn() {
   if (prod) {
     const before = Number(prod.stock) || 0;
     prod.stock = before + qty;
-
     state.stockMoves.unshift({
       id: uid('SM'), date: new Date().toISOString(),
-      product_id: prod.id, productId: prod.id,
-      product_name: prod.name, productName: prod.name,
-      type: 'return', qty: qty,
-      old_stock: before, oldStock: before,
-      new_stock: prod.stock, newStock: prod.stock,
-      // ✅ v7.10.2 — ترجمة
-      reason: tr('return_for_invoice_prefix') + saleId
+      product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name,
+      type: 'return', qty: qty, old_stock: before, oldStock: before,
+      new_stock: prod.stock, newStock: prod.stock, reason: tr('return_for_invoice_prefix') + saleId
     });
   }
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_return', {
-      returnId: newReturn.id, saleId, qty,
-      refundMethod, returnValue, vatAmount: returnVat
-    }, newReturn.id);
+    addAuditLog('add_return', { returnId: newReturn.id, saleId, qty, refundMethod, returnValue, vatAmount: returnVat }, newReturn.id);
   }
 
   saveData();
-
   document.getElementById('returnQty').value = 1;
   document.getElementById('returnReason').value = '';
+  renderReturns(); renderProducts(); renderStockMoves(); renderDashboard(); renderSales(); renderCustomers(); updateStockBadge();
 
-  renderReturns();
-  renderProducts();
-  renderStockMoves();
-  renderDashboard();
-  renderSales();
-  renderCustomers();
-  updateStockBadge();
-
-  // ✅ v7.10.2 — ترجمة
   const methodText = refundMethod === 'credit' ? tr('refund_credit') : tr('refund_cash');
   showNotification(tr('return_success_1') + methodText + tr('return_success_2'), 'success');
 }
@@ -517,12 +511,7 @@ function renderReturns() {
     return;
   }
 
-  // ✅ v7.10.2 — ترجمة
-  const methodLabels = {
-    'cash':   tr('cash_method'),
-    'credit': tr('credit_method'),
-    'none':   tr('none_method')
-  };
+  const methodLabels = { 'cash': tr('cash_method'), 'credit': tr('credit_method'), 'none': tr('none_method') };
 
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_invoice_number">' + tr('th_invoice_number') + '</th><th data-i18n="th_item">' + tr('th_item') + '</th><th data-i18n="th_quantity">' + tr('th_quantity') + '</th><th>' + tr('th_value') + '</th><th>' + tr('return_method') + '</th><th data-i18n="th_reason">' + tr('th_reason') + '</th></tr></thead><tbody>';
   state.returns.forEach(function(r) {
@@ -543,6 +532,7 @@ function renderReturns() {
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
+
 /* ============ v7.11a — Excel/CSV/JSON Import (Professional) ============ */
 let _importState = { rows: [], valid: 0, skipped: 0, errors: 0, fileName: '' };
 
@@ -580,10 +570,8 @@ async function _readImportFile(file, ext) {
     const txt = await file.text();
     const delim = ext === 'tsv' ? '\t' : ',';
     const res = Papa.parse(txt, { header: true, skipEmptyLines: true, delimiter: delim });
-    if (res.errors?.length) console.warn('CSV warnings:', res.errors);
     return res.data || [];
   }
-  // Excel / ODS / FODS
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -678,12 +666,9 @@ async function executeImport() {
     reason: tr('import_reason_excel'), date: new Date().toISOString()
   }));
 
-  const rollback = () => {
-    state.products = state.products.filter(p => !productsBatch.find(b => b.id === p.id));
-  };
+  const rollback = () => { state.products = state.products.filter(p => !productsBatch.find(b => b.id === p.id)); };
 
   try {
-    // محلي أولاً
     productsBatch.forEach(p => state.products.push({ id: p.id, name: p.name, barcode: p.barcode, category: p.category, price: p.price, cost: p.cost, stock: p.stock, min_stock: p.min_stock, minStock: p.min_stock }));
     movesBatch.forEach(m => state.stockMoves.unshift({ ...m, productId: m.product_id, productName: m.product_name, oldStock: 0, newStock: m.new_stock }));
 
@@ -732,22 +717,4 @@ function downloadImportTemplate() {
   a.download = 'products-template.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-function switchProductTab(tabId) {
-  // إخفاء كل التابات
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  
-  // إظهار التاب المطلوب
-  const content = document.getElementById('tab-' + tabId);
-  if (content) content.classList.add('active');
-  
-  // تنشيط الزر
-  const btn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
-  if (btn) btn.classList.add('active');
-
-  // لو رجعنا للقائمة، نحدث الجدول
-  if (tabId === 'list') {
-    renderProducts();
-  }
 }
