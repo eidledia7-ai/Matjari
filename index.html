@@ -158,7 +158,7 @@
         <span class="arrow">▼</span>
       </button>
       <div id="settSubMenu" class="sub-menu">
-        <button data-page="settStore" onclick="showPage('settStore')" data-i18n="store_data_page">🏪 بيانات المحل</button>
+      <button data-page="settStore" onclick="showPage('settStore')" data-i18n="store_data_page">⚙️ إعدادات المحل</button>
         <button data-page="settLang" onclick="showPage('settLang')" data-i18n="lang_page">🌐 لغة التطبيق</button>
         <button data-page="settSubscription" onclick="showPage('settSubscription')" data-i18n="subscription_page">💳 اشتراكي</button>
         <button data-page="settStaff" onclick="showPage('settStaff')" data-i18n="staff_page">👥 إدارة الموظفين</button>
@@ -366,30 +366,44 @@
 
 <!-- 2b. سجل المبيعات -->
 <div id="salesLog" class="page">
-  <h2 data-i18n="sales_log">سجل المبيعات</h2>
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h3 style="margin:0" data-i18n="sales_log">سجل المبيعات</h3>
+  <h2 data-i18n="sales_log">📋 سجل المبيعات</h2>
+
+  <!-- 1. الفلاتر السريعة -->
+  <div class="quick-filters-wrap">
+    <button class="qf-btn active" onclick="setSalesLogPeriod('today', this)" data-i18n="period_today">📅 اليوم</button>
+    <button class="qf-btn" onclick="setSalesLogPeriod('yesterday', this)" data-i18n="period_yesterday">الأمس</button>
+    <button class="qf-btn" onclick="setSalesLogPeriod('week', this)" data-i18n="period_week">📆 الأسبوع</button>
+    <button class="qf-btn" onclick="setSalesLogPeriod('month', this)" data-i18n="period_month">🗓️ الشهر</button>
+    <button class="qf-btn" onclick="setSalesLogPeriod('all', this)" data-i18n="period_all">الكل</button>
+  </div>
+
+  <!-- 2. كروت الملخص -->
+  <div id="salesLogSummary" class="sales-summary-grid"></div>
+
+  <!-- 3. البحث المتقدم (التاريخ المخصص) -->
+  <div class="card mt-15" style="padding: 15px;">
+    <div class="form-grid" style="gap: 10px;">
+      <div class="form-group">
+        <input type="text" id="salesSearch" data-i18n-placeholder="search_placeholder" placeholder="🔎 بحث برقم الفاتورة أو العميل..." oninput="renderSales()">
+      </div>
+      <div class="form-group" style="display:flex; gap:5px; align-items:center;">
+        <input type="date" id="salesFrom" onchange="renderSales()" style="flex:1;" title="من تاريخ">
+        <span style="font-size:12px; color:#666;">إلى</span>
+        <input type="date" id="salesTo" onchange="renderSales()" style="flex:1;" title="إلى تاريخ">
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. قائمة الفواتير (هتظهر كجدول على الكمبيوتر وككروت على الموبايل) -->
+  <div class="card mt-15" style="padding: 15px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+      <h3 style="margin:0;" data-i18n="sales_log">الفواتير</h3>
       <div class="btn-group">
-        <button class="btn red small-btn" onclick="clearTableLog('sales')" data-i18n="clear_log">🗑️ تصفير السجل</button>
-        <button class="btn secondary small-btn" onclick="openExportModal('sales')" data-i18n="export_print_btn">🖨️ / 📊 خيارات</button>
+        <button class="btn red small-btn" onclick="clearTableLog('sales')" data-i18n="clear_log">🗑️ تصفير</button>
+        <button class="btn secondary small-btn" onclick="openExportModal('sales')" data-i18n="export_print_btn">🖨️ / 📊 تصدير</button>
       </div>
     </div>
-    <div class="form-grid mt-15">
-      <div class="form-group">
-        <label data-i18n="search_sales">بحث في المبيعات</label>
-        <input type="text" id="salesSearch" data-i18n-placeholder="search_placeholder" placeholder="بحث..." oninput="renderSales()">
-      </div>
-      <div class="form-group">
-        <label data-i18n="from_date">من تاريخ</label>
-        <input type="date" id="salesFrom" onchange="renderSales()">
-      </div>
-      <div class="form-group">
-        <label data-i18n="to_date">إلى تاريخ</label>
-        <input type="date" id="salesTo" onchange="renderSales()">
-      </div>
-    </div>
-    <div id="salesTable" class="mt-15"></div>
+    <div id="salesTable"></div>
   </div>
 </div>
 <!-- 2. المخزون - المنتجات -->
@@ -832,7 +846,7 @@
 
 <!-- 6. الإعدادات - بيانات المحل -->
 <div id="settStore" class="page">
-  <h2 data-i18n="store_data_page">⚙️ الإعدادات</h2>
+  <h2 data-i18n="store_data_page">⚙️ إعدادات المحل</h2>
 
   <div class="tabs-container">
     <button class="tab-btn active" data-tab="set-store" onclick="switchSettingsTab('set-store')">🏪 المحل</button>
@@ -847,12 +861,19 @@
       <!-- الجزء الأيمن: البيانات -->
       <div class="card mt-15" style="margin-bottom:0;">
         <div class="form-grid" style="gap: 15px;">
-          <div class="form-group span-2">
-            <label data-i18n="store_logo">شعار المحل (صورة)</label>
-            <input type="file" id="storeLogo" accept="image/*" style="padding:8px;">
-            <img id="storeLogoPreview" style="max-width: 100px; margin-top: 5px; display: none; border-radius: 8px; background: #fff; padding: 5px;">
-            <button class="small-btn gray" type="button" onclick="removeStoreLogo()" style="margin-top: 5px;" data-i18n="remove_logo">حذف الشعار</button>
-          </div>
+      <div class="form-group span-2" style="display:flex; align-items:center; gap:15px; flex-wrap:wrap; background:var(--bg-body); padding:10px; border-radius:8px;">
+  <img id="storeLogoPreview" style="width: 50px; height: 50px; display: none; border-radius: 8px; background: #fff; padding: 3px; object-fit: cover;">
+  <div style="flex:1;">
+    <label data-i18n="store_logo" style="display:block; margin-bottom:5px; font-size:12px;">شعار المحل</label>
+    <div style="display:flex; gap:8px;">
+      <label class="btn secondary small-btn" style="cursor:pointer; margin:0;">
+        📸 <span data-i18n="upload_image_btn">اختر صورة</span>
+        <input type="file" id="storeLogo" accept="image/*" style="display:none;">
+      </label>
+      <button class="btn red small-btn" type="button" onclick="removeStoreLogo()" data-i18n="remove_logo">حذف</button>
+    </div>
+  </div>
+</div>
           <div class="form-group"><label data-i18n="store_name">اسم المحل</label><input type="text" id="storeName" placeholder="اسم المحل" oninput="triggerAutoSave()"></div>
           <div class="form-group"><label data-i18n="store_phone_label">رقم الهاتف</label><input type="text" id="storePhone" placeholder="01xxxxxxxxx" oninput="triggerAutoSave()"></div>
           <div class="form-group"><label data-i18n="address_label">العنوان</label><input type="text" id="storeAddress" oninput="triggerAutoSave()"></div>
@@ -893,11 +914,11 @@
           </select>
         </div>
         <div class="form-group" style="justify-content:center;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:bold; color:var(--primary);">
-            <input type="checkbox" id="autoPrintOnScan" style="width:20px; height:20px;" onchange="triggerAutoSave()">
-            <span data-i18n="auto_print_on_scan">الطباعة التلقائية عند مسح الباركود</span>
-          </label>
-        </div>
+  <label class="switch-row" style="margin:0; width:100%;">
+    <input type="checkbox" id="autoPrintOnScan" onchange="triggerAutoSave()">
+    <span data-i18n="auto_print_on_scan">الطباعة التلقائية عند مسح الباركود</span>
+  </label>
+</div>
       </div>
 
       <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--border);">
@@ -945,12 +966,6 @@
         <div class="form-group"><label data-i18n="auto_backup_retention">عدد النسخ المحفوظة (3-30)</label><input type="number" id="autoBackupRetention" min="3" max="30" value="7" oninput="triggerAutoSave()"></div>
         <p id="autoBackupStatus" style="font-size:12px; color:var(--text-muted); margin-top:5px;"></p>
       </div>
-    </div>
-    
-    <div class="card mt-20 red-border no-print" id="dangerZone">
-      <h3 class="red-text" data-i18n="danger_zone">منطقة الخطر</h3>
-      <p class="muted" data-i18n="danger_desc">مسح كافة بيانات التطبيق الحالية بشكل نهائي.</p>
-      <button class="btn red" onclick="safeClearAllDataPrompt()" data-i18n="clear_all_data">مسح كافة بيانات التطبيق</button>
     </div>
   </div>
 </div>

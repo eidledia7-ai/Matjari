@@ -626,6 +626,7 @@ async function completeSale() {
 function renderSales() {
   const container = document.getElementById('salesTable');
   if (!container) return;
+
   const searchInput = document.getElementById('salesSearch');
   const fromInput = document.getElementById('salesFrom');
   const toInput = document.getElementById('salesTo');
@@ -645,38 +646,79 @@ function renderSales() {
     return matchSearch && matchDate;
   });
 
-  if (filtered.length === 0) { container.innerHTML = '<p class="text-muted">' + tr('empty_invoices') + '</p>'; return; }
+  // 1. حساب الملخص
+  let totalSales = 0;
+  let totalUnpaid = 0;
+  filtered.forEach(s => {
+    totalSales += (Number(s.total) || 0);
+    totalUnpaid += (Number(s.remaining) || 0);
+  });
+
+  const summaryEl = document.getElementById('salesLogSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="summary-card"><span>${tr('log_summary_total')}</span><b>${totalSales.toFixed(2)} ${state.storeSettings.currency}</b></div>
+      <div class="summary-card"><span>${tr('log_summary_invoices')}</span><b>${filtered.length}</b></div>
+      <div class="summary-card"><span>${tr('log_summary_unpaid')}</span><b class="${totalUnpaid > 0 ? 'red-text' : ''}">${totalUnpaid.toFixed(2)} ${state.storeSettings.currency}</b></div>
+    `;
+  }
+
+  if (filtered.length === 0) { 
+    container.innerHTML = '<p class="text-muted text-center" style="padding:20px;">' + tr('empty_invoices') + '</p>'; 
+    return; 
+  }
 
   const payLabels = { cash: tr('cash_label'), visa: tr('th_visa_sales'), transfer: tr('th_bank_transfers'), card: tr('card_label') };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_invoice_number') + '</th><th>' + tr('th_date') + '</th><th>' + tr('th_customer') + '</th><th>' + tr('th_total') + '</th><th>' + tr('th_paid') + '</th><th>' + tr('th_remaining') + '</th><th>' + tr('th_payment_method') + '</th><th>' + tr('th_action') + '</th></tr></thead><tbody>';
+  // 2. عرض الفواتير ككروت
+  let html = '<div class="invoice-cards-grid">';
   filtered.forEach(function(s) {
     const custId = s.customer_id || s.customerId;
     const cust = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = s.pay_method || s.payMethod;
     const payText = payLabels[payMethod] || payMethod || '-';
-    html += '<tr>' +
-      '<td>' + escapeHTML(s.id) + '</td>' +
-      '<td>' + new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
-      '<td>' + (cust ? escapeHTML(cust.name) : tr('cash_customer')) + '</td>' +
-      '<td>' + (Number(s.total) || 0).toFixed(2) + '</td>' +
-      '<td>' + (Number(s.paid) || 0).toFixed(2) + '</td>' +
-      '<td class="' + (Number(s.remaining) > 0 ? 'red-text' : '') + '">' + (Number(s.remaining) || 0).toFixed(2) + '</td>' +
-      '<td>' + escapeHTML(payText) + '</td>' +
-      '<td style="white-space: nowrap;">' +
-        '<button class="small-btn orange" onclick="printThermalInvoice(\'' + s.id + '\')" title="' + tr('sales_print_title') + '">🧾</button>' +
-        '<div class="action-dropdown">' +
-          '<button class="small-btn grey" onclick="toggleActionMenu(event, \'' + s.id + '\')" title="' + tr('sales_options_title') + '">⋮</button>' +
-          '<div id="menu-' + s.id + '" class="action-dropdown-menu">' +
-            '<button onclick="sendInvoiceWhatsApp(\'' + s.id + '\')">💬 ' + tr('sales_send_whatsapp') + '</button>' +
-            '<button onclick="initiateReturnFromSale(\'' + s.id + '\')">🔄 ' + tr('tab_returns') + '</button>' +
-            '<button class="text-danger" onclick="safeDeleteRecord(\'sale\', \'' + s.id + '\')">🗑️ ' + tr('sales_delete_invoice') + '</button>' +
-          '</div>' +
-        '</div>' +
-      '</td>' +
-      '</tr>';
+    const remaining = Number(s.remaining) || 0;
+    
+    // تحديد حالة الفاتورة
+    let statusHtml = '';
+    if (Number(s.returned_total) > 0) {
+      statusHtml = `<span class="badge status-returned">${tr('status_badge_returned')}</span>`;
+    } else if (remaining === 0) {
+      statusHtml = `<span class="badge status-paid">${tr('status_badge_paid')}</span>`;
+    } else if (Number(s.paid) === 0) {
+      statusHtml = `<span class="badge status-credit">${tr('status_badge_credit')}</span>`;
+    } else {
+      statusHtml = `<span class="badge status-partial">${tr('status_badge_partial')}</span>`;
+    }
+
+    html += `
+      <div class="invoice-card">
+        <div class="inv-card-header">
+          <div class="inv-id">#${escapeHTML(s.id)}</div>
+          ${statusHtml}
+        </div>
+        <div class="inv-card-body">
+          <div class="inv-row"><span>📅 ${tr('th_date')}:</span> <b>${new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</b></div>
+          <div class="inv-row"><span>👤 ${tr('th_customer')}:</span> <b>${cust ? escapeHTML(cust.name) : tr('cash_customer')}</b></div>
+          <div class="inv-row"><span>💳 ${tr('th_payment_method')}:</span> <b>${escapeHTML(payText)}</b></div>
+          <div class="inv-row total-row"><span>${tr('th_total')}:</span> <b>${Number(s.total || 0).toFixed(2)}</b></div>
+          ${remaining > 0 ? `<div class="inv-row unpaid-row"><span>${tr('th_remaining')}:</span> <b>${remaining.toFixed(2)}</b></div>` : ''}
+        </div>
+        <div class="inv-card-footer">
+          <button class="small-btn orange" onclick="printThermalInvoice('${s.id}')" title="${tr('sales_print_title')}">🖨️</button>
+          <div class="action-dropdown">
+            <button class="small-btn grey" onclick="toggleActionMenu(event, '${s.id}')" title="${tr('sales_options_title')}">⋮</button>
+            <div id="menu-${s.id}" class="action-dropdown-menu">
+              <button onclick="sendInvoiceWhatsApp('${s.id}')">💬 ${tr('sales_send_whatsapp')}</button>
+              <button onclick="initiateReturnFromSale('${s.id}')">🔄 ${tr('tab_returns')}</button>
+              <button class="text-danger" onclick="safeDeleteRecord('sale', '${s.id}')">🗑️ ${tr('sales_delete_invoice')}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   });
-  html += '</tbody></table></div>';
+  html += '</div>';
   container.innerHTML = html;
 }
 
@@ -1303,4 +1345,44 @@ function confirmCheckout() {
   closeCheckoutModal();
   // استدعاء دالة البيع الأصلية اللي بتخصم من المخزون وتحفظ الفاتورة
   completeSale();
+}
+/* v7.18 — Sales Log Quick Filters */
+function setSalesLogPeriod(period, btn) {
+  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const todayDate = new Date();
+  let fromStr = '';
+  let toStr = '';
+
+  const formatDate = (d) => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  if (period === 'today') {
+    fromStr = formatDate(todayDate);
+    toStr = fromStr;
+  } else if (period === 'yesterday') {
+    const y = new Date(todayDate);
+    y.setDate(y.getDate() - 1);
+    fromStr = formatDate(y);
+    toStr = fromStr;
+  } else if (period === 'week') {
+    const w = new Date(todayDate);
+    w.setDate(w.getDate() - 6);
+    fromStr = formatDate(w);
+    toStr = formatDate(todayDate);
+  } else if (period === 'month') {
+    const m = new Date(todayDate);
+    m.setDate(m.getDate() - 29);
+    fromStr = formatDate(m);
+    toStr = formatDate(todayDate);
+  } else if (period === 'all') {
+    fromStr = '';
+    toStr = '';
+  }
+
+  document.getElementById('salesFrom').value = fromStr;
+  document.getElementById('salesTo').value = toStr;
+  renderSales();
 }
