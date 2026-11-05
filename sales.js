@@ -78,19 +78,22 @@ function addToCartById(prodId, qty, isManualClick) {
     if (typeof renderProductGrid === 'function') renderProductGrid();
   }, 150);
 
- if (!isManualClick) {
-  const activeId = document.activeElement ? document.activeElement.id : '';
-  if (activeId !== 'productSearchInput') {
-    refocusCashierInput && refocusCashierInput();
-  
-if (state.storeSettings && (state.storeSettings.autoPrintOnScan || state.storeSettings.auto_print_on_scan)) {
-  setTimeout(() => {
-    if (typeof completeSale === 'function' && state.cart.length === 1) {
-      completeSale();
+  // لو ضغط باللمس، متفتحش الكيبورد
+  if (!isManualClick) {
+    const activeId = document.activeElement ? document.activeElement.id : '';
+    if (activeId !== 'productSearchInput') {
+      refocusCashierInput && refocusCashierInput();
     }
-  }, 200);
-}
-    }
+  }
+
+  // الطباعة التلقائية (بتشتغل سواء لمس أو اسكنر)
+  if (state.storeSettings && (state.storeSettings.autoPrintOnScan || state.storeSettings.auto_print_on_scan)) {
+    setTimeout(() => {
+      if (typeof completeSale === 'function' && state.cart.length === 1) {
+        completeSale();
+      }
+    }, 200);
+  }
 }
 
 function addToCartManual() {
