@@ -169,13 +169,17 @@ function setupPullToRefresh() {
   }, { passive: true });
 
   document.addEventListener('touchmove', function(e) {
-    if (!pulling) return;
-    const delta = e.touches[0].clientY - startY;
-    if (delta <= 0) return;
-    if (!indicator) indicator = createIndicator();
-    const h = Math.min(delta * 0.6, threshold + 20);
-    indicator.style.height = h + 'px';
-  }, { passive: true });
+  if (!pulling) return;
+  const delta = e.touches[0].clientY - startY;
+  if (delta <= 0) return;
+  
+  // ✅ منع المتصفح من عمل الـ Reload بتاعه
+  if (e.cancelable) e.preventDefault(); 
+  
+  if (!indicator) indicator = createIndicator();
+  const h = Math.min(delta * 0.6, threshold + 20);
+  indicator.style.height = h + 'px';
+}, { passive: false }); // ✅ غيرناها لـ false
 
   document.addEventListener('touchend', function() {
     if (!pulling) return;
