@@ -386,13 +386,20 @@ async function startAuth() {
       return;
     }
 
-    const result = await supabaseClient.auth.getSession();
-    if (result.error) throw result.error;
-    if (result.data.session && result.data.session.user) {
-      await openUserSession(result.data.session.user);
-    } else {
-      showLoggedOutUI();
-    }
+  const result = await supabaseClient.auth.getSession();
+if (result.error) throw result.error;
+if (result.data.session && result.data.session.user) {
+  await openUserSession(result.data.session.user);
+} else {
+  // ✅ فحص: لو المستخدم مسجل قبل كده، افتحه من الكاش
+  const lastUser = localStorage.getItem('matjari_last_user');
+  if (lastUser) {
+    loadOfflineSession();
+  } else {
+    showLoggedOutUI();
+  }
+}
+
   } catch (e) {
     const isNetworkErr = !navigator.onLine || /network|fetch|timeout/i.test((e && e.message) || '');
     if (isNetworkErr) {

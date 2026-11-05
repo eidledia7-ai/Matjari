@@ -315,8 +315,16 @@ async function syncUp(ownerId) {
     } catch (e) { console.warn('Audit log upload failed', e); }
   }
 }
+let _saveDataTimer = null;
 
 function saveData() {
+  // Debounce: نحفظ بعد 1.5 ثانية من آخر تعديل
+  clearTimeout(_saveDataTimer);
+  _saveDataTimer = setTimeout(_actualSaveData, 1500);
+}
+
+function _actualSaveData() {
+  _saveDataTimer = null;
   const cacheOwnerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
   if (!cacheOwnerId) return;
   const key = 'matjari_cache_' + cacheOwnerId;
@@ -337,6 +345,14 @@ function saveData() {
     localStorage.setItem(key, JSON.stringify(cache));
   } catch (e) {}
 }
+
+// ✅ حفظ فوري قبل إغلاق الصفحة (عشان مفيش داتا تضيع)
+window.addEventListener('beforeunload', function() {
+  if (_saveDataTimer) {
+    clearTimeout(_saveDataTimer);
+    _actualSaveData();
+  }
+});
 
 async function syncEmployeeChanges() {
   if (!state.currentUser || state.role !== 'employee' || !state.ownerId) return;
