@@ -1,7 +1,7 @@
 /* ============ سجل النشاط (Audit Log) ============ */
 async function addAuditLog(action, details, entityId) {
   try {
-    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
+     const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : (state.currentUser ? state.currentUser.id : null);
     if (!ownerId) return;
 
     const entry = {
