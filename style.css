@@ -1076,7 +1076,7 @@ body.dark-mode .skeleton {
 /* ─── Layout ─── */
 .sales-workspace {
   display: grid;
-  grid-template-columns: 7fr 3fr;
+ grid-template-columns: 1fr 380px;
   gap: 16px;
   height: calc(100dvh - 80px);
   min-height: 600px;
@@ -2233,4 +2233,74 @@ body.dark-mode .skeleton {
 
 @media (max-width: 400px) {
   .app-grid-btn { font-size: 11px; padding: 10px 2px; }
+}
+/* تنسيق كروت السلة (Cart Cards) */
+.cart-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+}
+
+.cart-item-card {
+  background: #fff;
+  border: 1px solid var(--sw-border);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.cart-item-card.selected {
+  border-color: var(--sw-primary);
+  background: #f1f8f9;
+  box-shadow: 0 2px 8px rgba(23, 107, 112, 0.1);
+}
+
+.cic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #e1e8ed;
+  padding-bottom: 6px;
+}
+
+.cic-name {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--sw-text);
+}
+
+.cic-del {
+  background: #fef2f2;
+  color: #c62828;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+.cic-del:hover { background: #fee2e2; }
+
+.cic-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cic-price {
+  font-size: 11px;
+  color: var(--sw-muted);
+  direction: ltr;
+}
+
+.cic-total {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--sw-primary);
+  direction: ltr;
+  min-width: 60px;
+  text-align: left;
 }

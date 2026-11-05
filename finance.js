@@ -65,24 +65,26 @@ function renderExpenses() {
   const en = currentLang === 'en';
   
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th>' + tr('th_date') + '</th>' +
-    '<th>' + tr('th_item_name') + '</th>' +
-    '<th>' + tr('th_amount') + '</th>' +
-    '<th>' + tr('th_notes') + '</th>' +
-    '<th>' + tr('th_action') + '</th>' +
+    '<th>التاريخ والوقت</th>' +
+    '<th>البند</th>' +
+    '<th>المبلغ</th>' +
+    '<th>إجراء</th>' +
     '</tr></thead><tbody>';
     
   state.expenses.forEach(function(e) {
-    // إصلاح التاريخ عشان يظهر بشكل مفهوم
     const dateObj = new Date(e.date);
-    const dateStr = dateObj.toLocaleDateString(en ? 'en-US' : 'ar-EG', { month: 'short', day: 'numeric' });
-    const timeStr = dateObj.toLocaleTimeString(en ? 'en-US' : 'ar-EG', { hour: '2-digit', minute: '2-digit' });
+    
+    // تنسيق التاريخ والوقت مع بعض في سطر واحد
+    const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    const dateStr = dateObj.toLocaleString(en ? 'en-US' : 'ar-EG', options);
+    
+    // دمج الملاحظات تحت اسم البند عشان نوفر مساحة
+    const notesHtml = e.notes ? `<br><span style="color:#888; font-size:11px;">${escapeHTML(e.notes)}</span>` : '';
     
     html += '<tr>' +
-      '<td style="white-space:nowrap; font-size:12px;">' + dateStr + '<br><span style="color:#888;font-size:10px;">' + timeStr + '</span></td>' +
-      '<td><b>' + escapeHTML(e.name) + '</b></td>' +
-      '<td><b style="color:#c0392b; direction:ltr;">' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
-      '<td style="font-size:12px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + escapeHTML(e.notes||'') + '">' + escapeHTML(e.notes || '-') + '</td>' +
+      '<td style="white-space:nowrap; font-size:12px; color:#555;">' + dateStr + '</td>' +
+      '<td><b style="font-size:13px;">' + escapeHTML(e.name) + '</b>' + notesHtml + '</td>' +
+      '<td><b style="color:#c0392b; direction:ltr; font-size:13px;">' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
       '<td><button class="small-btn red" style="padding:4px 8px;" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td>' +
       '</tr>';
   });
@@ -442,12 +444,25 @@ function calculateShiftDiff() {
   const actEl = document.getElementById('shiftActualCash');
   const diffEl = document.getElementById('shiftDifference');
   if (!expEl || !actEl || !diffEl) return;
-  const expected = parseFloat(expEl.value) || 0;
+  
+  // إصلاح: مسح الفواصل والكلمات لقراءة الرقم صح
+  const expClean = expEl.value.replace(/,/g, '').replace(/[^\d.-]/g, '');
+  const expected = parseFloat(expClean) || 0;
   const actual = parseFloat(actEl.value) || 0;
+  
   const diff = actual - expected;
-  if (diff < 0) { diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('shortage'); diffEl.style.color = '#c62828'; }
-  else if (diff > 0) { diffEl.value = diff.toFixed(2) + ' ' + state.storeSettings.currency + tr('surplus'); diffEl.style.color = '#2e7d32'; }
-  else { diffEl.value = '0.00 ' + state.storeSettings.currency + tr('matched'); diffEl.style.color = '#17643a'; }
+  if (diff < 0) { 
+    diffEl.value = diff.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ' + state.storeSettings.currency + tr('shortage'); 
+    diffEl.style.color = '#c62828'; 
+  }
+  else if (diff > 0) { 
+    diffEl.value = diff.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ' + state.storeSettings.currency + tr('surplus'); 
+    diffEl.style.color = '#2e7d32'; 
+  }
+  else { 
+    diffEl.value = '0.00 ' + state.storeSettings.currency + tr('matched'); 
+    diffEl.style.color = '#17643a'; 
+  }
 }
 
 async function closeShift() {
@@ -934,7 +949,7 @@ function fillShiftCash(amount) {
   const input = document.getElementById('shiftActualCash');
   if (!input) return;
   if (amount === 'exact') {
-    const expVal = document.getElementById('shiftExpectedCash').value.replace(/[^\d.]/g, '');
+    const expVal = document.getElementById('shiftExpectedCash').value.replace(/,/g, '').replace(/[^\d.-]/g, '');
     input.value = parseFloat(expVal).toFixed(2);
   } else {
     input.value = amount;

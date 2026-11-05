@@ -241,7 +241,7 @@ function populateAdjustDropdown() {
   sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   const availableLabel = tr('opt_available_label');
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + availableLabel + (Number(p.stock) || 0) + ')</option>';
+    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (' + availableLabel + ' ' + (Number(p.stock) || 0) + ')</option>';
   });
 }
 
@@ -358,7 +358,7 @@ function populateReturnDropdowns() {
   saleSel.innerHTML = '<option value="">' + tr('opt_select_invoice') + '</option>';
   const invLabel = tr('opt_invoice_label');
   state.sales.forEach(function(s) {
-    saleSel.innerHTML += '<option value="' + s.id + '">' + invLabel + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
+    saleSel.innerHTML += '<option value="' + s.id + '">' + invLabel + ' ' + s.id + ' (' + (Number(s.total) || 0).toFixed(2) + ' ' + state.storeSettings.currency + ')</option>';
   });
 }
 
@@ -381,7 +381,7 @@ function updateReturnProducts() {
     const remaining = i.qty - alreadyReturned;
     if (remaining > 0) {
       const remLabel = tr('opt_remaining_label');
-      prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + remLabel + remaining + ')</option>';
+prodSel.innerHTML += '<option value="' + i.id + '">' + escapeHTML(i.name) + ' (' + remLabel + ' ' + remaining + ')</option>';
     }
   });
 }

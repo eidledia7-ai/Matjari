@@ -44,7 +44,7 @@ function populateSalesDropdowns() {
   renderCart();
 }
 
-function addToCartById(prodId, qty) {
+function addToCartById(prodId, qty, isManualClick) {
   if (!prodId) return showNotification(tr('notify_select_product'), 'error');
   qty = parseInt(qty) || 1;
 
@@ -78,9 +78,11 @@ function addToCartById(prodId, qty) {
     if (typeof renderProductGrid === 'function') renderProductGrid();
   }, 150);
 
+ if (!isManualClick) {
   const activeId = document.activeElement ? document.activeElement.id : '';
   if (activeId !== 'productSearchInput') {
     refocusCashierInput && refocusCashierInput();
+  
 if (state.storeSettings && (state.storeSettings.autoPrintOnScan || state.storeSettings.auto_print_on_scan)) {
   setTimeout(() => {
     if (typeof completeSale === 'function' && state.cart.length === 1) {
@@ -96,7 +98,7 @@ function addToCartManual() {
   const qtyEl = document.getElementById('saleQty');
   const prodId = prodIdEl ? prodIdEl.value : null;
   const qty = qtyEl ? parseInt(qtyEl.value) : 1;
-  addToCartById(prodId, qty);
+  addToCartById(prodId, qty, true);
   if (qtyEl) qtyEl.value = 1;
 }
 
@@ -165,7 +167,7 @@ function handleProductClick(e, productId) {
     return showNotification(tr('qty_exceeds_stock_1') + 0 + tr('qty_exceeds_stock_2'), 'error');
   }
   flyToCart(card);
-  addToCartById(productId, 1);
+  addToCartById(productId, 1, true);
 }
 
 function renderCategoryChips() {
@@ -249,7 +251,6 @@ function closeMobileCart() {
   if (bd) bd.classList.remove('show');
   document.body.style.overflow = '';
 }
-
 function renderCart() {
   const container = document.getElementById('cartTable');
   if (!container) return;
@@ -287,34 +288,35 @@ function renderCart() {
     return;
   }
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th>' + tr('th_item') + '</th>' +
-    '<th>' + tr('th_price') + '</th>' +
-    '<th>' + tr('th_quantity') + '</th>' +
-    '<th>' + tr('th_total') + '</th>' +
-    '<th>' + tr('th_action') + '</th>' +
-    '</tr></thead><tbody>';
-
+  let html = '<div class="cart-cards-wrap">';
   let subtotal = 0;
+  const cur = state.storeSettings.currency || 'ج.م';
+
   state.cart.forEach(function(item, idx) {
     const tot = item.price * item.qty;
     subtotal += tot;
     const isSelected = (state.selectedCartIndex === idx);
-    html += '<tr class="cart-row' + (isSelected ? ' cart-row-selected' : '') + '" ' +
-      'data-cart-idx="' + idx + '" ' +
-      'onclick="selectCartRow(' + idx + ')" style="cursor:pointer;">' +
-      '<td>' + escapeHTML(item.name) + '</td>' +
-      '<td>' + item.price + '</td>' +
-      '<td><div class="qty-input-group" onclick="event.stopPropagation()">' +
-        '<button type="button" class="qty-btn" onclick="decreaseQty(' + idx + ')">−</button>' +
-        '<input type="number" min="1" value="' + item.qty + '" onchange="updateCartQty(' + idx + ', this.value)">' +
-        '<button type="button" class="qty-btn" onclick="increaseQty(' + idx + ')">+</button>' +
-      '</div></td>' +
-      '<td>' + tot.toFixed(2) + '</td>' +
-      '<td><button class="small-btn red" onclick="event.stopPropagation();removeFromCart(' + idx + ')">' + tr('delete_btn') + '</button></td>' +
-      '</tr>';
+    
+    html += `
+      <div class="cart-item-card ${isSelected ? 'selected' : ''}" data-cart-idx="${idx}" onclick="selectCartRow(${idx})">
+        <div class="cic-header">
+          <span class="cic-name">${escapeHTML(item.name)}</span>
+          <button class="cic-del" onclick="event.stopPropagation(); removeFromCart(${idx})" title="حذف">🗑️</button>
+        </div>
+        <div class="cic-details">
+          <span class="cic-price">${item.price} ${cur}</span>
+          <div class="qty-input-group" onclick="event.stopPropagation()">
+            <button type="button" class="qty-btn" onclick="decreaseQty(${idx})">−</button>
+            <input type="number" min="1" value="${item.qty}" onchange="updateCartQty(${idx}, this.value)">
+            <button type="button" class="qty-btn" onclick="increaseQty(${idx})">+</button>
+          </div>
+          <span class="cic-total">${tot.toFixed(2)} ${cur}</span>
+        </div>
+      </div>
+    `;
   });
-  html += '</tbody></table></div>';
+  
+  html += '</div>';
   container.innerHTML = html;
 
   const discVal = parseFloat(document.getElementById('saleDiscount')?.value) || 0;
@@ -339,12 +341,8 @@ function renderCart() {
   const t = document.getElementById('cartTotal');
   if (t) {
     let totalText = finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
-    if (pointsDiscount > 0) {
-      totalText += ' (' + tr('points_discount_prefix') + pointsDiscount.toFixed(2) + ')';
-    }
-    if (vat.vat_amount > 0) {
-      totalText += ' [' + tr('vat') + ': ' + vat.vat_amount.toFixed(2) + ']';
-    }
+    if (pointsDiscount > 0) totalText += ' (' + tr('points_discount_prefix') + pointsDiscount.toFixed(2) + ')';
+    if (vat.vat_amount > 0) totalText += ' [' + tr('vat') + ': ' + vat.vat_amount.toFixed(2) + ']';
     t.innerText = totalText;
   }
 
