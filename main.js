@@ -184,18 +184,25 @@ function setupPullToRefresh() {
       const h = parseFloat(indicator.style.height) || 0;
       if (h >= threshold * 0.6) {
         indicator.style.height = '50px';
-        setTimeout(function() {
+        setTimeout(async function() {
           if (navigator.onLine) {
-            if (state.role === 'employee' && typeof syncEmployeeChanges === 'function') {
-              syncEmployeeChanges().catch(function(){}).finally(function() { if (indicator) { indicator.remove(); indicator = null; } });
-            } else if (typeof syncNow === 'function') {
-              syncNow();
-              setTimeout(function() { if (indicator) { indicator.remove(); indicator = null; } }, 1500);
-            } else {
-              indicator.remove(); indicator = null;
+            try {
+              if (state.role === 'employee' && typeof syncEmployeeChanges === 'function') {
+                await syncEmployeeChanges();
+              } else if (typeof syncNow === 'function') {
+                await syncNow();
+              }
+            } catch(e) {
+              console.warn('PTR Sync failed:', e);
+            } finally {
+              if (indicator) { indicator.remove(); indicator = null; }
             }
           } else {
-            location.reload();
+            // لو مفيش نت، نظهر إشعار صغير ونشيل الدايرة
+            if (typeof showNotification === 'function' && typeof tr === 'function') {
+              showNotification(tr('error_no_internet') || 'لا يوجد اتصال بالإنترنت', 'error');
+            }
+            if (indicator) { indicator.remove(); indicator = null; }
           }
         }, 300);
       } else {

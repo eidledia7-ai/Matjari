@@ -398,8 +398,14 @@ async function startAuth() {
     if (isNetworkErr) {
       loadOfflineSession();
     } else {
-      setAuthMessage(tr('auth_sign_in_fail_prefix') + (e.message || ''), true);
-      showLoggedOutUI();
+      // ✅ التعديل الجديد: لو المستخدم مسجل قبل كده، افتحله السيشن المحلي بدل صفحة الهبوط
+      const lastUser = localStorage.getItem('matjari_last_user');
+      if (lastUser) {
+        loadOfflineSession();
+      } else {
+        setAuthMessage(tr('auth_sign_in_fail_prefix') + (e.message || ''), true);
+        showLoggedOutUI();
+      }
     }
   }
 }
