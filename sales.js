@@ -341,13 +341,14 @@ function renderCart() {
   const finalTotal = vat.total;
   state._lastCartTotal = finalTotal;
 
-  const t = document.getElementById('cartTotal');
-  if (t) {
-    let totalText = finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
-    if (pointsDiscount > 0) totalText += ' (' + tr('points_discount_prefix') + pointsDiscount.toFixed(2) + ')';
-    if (vat.vat_amount > 0) totalText += ' [' + tr('vat') + ': ' + vat.vat_amount.toFixed(2) + ']';
-    t.innerText = totalText;
-  }
+const t = document.getElementById('cartTotal');
+const ct = document.getElementById('checkoutTotal');
+let totalText = finalTotal.toFixed(2) + ' ' + state.storeSettings.currency;
+if (pointsDiscount > 0) totalText += ' (' + tr('points_discount_prefix') + pointsDiscount.toFixed(2) + ')';
+if (vat.vat_amount > 0) totalText += ' [' + tr('vat') + ': ' + vat.vat_amount.toFixed(2) + ']';
+
+if (t) t.innerText = totalText;
+if (ct) ct.innerText = totalText; // السطر الجديد
 
   const paidInput = document.getElementById('salePaid');
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer') && paidInput) {
@@ -618,6 +619,7 @@ async function completeSale() {
     state.selectedCartIndex = -1;
     refocusCashierInput();
     hideLoading();
+    closeCheckoutModal();
   }
 }
 
@@ -1273,4 +1275,32 @@ function setQuickPaid(amount) {
   }
   paidInput.dispatchEvent(new Event('input', { bubbles: true }));
   paidInput.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function openCheckoutModal() {
+  if (state.cart.length === 0) {
+    return showNotification(tr('empty_cart_err'), 'error');
+  }
+  
+  // تحديث الإجمالي اللي جوه النافذة
+  const totalEl = document.getElementById('cartTotal');
+  const checkoutTotalEl = document.getElementById('checkoutTotal');
+  if (totalEl && checkoutTotalEl) {
+    checkoutTotalEl.innerText = totalEl.innerText;
+  }
+  
+  // تصفير خانة المدفوع عشان الكاشير يكتبها من جديد (أو يضغط المبلغ بالظبط)
+  document.getElementById('salePaid').value = '';
+  
+  document.getElementById('checkoutModal').style.display = 'flex';
+}
+
+function closeCheckoutModal() {
+  document.getElementById('checkoutModal').style.display = 'none';
+}
+
+function confirmCheckout() {
+  // قفل النافذة الأول
+  closeCheckoutModal();
+  // استدعاء دالة البيع الأصلية اللي بتخصم من المخزون وتحفظ الفاتورة
+  completeSale();
 }
