@@ -104,6 +104,9 @@ function switchProductTab(tabId) {
   }
 }
 
+/* ============ v7.20 — Lazy Inventory Grid ============ */
+let _invGridState = { filtered: [], rendered: 0, batchSize: 60, observer: null };
+
 function renderProducts() {
   const container = document.getElementById('productsTable');
   if (!container) return;
@@ -114,9 +117,9 @@ function renderProducts() {
   const categories = [...new Set(state.products.map(p => p.category).filter(Boolean))];
   
   let chipsHtml = '<div class="prod-cats-bar" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:10px;">';
-  chipsHtml += `<button class="cat-chip ${_activeProductCategory === '' ? 'active' : ''}" onclick="filterProductCat('')">${tr('cat_all')}</button>`;
+  chipsHtml += '<button class="cat-chip ' + (_activeProductCategory === '' ? 'active' : '') + '" onclick="filterProductCat(\'\')">' + tr('cat_all') + '</button>';
   categories.forEach(cat => {
-    chipsHtml += `<button class="cat-chip ${_activeProductCategory === cat ? 'active' : ''}" onclick="filterProductCat('${cat}')">${escapeHTML(cat)}</button>`;
+    chipsHtml += '<button class="cat-chip ' + (_activeProductCategory === cat ? 'active' : '') + '" onclick="filterProductCat(\'' + cat + '\')">' + escapeHTML(cat) + '</button>';
   });
   chipsHtml += '</div>';
 
@@ -131,34 +134,70 @@ function renderProducts() {
     return;
   }
 
-  let html = chipsHtml + '<div class="products-grid">';
+  if (_invGridState.observer) { _invGridState.observer.disconnect(); _invGridState.observer = null; }
+  _invGridState.filtered = filtered;
+  _invGridState.rendered = 0;
 
-  filtered.forEach(function(p) {
+  container.innerHTML = chipsHtml + '<div class="products-grid" id="invProductsGrid"></div>';
+  _renderInvBatch();
+  _setupInvObserver();
+}
+
+function _renderInvBatch() {
+  const grid = document.getElementById('invProductsGrid');
+  if (!grid) return;
+  const start = _invGridState.rendered;
+  const end = Math.min(start + _invGridState.batchSize, _invGridState.filtered.length);
+  const batch = _invGridState.filtered.slice(start, end);
+  const cur = state.storeSettings.currency || 'ج.م';
+
+  const sentinel = grid.querySelector('#invGridSentinel');
+  if (sentinel) sentinel.remove();
+
+  let html = '';
+  batch.forEach(function(p) {
     const isLow = Number(p.stock) <= Number(p.minStock || p.min_stock || 5);
     const isPinned = p.is_pinned === true || p.isPinned === true;
     const pinTitle = isPinned ? tr('unpin_product') : tr('pin_product');
-    const cur = state.storeSettings.currency || 'ج.م';
-    
-    html += `
-      <div class="product-item-card">
-        <div class="pic-header">
-          <span class="pic-name">${escapeHTML(p.name)}</span>
-          <button class="small-btn ${isPinned ? 'orange' : 'grey'}" style="padding:4px 8px;" onclick="togglePinProduct('${p.id}')" title="${pinTitle}">${isPinned ? '📌' : '📍'}</button>
-        </div>
-        <div class="pic-details">
-          <span class="pic-price" onclick="quickEditPrice('${p.id}', ${p.price})" style="cursor:pointer; border-bottom:1px dashed #999;">${Number(p.price)} ${cur} ✏️</span>
-          <span class="pic-stock ${isLow ? 'text-danger' : ''}">${isLow ? '⚠️' : ''} ${tr('th_stock')}: ${Number(p.stock)}</span>
-        </div>
-        <div class="pic-actions">
-          <button class="btn primary" style="padding:6px 12px; font-size:12px;" onclick="editProduct('${p.id}')">${tr('edit_btn')}</button>
-          <button class="btn red" style="padding:6px 12px; font-size:12px;" onclick="deleteProduct('${p.id}')">${tr('delete_btn')}</button>
-        </div>
-      </div>
-    `;
+
+    html += '<div class="product-item-card">' +
+      '<div class="pic-header"><span class="pic-name">' + escapeHTML(p.name) + '</span>' +
+        '<button class="small-btn ' + (isPinned ? 'orange' : 'grey') + '" style="padding:4px 8px;" onclick="togglePinProduct(\'' + p.id + '\')" title="' + pinTitle + '">' + (isPinned ? '📌' : '📍') + '</button>' +
+      '</div>' +
+      '<div class="pic-details">' +
+        '<span class="pic-price" onclick="quickEditPrice(\'' + p.id + '\', ' + p.price + ')" style="cursor:pointer; border-bottom:1px dashed #999;">' + Number(p.price) + ' ' + cur + ' ✏️</span>' +
+        '<span class="pic-stock ' + (isLow ? 'text-danger' : '') + '">' + (isLow ? '⚠️ ' : '') + tr('th_stock') + ': ' + Number(p.stock) + '</span>' +
+      '</div>' +
+      '<div class="pic-actions">' +
+        '<button class="btn primary" style="padding:6px 12px; font-size:12px;" onclick="editProduct(\'' + p.id + '\')">' + tr('edit_btn') + '</button>' +
+        '<button class="btn red" style="padding:6px 12px; font-size:12px;" onclick="deleteProduct(\'' + p.id + '\')">' + tr('delete_btn') + '</button>' +
+      '</div>' +
+    '</div>';
   });
-  
-  html += '</div>';
-  container.innerHTML = html;
+
+  grid.insertAdjacentHTML('beforeend', html);
+  _invGridState.rendered = end;
+
+  if (_invGridState.rendered < _invGridState.filtered.length) {
+    grid.insertAdjacentHTML('beforeend', '<div id="invGridSentinel" style="height:20px;grid-column:1/-1;"></div>');
+  }
+}
+
+function _setupInvObserver() {
+  if (typeof IntersectionObserver === 'undefined') return;
+  const sentinel = document.getElementById('invGridSentinel');
+  if (!sentinel) return;
+  _invGridState.observer = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting) {
+      _renderInvBatch();
+      const newSentinel = document.getElementById('invGridSentinel');
+      if (_invGridState.observer && newSentinel) {
+        _invGridState.observer.disconnect();
+        _invGridState.observer.observe(newSentinel);
+      }
+    }
+  }, { rootMargin: '300px' });
+  _invGridState.observer.observe(sentinel);
 }
 
 function filterProductCat(cat) {

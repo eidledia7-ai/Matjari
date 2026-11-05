@@ -73,10 +73,8 @@ function addToCartById(prodId, qty, isManualClick) {
   playSound && playSound('add');
   _flashCart && _flashCart('add');
   renderCart();
-  clearTimeout(window._gridRefreshTimer);
-  window._gridRefreshTimer = setTimeout(() => {
-    if (typeof renderProductGrid === 'function') renderProductGrid();
-  }, 150);
+  // ✅ v7.20 — تحديث كارت واحد بس بدل إعادة رسم كل الكروت
+_updateProductCardStock(productId);
 
   // لو ضغط باللمس، متفتحش الكيبورد
   if (!isManualClick) {
@@ -105,17 +103,18 @@ function addToCartManual() {
   if (qtyEl) qtyEl.value = 1;
 }
 
+/* ============ v7.20 — Lazy Product Grid ============ */
+let _productGridState = { filtered: [], rendered: 0, batchSize: 60, observer: null };
+
 function renderProductGrid() {
   const grid = document.getElementById('productGrid');
   const empty = document.getElementById('productGridEmpty');
   if (!grid) return;
-  const scrollPos = grid.scrollTop;
 
   const searchEl = document.getElementById('productSearchInput');
   const search = (searchEl ? searchEl.value : '').trim().toLowerCase();
 
   const filtered = (state.products || []).filter(function(p) {
-  
     if (_activeCategory) {
       const cat = (p.category || '').trim();
       if (cat !== _activeCategory) return false;
@@ -125,11 +124,12 @@ function renderProductGrid() {
         || (p.barcode && String(p.barcode).indexOf(search) !== -1)
         || (p.category && p.category.toLowerCase().indexOf(search) !== -1);
   });
-  filtered.sort((a, b) => {
-  const aPin = (a.is_pinned === true || a.isPinned === true) ? 1 : 0;
-  const bPin = (b.is_pinned === true || b.isPinned === true) ? 1 : 0;
-  return bPin - aPin; // المثبت أولاً
-});
+  
+  filtered.sort(function(a, b) {
+    const aPin = (a.is_pinned === true || a.isPinned === true) ? 1 : 0;
+    const bPin = (b.is_pinned === true || b.isPinned === true) ? 1 : 0;
+    return bPin - aPin;
+  });
 
   if (filtered.length === 0) {
     grid.innerHTML = '';
@@ -138,9 +138,27 @@ function renderProductGrid() {
   }
   if (empty) empty.style.display = 'none';
 
-  const cur = state.storeSettings.currency || 'ج.م';
+  // Reset
+  if (_productGridState.observer) { _productGridState.observer.disconnect(); _productGridState.observer = null; }
+  _productGridState.filtered = filtered;
+  _productGridState.rendered = 0;
+  grid.innerHTML = '';
+  
+  _renderProductBatch(grid);
+  _setupProductObserver(grid);
+}
 
-  grid.innerHTML = filtered.map(function(p) {
+function _renderProductBatch(grid) {
+  const cur = state.storeSettings.currency || 'ج.م';
+  const start = _productGridState.rendered;
+  const end = Math.min(start + _productGridState.batchSize, _productGridState.filtered.length);
+  const batch = _productGridState.filtered.slice(start, end);
+
+  const sentinel = grid.querySelector('#productGridSentinel');
+  if (sentinel) sentinel.remove();
+
+  let html = '';
+  batch.forEach(function(p) {
     const stock = Number(p.stock) || 0;
     const price = Number(p.price) || 0;
     const isOut = stock <= 0;
@@ -148,18 +166,57 @@ function renderProductGrid() {
     const stockCls = isOut ? 'zero' : (isLow ? 'low' : '');
     const stockLabel = isOut ? '0' : stock;
 
-    return '<div class="product-card' + (isOut ? ' out-of-stock' : '') + '" ' +
-      'tabindex="0" ' +
-      'data-product-id="' + p.id + '" ' +
+    html += '<div class="product-card' + (isOut ? ' out-of-stock' : '') + '" ' +
+      'tabindex="0" data-product-id="' + p.id + '" ' +
       'onclick="handleProductClick(event, \'' + p.id + '\')" ' +
       'onkeydown="if(event.key===\'Enter\'){handleProductClick(event, \'' + p.id + '\')}">' +
       '<span class="pc-stock ' + stockCls + '">' + stockLabel + '</span>' +
       '<div class="pc-name">' + escapeHTML(p.name) + '</div>' +
       '<div class="pc-price">' + price.toFixed(2) + ' ' + cur + '</div>' +
     '</div>';
-  }).join('');
+  });
 
-  grid.scrollTop = scrollPos;
+  grid.insertAdjacentHTML('beforeend', html);
+  _productGridState.rendered = end;
+
+  if (_productGridState.rendered < _productGridState.filtered.length) {
+    grid.insertAdjacentHTML('beforeend', '<div id="productGridSentinel" style="height:20px;grid-column:1/-1;"></div>');
+  }
+}
+
+function _setupProductObserver(grid) {
+  if (typeof IntersectionObserver === 'undefined') return;
+  const sentinel = document.getElementById('productGridSentinel');
+  if (!sentinel) return;
+
+  _productGridState.observer = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting) {
+      _renderProductBatch(grid);
+      const newSentinel = document.getElementById('productGridSentinel');
+      if (_productGridState.observer && newSentinel) {
+        _productGridState.observer.disconnect();
+        _productGridState.observer.observe(newSentinel);
+      }
+    }
+  }, { rootMargin: '300px' });
+
+  _productGridState.observer.observe(sentinel);
+}
+
+// ✅ تحديث سريع لكارت واحد بدل إعادة رسم كل الكروت
+function _updateProductCardStock(productId) {
+  const product = state.products.find(function(p) { return p.id === productId; });
+  if (!product) return;
+  const card = document.querySelector('.product-card[data-product-id="' + productId + '"]');
+  if (!card) return;
+  const badge = card.querySelector('.pc-stock');
+  if (!badge) return;
+  const stock = Number(product.stock) || 0;
+  const isOut = stock <= 0;
+  const isLow = !isOut && stock <= (Number(product.minStock ?? product.min_stock) || 5);
+  badge.textContent = isOut ? '0' : stock;
+  badge.className = 'pc-stock ' + (isOut ? 'zero' : (isLow ? 'low' : ''));
+  card.classList.toggle('out-of-stock', isOut);
 }
 
 function handleProductClick(e, productId) {
