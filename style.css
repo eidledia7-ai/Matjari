@@ -2472,7 +2472,6 @@ html[dir="rtl"] .switch-row input[type="checkbox"]:checked::after {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
@@ -2524,4 +2523,14 @@ html[dir="rtl"] .switch-row input[type="checkbox"]:checked::after {
   padding: 10px 15px;
   border-top: 1px solid var(--border);
   background: #fafbfc;
+}
+/* تظبيط ظهور القائمة المنسدلة في سجل المبيعات */
+.inv-card-header {
+  border-radius: 12px 12px 0 0;
+}
+.inv-card-footer {
+  border-radius: 0 0 12px 12px;
+}
+.action-dropdown-menu {
+  z-index: 9999 !important;
 }

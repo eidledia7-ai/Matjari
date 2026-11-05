@@ -359,7 +359,7 @@ async function syncNow() {
   if (!supabaseClient) return showNotification('لا يوجد اتصال بالسيرفر', 'error');
   if (!navigator.onLine) return showNotification('لا يوجد اتصال بالإنترنت', 'error');
 
-  showLoading('جارٍ المزامنة...');
+  
   try {
     const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
     if (state.role === 'employee') await syncEmployeeChanges();
@@ -370,6 +370,6 @@ async function syncNow() {
     console.error(e);
     showNotification('تعذرت المزامنة', 'error');
   } finally {
-    hideLoading();
+    
   }
 }
