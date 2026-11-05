@@ -832,56 +832,126 @@
 
 <!-- 6. الإعدادات - بيانات المحل -->
 <div id="settStore" class="page">
-  <h2 data-i18n="store_data_page">🏪 بيانات المحل</h2>
-  <div class="card">
-    <div class="form-grid">
-      <div class="form-group"><label data-i18n="store_logo">شعار المحل (صورة)</label><input type="file" id="storeLogo" accept="image/*"><img id="storeLogoPreview" style="max-width: 120px; margin-top: 8px; display: none; border-radius: 8px; background: #fff; padding: 5px;"><button class="small-btn gray" type="button" onclick="removeStoreLogo()" style="margin-top: 5px;" data-i18n="remove_logo">حذف الشعار</button></div>
-      <div class="form-group"><label data-i18n="store_name">اسم المحل</label><input type="text" id="storeName" data-i18n-placeholder="store_name" placeholder="اسم المحل"></div>
-      <div class="form-group"><label data-i18n="store_phone_label">رقم الهاتف</label><input type="text" id="storePhone" data-i18n-placeholder="store_phone_ph" placeholder="01xxxxxxxxx"></div>
-      <div class="form-group"><label data-i18n="address_label">العنوان</label><input type="text" id="storeAddress"></div>
-      <div class="form-group"><label data-i18n="tax_number">الرقم الضريبي (اختياري)</label><input type="text" id="storeTaxNumber"></div>
-      <div class="form-group"><label data-i18n="currency_label">العملة</label><input type="text" id="storeCurrency" value="ج.م"></div>
-      <div class="form-group"><label data-i18n="monthly_goal">🎯 هدف المبيعات الشهري (اختياري)</label><input type="number" id="storeMonthlyGoal" min="0" step="any" data-i18n-placeholder="monthly_goal_ph" placeholder="مثال: 50000"></div>
-      <div class="form-group"><label data-i18n="print_type_label">🖨️ نوع الفاتورة الافتراضي</label><select id="storePrintType"><option value="thermal" data-i18n="print_type_thermal">فاتورة كاشير (حرارية 80mm)</option><option value="a4" data-i18n="print_type_a4">فاتورة عادية (A4)</option></select></div>
-      <div class="form-group">
-  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:15px; font-weight:bold; color:var(--primary);">
-    <input type="checkbox" id="autoPrintOnScan" style="width:20px; height:20px;">
-    <span data-i18n="auto_print_on_scan">الطباعة التلقائية عند مسح الباركود (وضع البيع السريع)</span>
-  </label>
-</div>
-      <div class="form-group"><label data-i18n="points_rate_label">💎 كل كام جنيه يكسب العميل نقطة؟ (اتركه 0 للإلغاء)</label><input type="number" id="storePointsRate" min="0" data-i18n-placeholder="points_rate_ph" placeholder="مثال: 10"></div>
-      <div class="form-group"><label data-i18n="point_value_label">💎 النقطة بتساوي كام جنيه خصم؟</label><input type="number" id="storePointValue" min="0" step="any" data-i18n-placeholder="point_value_ph" placeholder="مثال: 1"></div>
-    </div>
+  <h2 data-i18n="store_data_page">⚙️ الإعدادات</h2>
 
-    <section class="settings-section" id="vat-section">
-      <h3 data-i18n="vat_settings">إعدادات الضريبة</h3>
-      <label class="switch-row" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;"><input type="checkbox" id="storeVatEnabled" /><span data-i18n="vat_enabled">تفعيل الضريبة</span></label>
-      <div id="storeVatFields" style="display:none;">
-        <div class="form-group"><label for="storeVatRate" data-i18n="vat_rate">نسبة الضريبة %</label><input type="number" id="storeVatRate" min="0" max="100" step="0.01" value="0" /></div>
-        <div class="form-group"><label for="storeVatMode" data-i18n="vat_mode">طريقة الاحتساب</label><select id="storeVatMode"><option value="inclusive" data-i18n="vat_inclusive">شاملة (داخل السعر)</option><option value="exclusive" data-i18n="vat_exclusive">حصرية (تضاف فوق السعر)</option></select></div>
+  <div class="tabs-container">
+    <button class="tab-btn active" data-tab="set-store" onclick="switchSettingsTab('set-store')">🏪 المحل</button>
+    <button class="tab-btn" data-tab="set-tax" onclick="switchSettingsTab('set-tax')">💸 الضرائب والطباعة</button>
+    <button class="tab-btn" data-tab="set-perm" onclick="switchSettingsTab('set-perm')">🔐 الصلاحيات</button>
+    <button class="tab-btn" data-tab="set-sec" onclick="switchSettingsTab('set-sec')">🛡️ الأمان</button>
+  </div>
+
+  <!-- 1. تاب بيانات المحل -->
+  <div id="tab-set-store" class="tab-content active">
+    <div class="settings-layout">
+      <!-- الجزء الأيمن: البيانات -->
+      <div class="card mt-15" style="margin-bottom:0;">
+        <div class="form-grid" style="gap: 15px;">
+          <div class="form-group span-2">
+            <label data-i18n="store_logo">شعار المحل (صورة)</label>
+            <input type="file" id="storeLogo" accept="image/*" style="padding:8px;">
+            <img id="storeLogoPreview" style="max-width: 100px; margin-top: 5px; display: none; border-radius: 8px; background: #fff; padding: 5px;">
+            <button class="small-btn gray" type="button" onclick="removeStoreLogo()" style="margin-top: 5px;" data-i18n="remove_logo">حذف الشعار</button>
+          </div>
+          <div class="form-group"><label data-i18n="store_name">اسم المحل</label><input type="text" id="storeName" placeholder="اسم المحل" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="store_phone_label">رقم الهاتف</label><input type="text" id="storePhone" placeholder="01xxxxxxxxx" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="address_label">العنوان</label><input type="text" id="storeAddress" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="currency_label">العملة</label><input type="text" id="storeCurrency" value="ج.م" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="tax_number">الرقم الضريبي (اختياري)</label><input type="text" id="storeTaxNumber" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="monthly_goal">🎯 هدف المبيعات الشهري</label><input type="number" id="storeMonthlyGoal" min="0" step="any" placeholder="50000" oninput="triggerAutoSave()"></div>
+        </div>
       </div>
-    </section>
 
-    <section class="settings-section" id="auto-backup-section" style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+      <!-- الجزء الأيسر: المعاينة الحية -->
+      <div class="card mt-15 preview-card" style="margin-bottom:0;">
+        <h4 style="margin:0 0 10px 0; font-size:12px; color:#666; text-align:center;">معاينة الفاتورة</h4>
+        <div class="receipt-preview">
+          <div id="previewLogoWrap" style="text-align:center; margin-bottom:5px; display:none;">
+            <img id="previewLogo" style="max-width:50px; max-height:50px;">
+          </div>
+          <h3 id="previewStoreName" style="margin:0 0 5px 0; font-size:16px; text-align:center;">متجري</h3>
+          <p id="previewStorePhone" style="margin:0; font-size:10px; text-align:center; color:#555;">01xxxxxxxxx</p>
+          <p id="previewStoreAddress" style="margin:0 0 10px 0; font-size:10px; text-align:center; color:#555;">العنوان</p>
+          <div style="border-top:1px dashed #ccc; padding-top:5px; font-size:10px; color:#666;">
+            <div style="display:flex; justify-content:space-between;"><span>فاتورة #1001</span><span>منتج 1</span></div>
+            <div style="display:flex; justify-content:space-between; margin-top:5px;"><span>الإجمالي</span><span>100 <span class="previewCur">ج.م</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. تاب الضرائب والطباعة -->
+  <div id="tab-set-tax" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <div class="form-grid">
+        <div class="form-group">
+          <label data-i18n="print_type_label">🖨️ نوع الفاتورة الافتراضي</label>
+          <select id="storePrintType" onchange="triggerAutoSave()">
+            <option value="thermal" data-i18n="print_type_thermal">فاتورة كاشير (حرارية 80mm)</option>
+            <option value="a4" data-i18n="print_type_a4">فاتورة عادية (A4)</option>
+          </select>
+        </div>
+        <div class="form-group" style="justify-content:center;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:bold; color:var(--primary);">
+            <input type="checkbox" id="autoPrintOnScan" style="width:20px; height:20px;" onchange="triggerAutoSave()">
+            <span data-i18n="auto_print_on_scan">الطباعة التلقائية عند مسح الباركود</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--border);">
+        <label class="switch-row" style="display:flex; align-items:center; gap:8px; margin-bottom:15px;">
+          <input type="checkbox" id="storeVatEnabled" onchange="toggleVatFields(); triggerAutoSave();">
+          <span data-i18n="vat_enabled" style="font-weight:bold;">تفعيل الضريبة</span>
+        </label>
+        <div id="storeVatFields" style="display:none;" class="form-grid">
+          <div class="form-group"><label data-i18n="vat_rate">نسبة الضريبة %</label><input type="number" id="storeVatRate" min="0" max="100" step="0.01" value="0" oninput="triggerAutoSave()"></div>
+          <div class="form-group"><label data-i18n="vat_mode">طريقة الاحتساب</label><select id="storeVatMode" onchange="triggerAutoSave()"><option value="inclusive" data-i18n="vat_inclusive">شاملة (داخل السعر)</option><option value="exclusive" data-i18n="vat_exclusive">حصرية (تضاف فوق السعر)</option></select></div>
+        </div>
+      </div>
+      
+      <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--border);" class="form-grid">
+        <div class="form-group"><label data-i18n="points_rate_label">💎 كل كام جنيه يكسب العميل نقطة؟</label><input type="number" id="storePointsRate" min="0" placeholder="10" oninput="triggerAutoSave()"></div>
+        <div class="form-group"><label data-i18n="point_value_label">💎 النقطة بتساوي كام جنيه خصم؟</label><input type="number" id="storePointValue" min="0" step="any" placeholder="1" oninput="triggerAutoSave()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. تاب الصلاحيات -->
+  <div id="tab-set-perm" class="tab-content" style="display:none;">
+    <div class="card mt-15">
+      <h3 data-i18n="permissions_section_title">🔐 صلاحيات الموظف (الكاشير)</h3>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:15px;">
+        <label class="switch-row"><input type="checkbox" id="perm_canDiscount" onchange="triggerAutoSave()"><span data-i18n="perm_can_discount">السماح بعمل خصم على الفاتورة</span></label>
+        <label class="switch-row"><input type="checkbox" id="perm_canDelete" onchange="triggerAutoSave()"><span data-i18n="perm_can_delete">السماح بمسح الفواتير والعمليات</span></label>
+        <label class="switch-row"><input type="checkbox" id="perm_canEditPrice" onchange="triggerAutoSave()"><span data-i18n="perm_can_edit_price">السماح بتعديل سعر المنتج في الكاشير</span></label>
+        <label class="switch-row"><input type="checkbox" id="perm_canReturn" onchange="triggerAutoSave()"><span data-i18n="perm_can_return">السماح بتسجيل المرتجعات</span></label>
+        <label class="switch-row"><input type="checkbox" id="perm_canDrawerExpense" onchange="triggerAutoSave()"><span data-i18n="perm_can_drawer_expense">السماح بمصروف الدرج</span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. تاب الأمان والنسخ -->
+  <div id="tab-set-sec" class="tab-content" style="display:none;">
+    <div class="card mt-15">
       <h3 data-i18n="auto_backup_title">النسخ الاحتياطي التلقائي</h3>
-      <label class="switch-row" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;"><input type="checkbox" id="autoBackupEnabled" /><span data-i18n="auto_backup_enabled">تفعيل النسخ التلقائي</span></label>
-      <div id="autoBackupFields">
-        <div class="form-group"><label for="autoBackupInterval" data-i18n="auto_backup_interval">معدل الإنشاء</label><select id="autoBackupInterval"><option value="daily" data-i18n="auto_backup_daily">يومياً</option><option value="shift_close" data-i18n="auto_backup_shift_close">عند إغلاق الوردية</option><option value="both" data-i18n="auto_backup_both">يومياً وعند إغلاق الوردية</option></select></div>
-        <div class="form-group"><label for="autoBackupRetention" data-i18n="auto_backup_retention">عدد النسخ المحفوظة (3-30)</label><input type="number" id="autoBackupRetention" min="3" max="30" value="7" /></div>
+      <label class="switch-row" style="display:flex; align-items:center; gap:8px; margin-bottom:15px;">
+        <input type="checkbox" id="autoBackupEnabled" onchange="triggerAutoSave()">
+        <span data-i18n="auto_backup_enabled">تفعيل النسخ التلقائي</span>
+      </label>
+      <div id="autoBackupFields" class="form-grid">
+        <div class="form-group"><label data-i18n="auto_backup_interval">معدل الإنشاء</label><select id="autoBackupInterval" onchange="triggerAutoSave()"><option value="daily" data-i18n="auto_backup_daily">يومياً</option><option value="shift_close" data-i18n="auto_backup_shift_close">عند إغلاق الوردية</option><option value="both" data-i18n="auto_backup_both">يومياً وعند إغلاق الوردية</option></select></div>
+        <div class="form-group"><label data-i18n="auto_backup_retention">عدد النسخ المحفوظة (3-30)</label><input type="number" id="autoBackupRetention" min="3" max="30" value="7" oninput="triggerAutoSave()"></div>
         <p id="autoBackupStatus" style="font-size:12px; color:var(--text-muted); margin-top:5px;"></p>
       </div>
-    </section>
-
-    <div style="margin-top: 20px; padding: 15px; background: var(--bg-body); border-radius: var(--radius-md); border: 1px solid var(--border);">
-      <h4 style="margin-top:0; color:var(--text-main);" data-i18n="permissions_section_title">🔐 صلاحيات الموظف (الكاشير)</h4>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;"><input type="checkbox" id="perm_canDiscount" style="width:20px; height:20px;"><span data-i18n="perm_can_discount">السماح للموظف بعمل خصم على الفاتورة</span></label>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;"><input type="checkbox" id="perm_canDelete" style="width:20px; height:20px;"><span data-i18n="perm_can_delete">السماح للموظف بمسح الفواتير والعمليات</span></label>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;"><input type="checkbox" id="perm_canEditPrice" style="width:20px; height:20px;"><span data-i18n="perm_can_edit_price">السماح للموظف بتعديل سعر المنتج في الكاشير</span></label>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;"><input type="checkbox" id="perm_canReturn" style="width:20px; height:20px;"><span data-i18n="perm_can_return">السماح للموظف بتسجيل المرتجعات</span></label>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" id="perm_canDrawerExpense" style="width:20px; height:20px;"><span data-i18n="perm_can_drawer_expense">السماح للموظف بمصروف الدرج</span></label>
     </div>
-
-    <div class="btn-group mt-15"><button class="btn primary" onclick="saveStoreSettings()" data-i18n="save_store_btn">حفظ بيانات المحل</button></div>
+    
+    <div class="card mt-20 red-border no-print" id="dangerZone">
+      <h3 class="red-text" data-i18n="danger_zone">منطقة الخطر</h3>
+      <p class="muted" data-i18n="danger_desc">مسح كافة بيانات التطبيق الحالية بشكل نهائي.</p>
+      <button class="btn red" onclick="safeClearAllDataPrompt()" data-i18n="clear_all_data">مسح كافة بيانات التطبيق</button>
+    </div>
   </div>
 </div>
 

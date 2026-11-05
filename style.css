@@ -2304,3 +2304,95 @@ body.dark-mode .skeleton {
   min-width: 60px;
   text-align: left;
 }
+/* ═══════════════════════════════════════════════════════════ */
+/* v7.17 — Smart Settings Layout & Premium Switches            */
+/* ═══════════════════════════════════════════════════════════ */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.preview-card {
+  position: sticky;
+  top: 90px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+}
+
+.receipt-preview {
+  background: #fff;
+  border: 1px dashed #ccc;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  max-width: 250px;
+  margin: 0 auto;
+  font-family: 'Cairo', sans-serif;
+}
+
+/* مفاتيح التشغيل (Toggle Switches) زي الآيفون */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 10px;
+  background: var(--bg-body);
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.switch-row:hover { background: #eef2f5; }
+
+.switch-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 46px;
+  height: 24px;
+  background: #cbd5e1;
+  border-radius: 20px;
+  position: relative;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.3s;
+  flex-shrink: 0;
+  margin: 0;
+}
+.switch-row input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.switch-row input[type="checkbox"]:checked {
+  background: var(--primary);
+}
+.switch-row input[type="checkbox"]:checked::after {
+  transform: translateX(22px);
+}
+html[dir="rtl"] .switch-row input[type="checkbox"]::after {
+  left: auto;
+  right: 2px;
+}
+html[dir="rtl"] .switch-row input[type="checkbox"]:checked::after {
+  transform: translateX(-22px);
+}
+
+/* الموبايل: الشاشة تصغر وتتظبط */
+@media (max-width: 900px) {
+  .settings-layout {
+    grid-template-columns: 1fr; /* المعاينة هتنزل تحت */
+  }
+  .preview-card {
+    position: relative;
+    top: 0;
+  }
+}

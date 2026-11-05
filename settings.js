@@ -79,7 +79,7 @@ function toggleVatFields() {
   vatFieldsEl.style.display = vatEnabledEl.checked ? 'block' : 'none';
 }
 
-async function saveStoreSettings() {
+async function saveStoreSettings(isAutoSave = false) {
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   
   const permDiscountEl = document.getElementById('perm_canDiscount');
@@ -164,7 +164,16 @@ async function saveStoreSettings() {
   }
 
   saveData();
+  if (isAutoSave) {
+  // إظهار علامة صغيرة جداً فوق إن تم الحفظ
+  const badge = document.createElement('div');
+  badge.innerText = '✅ تم الحفظ تلقائياً';
+  badge.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#2e7d32; color:#fff; padding:8px 15px; border-radius:20px; font-size:12px; font-weight:bold; z-index:99999; transition:opacity 0.3s;';
+  document.body.appendChild(badge);
+  setTimeout(() => { badge.style.opacity = '0'; setTimeout(() => badge.remove(), 300); }, 1500);
+} else {
   showNotification(tr('settings_saved_ok'));
+}
 
   if (newSettings.autoBackupEnabled && typeof checkAndRunAutoBackup === 'function') {
     setTimeout(() => checkAndRunAutoBackup('load').catch(() => {}), 500);
@@ -276,4 +285,65 @@ document.addEventListener('change', function(e) {
   if (e.target && e.target.id === 'storeVatEnabled') {
     toggleVatFields();
   }
+});
+/* ============ v7.17 — Smart Settings (Auto-Save & Live Preview) ============ */
+
+function switchSettingsTab(tabId) {
+  document.querySelectorAll('#settStore .tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#settStore .tab-btn').forEach(el => el.classList.remove('active'));
+  
+  const content = document.getElementById('tab-' + tabId);
+  if (content) content.style.display = 'block';
+  
+  const btn = document.querySelector('#settStore .tab-btn[data-tab="' + tabId + '"]');
+  if (btn) btn.classList.add('active');
+  
+  if (tabId === 'set-store') updateReceiptPreview();
+}
+
+let _autoSaveTimer = null;
+function triggerAutoSave() {
+  updateReceiptPreview(); // تحديث المعاينة فوراً
+  
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => {
+    // ننادي دالة الحفظ الموجودة بس في صمت (من غير ما تطلع إشعار مزعج)
+    if (typeof saveStoreSettings === 'function') {
+      saveStoreSettings(true); 
+    }
+  }, 1000); // يحفظ بعد ما التاجر يبطّل كتابة لمدة ثانية
+}
+
+function updateReceiptPreview() {
+  const nameInput = document.getElementById('storeName');
+  const phoneInput = document.getElementById('storePhone');
+  const addressInput = document.getElementById('storeAddress');
+  const currencyInput = document.getElementById('storeCurrency');
+  const logoPreview = document.getElementById('storeLogoPreview');
+  
+  if (document.getElementById('previewStoreName')) {
+    document.getElementById('previewStoreName').innerText = nameInput.value || 'متجري';
+    document.getElementById('previewStorePhone').innerText = phoneInput.value || '';
+    document.getElementById('previewStoreAddress').innerText = addressInput.value || '';
+    document.querySelectorAll('.previewCur').forEach(el => el.innerText = currencyInput.value || 'ج.م');
+  }
+
+  if (logoPreview && logoPreview.src && logoPreview.style.display !== 'none') {
+    document.getElementById('previewLogo').src = logoPreview.src;
+    document.getElementById('previewLogoWrap').style.display = 'block';
+  } else {
+    document.getElementById('previewLogoWrap').style.display = 'none';
+  }
+}
+
+// ربط أحداث تحديث المعاينة (لما يغير الشعار أو الاسم)
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    ['storeName', 'storePhone', 'storeAddress', 'storeCurrency', 'storeLogo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', updateReceiptPreview);
+      if (el) el.addEventListener('change', updateReceiptPreview);
+    });
+    updateReceiptPreview();
+  }, 1000);
 });
