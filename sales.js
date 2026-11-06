@@ -663,21 +663,14 @@ async function completeSale() {
       else printThermalInvoice(saleObj.id);
     }
   } catch (printErr) { console.warn('Print invoice failed:', printErr); }
-  finally {
-    clearCart();
-    renderSales();
-    renderDashboard();
-    updateStockBadge();
-    renderProducts();
-    renderStockMoves();
-    renderShifts();
-    renderCustomers();
-    populateSalesDropdowns();
-    state.selectedCartIndex = -1;
-    refocusCashierInput();
-    hideLoading();
-    closeCheckoutModal();
-  }
+ finally {
+  clearCart();
+  refreshCurrentPage(); // ← فقط الصفحة الحالية
+  state.selectedCartIndex = -1;
+  refocusCashierInput();
+  hideLoading();
+  closeCheckoutModal();
+}
 }
 
 function renderSales() {
@@ -1063,11 +1056,9 @@ async function saveDrawerExpense() {
   }
 
   saveData();
-  closeDrawerExpense();
-  if (typeof renderExpenses === 'function') renderExpenses();
-  if (typeof renderDashboard === 'function') renderDashboard();
-  if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
-  showNotification(tr('drawer_expense_success'), 'success');
+closeDrawerExpense();
+refreshCurrentPage();
+showNotification(tr('drawer_expense_success'), 'success');
 }
 
 function bindDrawerExpenseListeners() {

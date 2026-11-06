@@ -196,16 +196,11 @@ async function recordCustomerPayment() {
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - amount;
   }
 
-  saveData();
-  document.getElementById('customerPaymentAmount').value = '';
-  document.getElementById('customerPaymentNotes').value = '';
-  renderCustomers();
-  renderCustomerPayments();
-  renderDashboard();
-
-  if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
-
-  showNotification(tr('payment_success'));
+ saveData();
+document.getElementById('supplierPaymentAmount').value = '';
+document.getElementById('supplierPaymentNotes').value = '';
+refreshCurrentPage();
+showNotification(tr('supplier_payment_success'));
 }
 
 function renderCustomerPayments() {
@@ -503,19 +498,14 @@ async function savePurchase() {
   }
 
   saveData();
-  document.getElementById('purchaseNewName').value = '';
-  document.getElementById('purchaseQty').value = 1;
-  document.getElementById('purchaseCost').value = '';
-  if (purchasePriceInput) purchasePriceInput.value = '';
-  document.getElementById('purchaseTotal').value = '0.00';
-  document.getElementById('purchasePaid').value = 0;
-  renderSuppliers();
-  renderPurchases();
-  renderProducts();
-  renderStockMoves();
-  renderDashboard();
-  updateStockBadge();
-  showNotification(tr('purchase_success'));
+document.getElementById('purchaseNewName').value = '';
+document.getElementById('purchaseQty').value = 1;
+document.getElementById('purchaseCost').value = '';
+if (purchasePriceInput) purchasePriceInput.value = '';
+document.getElementById('purchaseTotal').value = '0.00';
+document.getElementById('purchasePaid').value = 0;
+refreshCurrentPage();
+showNotification(tr('purchase_success'));
 }
 
 function renderPurchases() {

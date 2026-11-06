@@ -43,13 +43,11 @@ async function saveExpense() {
   }
 
   saveData();
-  document.getElementById('expenseName').value = '';
-  document.getElementById('expenseAmount').value = '';
-  document.getElementById('expenseNotes').value = '';
-  renderExpenses();
-  renderDashboard();
-  if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
-  showNotification(tr('expense_saved'));
+document.getElementById('expenseName').value = '';
+document.getElementById('expenseAmount').value = '';
+document.getElementById('expenseNotes').value = '';
+refreshCurrentPage();
+showNotification(tr('expense_saved'));
   switchExpenseTab('exp-list');
 }
 

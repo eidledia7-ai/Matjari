@@ -361,3 +361,62 @@ function toggleDarkMode() {
   document.body.classList.toggle('dark-mode');
   localStorage.setItem('matjari_dark', document.body.classList.contains('dark-mode') ? '1' : '0');
 }
+/* ============ v7.21 — Conditional Rendering ============ */
+function refreshCurrentPage() {
+  const currentPage = document.querySelector('.page.active');
+  const pageId = currentPage ? currentPage.id : 'home';
+  
+  if (typeof updateStockBadge === 'function') updateStockBadge();
+  
+  switch(pageId) {
+    case 'home': 
+      if (typeof renderDashboard === 'function') renderDashboard(); 
+      break;
+    case 'sales': 
+      _refreshVisibleProductCards(); 
+      break;
+    case 'invProducts': 
+      if (typeof renderProducts === 'function') renderProducts(); 
+      break;
+    case 'invMoves': 
+      if (typeof populateAdjustDropdown === 'function') populateAdjustDropdown();
+      if (typeof renderStockMoves === 'function') renderStockMoves();
+      break;
+    case 'invReturns': 
+      if (typeof populateReturnDropdowns === 'function') populateReturnDropdowns();
+      if (typeof renderReturns === 'function') renderReturns();
+      break;
+    case 'salesLog': 
+      if (typeof renderSales === 'function') renderSales(); 
+      break;
+    case 'partCustomers': 
+      if (typeof renderCustomers === 'function') renderCustomers();
+      if (typeof renderCustomerPayments === 'function') renderCustomerPayments();
+      break;
+    case 'partSuppliers': 
+      if (typeof renderSuppliers === 'function') renderSuppliers();
+      if (typeof renderPurchases === 'function') renderPurchases();
+      if (typeof renderSupplierPayments === 'function') renderSupplierPayments();
+      break;
+    case 'finExpenses': 
+      if (typeof renderExpenses === 'function') renderExpenses(); 
+      break;
+    case 'finReports': 
+      if (typeof renderReports === 'function') renderReports(); 
+      break;
+    case 'finShift': 
+      if (typeof calcExpectedShiftCash === 'function') calcExpectedShiftCash();
+      if (typeof renderShifts === 'function') renderShifts();
+      break;
+  }
+}
+
+function _refreshVisibleProductCards() {
+  const grid = document.getElementById('productGrid');
+  if (!grid) return;
+  const cards = grid.querySelectorAll('.product-card[data-product-id]');
+  cards.forEach(function(card) {
+    const id = card.getAttribute('data-product-id');
+    if (typeof _updateProductCardStock === 'function') _updateProductCardStock(id);
+  });
+}

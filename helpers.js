@@ -67,11 +67,8 @@ async function quickAddStock(id) {
   }
 
   saveData();
-  renderProducts();
-  renderStockMoves();
-  renderDashboard();
-  updateStockBadge();
-  showNotification(tr('quick_add_success_template').replace('{qty}', qty).replace('{name}', prod.name), 'success');
+refreshCurrentPage();
+showNotification(tr('quick_add_success_template').replace('{qty}', qty).replace('{name}', prod.name), 'success');
 }
 
 /* ============ تذكير العملاء بالديون ============ */

@@ -51,11 +51,11 @@ async function saveProduct() {
   if (typeof addAuditLog === 'function') {
     addAuditLog(id ? 'edit_product' : 'add_product', { productId: productData.id, name }, productData.id);
   }
-
-  saveData();
-  clearProductForm();
-  switchProductTab('list'); // العودة للقائمة بعد الحفظ
-  showNotification(tr('product_saved'));
+saveData();
+clearProductForm();
+switchProductTab('list');
+refreshCurrentPage();
+showNotification(tr('product_saved'));
 }
 
 async function togglePinProduct(id) {
@@ -268,11 +268,9 @@ async function deleteProduct(id) {
   }
 
   state.products = state.products.filter(function(p) { return p.id !== id; });
-  saveData();
-  renderProducts();
-  renderDashboard();
-  updateStockBadge();
-  showNotification(tr('product_deleted'));
+saveData();
+refreshCurrentPage();
+showNotification(tr('product_deleted'));
 }
 function populateAdjustDropdown() {
   const sel = document.getElementById('adjustProduct');
@@ -334,14 +332,11 @@ async function saveStockAdjustment() {
     addAuditLog('stock_adjustment', { productId: prod.id, newStock: newStock, reason: reason }, prod.id);
   }
 
-  saveData();
-  document.getElementById('adjustQty').value = '';
-  document.getElementById('adjustReason').value = '';
-  renderStockMoves();
-  renderProducts();
-  renderDashboard();
-  updateStockBadge();
-  showNotification(tr('move_saved'));
+ saveData();
+document.getElementById('adjustQty').value = '';
+document.getElementById('adjustReason').value = '';
+refreshCurrentPage();
+showNotification(tr('move_saved'));
 }
 
 function renderStockMoves() {
@@ -534,9 +529,9 @@ async function saveReturn() {
   }
 
   saveData();
-  document.getElementById('returnQty').value = 1;
-  document.getElementById('returnReason').value = '';
-  renderReturns(); renderProducts(); renderStockMoves(); renderDashboard(); renderSales(); renderCustomers(); updateStockBadge();
+document.getElementById('returnQty').value = 1;
+document.getElementById('returnReason').value = '';
+refreshCurrentPage();
 
   const methodText = refundMethod === 'credit' ? tr('refund_credit') : tr('refund_cash');
   showNotification(tr('return_success_1') + methodText + tr('return_success_2'), 'success');
