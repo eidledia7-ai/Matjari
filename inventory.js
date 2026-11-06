@@ -108,6 +108,7 @@ function switchProductTab(tabId) {
 let _invGridState = { filtered: [], rendered: 0, batchSize: 60, observer: null };
 
 function renderProducts() {
+  renderInvSummary();
   const container = document.getElementById('productsTable');
   if (!container) return;
 
@@ -275,68 +276,14 @@ showNotification(tr('product_deleted'));
 function populateAdjustDropdown() {
   const sel = document.getElementById('adjustProduct');
   if (!sel) return;
-  sel.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
   const availableLabel = tr('opt_available_label');
+  
+  // ✅ v7.21 — بناء النص مرة واحدة (بدل innerHTML += في كل لفة)
+  let html = '<option value="">' + tr('opt_select_product') + '</option>';
   state.products.forEach(function(p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (' + availableLabel + ' ' + (Number(p.stock) || 0) + ')</option>';
+    html += '<option value="' + p.id + '">' + escapeHTML(p.name) + ' (' + availableLabel + ' ' + (Number(p.stock) || 0) + ')</option>';
   });
-}
-
-async function saveStockAdjustment() {
-  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
-
-  const prodId = document.getElementById('adjustProduct').value;
-  const type = document.getElementById('adjustType').value;
-  const qty = parseInt(document.getElementById('adjustQty').value);
-  const reason = document.getElementById('adjustReason').value.trim();
-
-  if (!prodId || isNaN(qty) || qty < 0 || !reason) return showNotification(tr('complete_move_data'), 'error');
-
-  const prod = state.products.find(function(p) { return p.id === prodId; });
-  if (!prod) return;
-
-  if (type === 'out' && qty > prod.stock) return showNotification(tr('qty_exceeds_stock_1') + prod.stock + tr('qty_exceeds_stock_2'), 'error');
-
-  const oldStock = Number(prod.stock) || 0;
-  let newStock = oldStock;
-  if (type === 'in') newStock = oldStock + qty;
-  if (type === 'out') newStock = Math.max(0, oldStock - qty);
-  if (type === 'set') newStock = qty;
-
-  if (newStock === oldStock) return showNotification(tr('qty_same'), 'info');
-
-  prod.stock = newStock;
-  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
-  const moveId = uid('SM');
-  const moveDate = new Date().toISOString();
-
-  state.stockMoves.unshift({
-    id: moveId, date: moveDate, product_id: prod.id, productId: prod.id,
-    product_name: prod.name, productName: prod.name,
-    type: type, qty: Math.abs(newStock - oldStock),
-    old_stock: oldStock, oldStock: oldStock,
-    new_stock: newStock, newStock: newStock,
-    reason: reason
-  });
-
-  if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('products').update({ stock: newStock }).eq('id', prodId);
-    await supabaseClient.from('stock_moves').insert({
-      id: moveId, user_id: ownerId, product_id: prod.id, product_name: prod.name,
-      type: type, qty: Math.abs(newStock - oldStock), old_stock: oldStock, new_stock: newStock,
-      reason: reason, date: moveDate
-    });
-  }
-
-  if (typeof addAuditLog === 'function') {
-    addAuditLog('stock_adjustment', { productId: prod.id, newStock: newStock, reason: reason }, prod.id);
-  }
-
- saveData();
-document.getElementById('adjustQty').value = '';
-document.getElementById('adjustReason').value = '';
-refreshCurrentPage();
-showNotification(tr('move_saved'));
+  sel.innerHTML = html;
 }
 
 /* ============ v7.21 — Lazy Stock Moves ============ */
@@ -791,4 +738,39 @@ function downloadImportTemplate() {
   a.download = 'products-template.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+/* ============ v7.21 — Inventory Summary ============ */
+function renderInvSummary() {
+  const el = document.getElementById('invSummary');
+  if (!el) return;
+  
+  const count = state.products.length;
+  let totalCost = 0;
+  let totalSale = 0;
+  state.products.forEach(function(p) {
+    const stock = Number(p.stock) || 0;
+    totalCost += stock * (Number(p.cost) || 0);
+    totalSale += stock * (Number(p.price) || 0);
+  });
+  const expectedProfit = totalSale - totalCost;
+  const cur = state.storeSettings.currency || 'ج.م';
+  
+  el.innerHTML = `
+    <div class="inv-sum-item">
+      <span>${tr('inv_sum_count')}</span>
+      <b>${count}</b>
+    </div>
+    <div class="inv-sum-item">
+      <span>${tr('inv_sum_cost')}</span>
+      <b>${totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+    </div>
+    <div class="inv-sum-item">
+      <span>${tr('inv_sum_sale')}</span>
+      <b>${totalSale.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+    </div>
+    <div class="inv-sum-item">
+      <span>${tr('inv_sum_profit')}</span>
+      <b style="color:${expectedProfit >= 0 ? '#2e7d32' : '#c0392b'}">${expectedProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+    </div>
+  `;
 }

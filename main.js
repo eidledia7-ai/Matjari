@@ -162,13 +162,19 @@ function setupPullToRefresh() {
   }
 
   document.addEventListener('touchstart', function(e) {
-    if (window.scrollY !== 0) return;
-    if (e.touches.length !== 1) return;
-    startY = e.touches[0].clientY;
-    pulling = true;
-  }, { passive: true });
+  // ✅ v7.21 — إلغاء PTR لو القائمة الجانبية مفتوحة
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('open')) return;
+  if (window.scrollY !== 0) return;
+  if (e.touches.length !== 1) return;
+  startY = e.touches[0].clientY;
+  pulling = true;
+}, { passive: true });
 
   document.addEventListener('touchmove', function(e) {
+  // ✅ v7.21 — إلغاء لو القائمة اتفتحت أثناء السحب
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('open')) { pulling = false; return; }
   if (!pulling) return;
   const delta = e.touches[0].clientY - startY;
   if (delta <= 0) return;

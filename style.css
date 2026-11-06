@@ -2534,3 +2534,34 @@ html[dir="rtl"] .switch-row input[type="checkbox"]:checked::after {
 .action-dropdown-menu {
   z-index: 9999 !important;
 }
+/* v7.21 — Inventory Summary Bar */
+.inv-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 15px;
+}
+@media (max-width: 700px) {
+  .inv-summary-bar { grid-template-columns: repeat(2, 1fr); }
+}
+.inv-sum-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+.inv-sum-item span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+.inv-sum-item b {
+  font-size: 15px;
+  color: var(--text-main);
+  font-weight: 900;
+  direction: ltr;
+}
