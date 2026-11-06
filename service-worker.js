@@ -1,9 +1,7 @@
 /* ==========================================================
-   متجري v7.11.0 - Service Worker
+   متجري v7.22.0 - Service Worker
    ========================================================== */
-
-const CACHE_NAME = 'matjari-cache-v7.16.10'; 
-
+const CACHE_NAME = 'matjari-cache-v7.23.0';
 const ASSETS = [
   './index.html', './style.css', './manifest.json', './icon-192.png', './icon-512.png',
   './config.js', './translations.js', './core.js', './audit.js', './helpers.js', './storage.js',
@@ -15,9 +13,9 @@ const ASSETS = [
   './stock-conflicts.js', './connection-banner.js', './operations-center.js',
   /* الخطوط */
   './cairo-regular.ttf', './cairo-semibold.ttf', './cairo-bold.ttf', './cairo-extrabold.ttf', './cairo-black.ttf',
-  /* v7.11a — CDN Libraries */
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js'
+  /* v7.22 — Import Libraries (cdnjs — مطابقة لـ index.html) */
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js'
 ];
 
 self.addEventListener('install', function (event) {
@@ -58,7 +56,8 @@ self.addEventListener('fetch', function (event) {
   
   if (!url.protocol.startsWith('http')) return;
 
-  const CDN_ALLOWLIST = ['cdnjs.cloudflare.com'];
+  // ✅ v7.22 — دعم cdnjs (xlsx, papaparse) + jsdelivr (Chart.js, supabase, qrcode, jsbarcode)
+  const CDN_ALLOWLIST = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
   if (url.origin !== self.location.origin && !CDN_ALLOWLIST.includes(url.hostname)) return;
 
   if (url.href.includes('supabase.co')) return;

@@ -350,7 +350,14 @@ function _renderMovesBatch(typeLabels) {
   tbody.insertAdjacentHTML('beforeend', html);
   _movesState.rendered = end;
 
-  if (_movesState.rendered < _movesState.filtered.length) {
+  // ✅ v7.23 — أضف زرار "اعرض الأقدم" لو كل الحركات اتعرضت
+  if (_movesState.rendered >= _movesState.filtered.length) {
+    tbody.insertAdjacentHTML('beforeend',
+      '<tr id="loadOlderRow"><td colspan="6" style="text-align:center;padding:15px;border:none;">' +
+        '<button id="loadOlderMovesBtn" class="load-older-btn" onclick="loadOlderStockMoves()">⬇️ ' + tr('load_older_moves') + '</button>' +
+      '</td></tr>'
+    );
+  } else {
     tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
   }
 }
@@ -739,38 +746,89 @@ function downloadImportTemplate() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-/* ============ v7.21 — Inventory Summary ============ */
+/* ============ v7.21/v7.22 — Inventory Summary (uses SSoT) ============ */
 function renderInvSummary() {
   const el = document.getElementById('invSummary');
   if (!el) return;
-  
-  const count = state.products.length;
-  let totalCost = 0;
-  let totalSale = 0;
-  state.products.forEach(function(p) {
-    const stock = Number(p.stock) || 0;
-    totalCost += stock * (Number(p.cost) || 0);
-    totalSale += stock * (Number(p.price) || 0);
-  });
-  const expectedProfit = totalSale - totalCost;
+
+  const v = window.financeCore.calcInventoryValuation(state.products);
   const cur = state.storeSettings.currency || 'ج.م';
-  
+  const fmt = function(n) {
+    return Number(n).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   el.innerHTML = `
     <div class="inv-sum-item">
       <span>${tr('inv_sum_count')}</span>
-      <b>${count}</b>
+      <b>${v.count}</b>
     </div>
     <div class="inv-sum-item">
       <span>${tr('inv_sum_cost')}</span>
-      <b>${totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+      <b>${fmt(v.totalCost)} ${cur}</b>
     </div>
     <div class="inv-sum-item">
       <span>${tr('inv_sum_sale')}</span>
-      <b>${totalSale.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+      <b>${fmt(v.totalSale)} ${cur}</b>
     </div>
     <div class="inv-sum-item">
       <span>${tr('inv_sum_profit')}</span>
-      <b style="color:${expectedProfit >= 0 ? '#2e7d32' : '#c0392b'}">${expectedProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${cur}</b>
+      <b style="color:${v.expectedProfit >= 0 ? '#2e7d32' : '#c0392b'}">${fmt(v.expectedProfit)} ${cur}</b>
     </div>
   `;
+}
+/* ============ v7.23 — Load Older Stock Moves ============ */
+async function loadOlderStockMoves() {
+  if (window.isReadOnlyMode) return;
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(tr('no_internet_for_load_more'), 'warning');
+  }
+  if (!state.stockMoves || !state.stockMoves.length) return;
+
+  const btn = document.getElementById('loadOlderMovesBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ ' + tr('loading_short'); }
+
+  try {
+    const oldest = state.stockMoves[state.stockMoves.length - 1];
+    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+
+    const { data, error } = await supabaseClient
+      .from('stock_moves')
+      .select('*')
+      .eq('user_id', ownerId)
+      .lt('date', oldest.date)
+      .order('date', { ascending: false })
+      .limit(500);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      showNotification(tr('no_more_moves'), 'info');
+      if (btn) { btn.textContent = '✔️ ' + tr('all_moves_loaded'); btn.disabled = true; }
+      return;
+    }
+
+    data.forEach(row => {
+      state.stockMoves.push({
+        id: row.id, date: row.date,
+        product_id: row.product_id, productId: row.product_id,
+        product_name: row.product_name, productName: row.product_name,
+        type: row.type, qty: row.qty,
+        old_stock: row.old_stock, oldStock: row.old_stock,
+        new_stock: row.new_stock, newStock: row.new_stock,
+        reason: row.reason
+      });
+    });
+
+    saveData();
+    renderStockMoves();
+    showNotification('✅ ' + data.length + ' ' + tr('moves_loaded_suffix'), 'success');
+
+  } catch (err) {
+    console.error('loadOlderStockMoves failed:', err);
+    showNotification(tr('load_moves_failed') + ' ' + err.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ ' + tr('load_older_moves'); }
+  }
 }

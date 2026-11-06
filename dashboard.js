@@ -205,8 +205,7 @@ function renderSalesChart() {
     }
   });
 }
-
-function renderDashboard() {
+async function renderDashboard() {
   const cur = currencyLabel();
   const todayStr = _getTodayStr();
   
@@ -214,17 +213,54 @@ function renderDashboard() {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
 
-  let todaySales = 0, todayProfit = 0, todayInvoices = 0;
-  const summary = _safeCalcPeriodSummary(todayStr, todayStr);
-  if (summary) {
-    todaySales = Number(summary.net_sales) || 0;
-    todayProfit = Number(summary.net_profit) || 0;
-    todayInvoices = Number(summary.invoices_count) || 0;
+  // 1. Skeleton للرقم الكبير
+  _renderBigNumberSkeleton(cur);
+
+  // 2. جرب RPC
+  let todaySummary = null, ySummary = null;
+  let fromRPC = false;
+  if (navigator.onLine && supabaseClient) {
+    try {
+      const results = await Promise.all([
+        financeCore.getPeriodSummary(todayStr, todayStr),
+        financeCore.getPeriodSummary(yesterdayStr, yesterdayStr)
+      ]);
+      todaySummary = results[0];
+      ySummary = results[1];
+      fromRPC = true;
+    } catch (e) {
+      console.warn('RPC failed, using local fallback:', e);
+    }
   }
 
-  let yesterdaySales = 0;
-  const ySummary = _safeCalcPeriodSummary(yesterdayStr, yesterdayStr);
-  if (ySummary) yesterdaySales = Number(ySummary.net_sales) || 0;
+  // 3. Fallback محلي
+  if (!todaySummary) todaySummary = _safeCalcPeriodSummary(todayStr, todayStr) || {};
+  if (!ySummary) ySummary = _safeCalcPeriodSummary(yesterdayStr, yesterdayStr) || {};
+
+  // 4. عرض Big Number
+  _renderBigNumberUI(todaySummary, ySummary, cur, fromRPC);
+
+  // 5. باقي العناصر (متزامنة عادي)
+  _renderDashboardRest(cur, todaySummary);
+}
+
+function _renderBigNumberSkeleton(cur) {
+  const bigEl = document.getElementById('homeBigNumber');
+  if (!bigEl) return;
+  bigEl.innerHTML = `
+    <div class="big-card">
+      <div class="big-title">${tr('dash_net_sales')} (اليوم)</div>
+      <div class="big-value" style="background: rgba(255,255,255,0.15); border-radius: 8px; min-height: 50px; color: transparent;">0.00</div>
+      <div class="big-sub" style="opacity: 0.5;">${tr('loading_short')}</div>
+    </div>
+  `;
+}
+
+function _renderBigNumberUI(todaySummary, ySummary, cur, fromRPC) {
+  const todaySales = Number(todaySummary.net_sales) || 0;
+  const todayProfit = Number(todaySummary.net_profit) || 0;
+  const todayInvoices = Number(todaySummary.invoices_count) || 0;
+  const yesterdaySales = Number(ySummary.net_sales) || 0;
 
   let trendHtml = '';
   if (yesterdaySales > 0) {
@@ -238,17 +274,25 @@ function renderDashboard() {
     }
   }
 
+  const limitBadge = (!fromRPC && state.salesDataLimited)
+    ? ' <span class="data-limited-badge" style="background:rgba(255,255,255,0.2);color:#fff;" title="' + tr('data_limited_hint') + '">⚠️</span>'
+    : '';
+
   const bigEl = document.getElementById('homeBigNumber');
   if (bigEl) {
     bigEl.innerHTML = `
       <div class="big-card" onclick="showPage('salesLog')">
-        <div class="big-title">${tr('dash_net_sales')} (اليوم) <span>⬅️</span></div>
+        <div class="big-title">${tr('dash_net_sales')} (اليوم)${limitBadge} <span>⬅️</span></div>
         <div class="big-value">${todaySales.toFixed(2)} <span style="font-size:20px;">${cur}</span></div>
-        <div class="big-sub">صافي الربح: ${todayProfit.toFixed(2)} ${cur}</div>
+        <div class="big-sub">${tr('dash_net_profit')}: ${todayProfit.toFixed(2)} ${cur}</div>
         ${trendHtml}
       </div>
     `;
   }
+}
+
+function _renderDashboardRest(cur, todaySummary) {
+  const todayInvoices = Number(todaySummary.invoices_count) || 0;
 
   const customerDebt = state.customers.reduce((sum, c) => {
     if (c.name === 'عميل نقدي عام' || c.name === 'Cash Customer') return sum;
@@ -268,7 +312,6 @@ function renderDashboard() {
     const cardStyle = 'padding:14px; cursor:pointer; transition:transform 0.1s; display:flex; flex-direction:column; justify-content:space-between;';
     const activeEffect = `onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'"`;
     
-    // شيلنا الكلام الإنجليزي من تحت الأرقام
     otherCards.innerHTML = `
       <div class="stat-card" style="${cardStyle}" onclick="showPage('partCustomers')" ${activeEffect}>
         <h3 style="font-size:13px; display:flex; justify-content:space-between;">${tr('dash_customer_debt')} <span>⬅️</span></h3>

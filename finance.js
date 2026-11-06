@@ -108,54 +108,84 @@ function filterByPeriod(items, dateField, from, to) {
     return true;
   });
 }
-
-function renderReports() {
+async function renderReports() {
   const from = (document.getElementById('reportFrom') || {}).value || '';
   const to = (document.getElementById('reportTo') || {}).value || '';
-
   const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const currency = state.storeSettings.currency;
 
-  const startDate = from ? financeCore.startOfDay(new Date(from)) : new Date(0);
-  const endDate = to ? financeCore.endOfDay(new Date(to)) : new Date();
-  const summary = financeCore.calcPeriodSummary(startDate, endDate);
+  // ─── 1. Skeleton فوري (إحساس إن التطبيق شغال) ───
+  const cardsContainer = document.getElementById('reportCards');
+  if (cardsContainer) {
+    const skelCard = '<div class="stat-card"><h3><span class="skeleton-line" style="width:70%"></span></h3><p><span class="skeleton-line" style="width:90%;height:28px"></span></p></div>';
+    cardsContainer.innerHTML = skelCard.repeat(6);
+  }
+  const dailyEl = document.getElementById('dailyReport');
+  if (dailyEl) {
+    dailyEl.innerHTML = '<p><span class="skeleton-line" style="width:100%"></span></p>'.repeat(6);
+  }
 
+  // ─── 2. جرب RPC (السيرفر) ───
+  let summary = null;
+  let fromRPC = false;
+  if (navigator.onLine && supabaseClient) {
+    try {
+      summary = await financeCore.getPeriodSummary(from || '2000-01-01', to || today());
+      fromRPC = true;
+    } catch (e) {
+      console.warn('RPC getPeriodSummary failed, using local fallback:', e);
+    }
+  }
+
+  // ─── 3. Fallback محلي (زي القديم بالظبط) ───
+  if (!summary) {
+    const startDate = from ? financeCore.startOfDay(new Date(from)) : new Date(0);
+    const endDate = to ? financeCore.endOfDay(new Date(to)) : new Date();
+    summary = financeCore.calcPeriodSummary(startDate, endDate);
+  }
+
+  // ─── 4. شارة "بيانات مقطوعة" (لو رجعنا للمحلي والبيانات محدودة) ───
+  const limitBadge = (!fromRPC && state.salesDataLimited)
+    ? '<span class="data-limited-badge" title="' + tr('data_limited_hint') + '">' + tr('data_limited_warning') + '</span>'
+    : '';
+
+  // ─── 5. كروت الملخص (زي القديم + الشارة) ───
   const filteredSales = filterByPeriod(state.sales, 'date', from, to);
   const filteredReturns = filterByPeriod(state.returns, 'date', from, to);
 
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
   const avgInvoice = summary.invoices_count > 0 ? summary.gross_sales / summary.invoices_count : 0;
 
-  const cardsContainer = document.getElementById('reportCards');
   if (cardsContainer) {
     cardsContainer.innerHTML =
-      '<div class="stat-card"><h3>' + tr('dash_total_sales') + '</h3><p>' + fmt(summary.gross_sales) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_total_sales') + limitBadge + '</h3><p>' + fmt(summary.gross_sales) + ' ' + currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + state.storeSettings.currency + '</p></div>' +
-      '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + fmt(summary.expenses_total) + ' ' + state.storeSettings.currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + currency + '</p></div>' +
+      '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + fmt(summary.expenses_total) + ' ' + currency + '</p></div>' +
       '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
       '<h3>' + tr('dash_net_profit') + '</h3>' +
-      '<p style="color:' + (summary.net_profit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(summary.net_profit) + ' ' + state.storeSettings.currency + '</p>' +
+      '<p style="color:' + (summary.net_profit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(summary.net_profit) + ' ' + currency + '</p>' +
       '</div>';
   }
 
-  const daily = document.getElementById('dailyReport');
-  if (daily) {
-    daily.innerHTML =
+  // ─── 6. ملخص الأداء اليومي ───
+  if (dailyEl) {
+    dailyEl.innerHTML =
       '<p>' + tr('invoices_count_label') + ': <b>' + summary.invoices_count + '</b></p>' +
-      '<p>' + tr('total_discounts') + ': <b>' + fmt(totalDiscount) + ' ' + state.storeSettings.currency + '</b></p>' +
-      '<p>' + tr('net_sales_after_returns') + ' <b>' + fmt(summary.net_sales) + ' ' + state.storeSettings.currency + '</b></p>' +
-      '<p>' + tr('total_returns') + ' <b>' + fmt(summary.returns_total) + ' ' + state.storeSettings.currency + '</b></p>' +
+      '<p>' + tr('total_discounts') + ': <b>' + fmt(totalDiscount) + ' ' + currency + '</b></p>' +
+      '<p>' + tr('net_sales_after_returns') + ' <b>' + fmt(summary.net_sales) + ' ' + currency + '</b></p>' +
+      '<p>' + tr('total_returns') + ' <b>' + fmt(summary.returns_total) + ' ' + currency + '</b></p>' +
       '<p>' + tr('returns_count') + ' <b>' + filteredReturns.length + '</b></p>' +
       '<p>' + tr('expenses_count') + ' <b>' + (state.expenses.filter(e => { const d = (e.date||'').split('T')[0]; return (!from || d >= from) && (!to || d <= to); })).length + '</b></p>' +
-      '<p>' + tr('collections_label') + ' <b>' + fmt(summary.collections_total) + ' ' + state.storeSettings.currency + '</b></p>';
+      '<p>' + tr('collections_label') + ' <b>' + fmt(summary.collections_total) + ' ' + currency + '</b></p>';
   }
 
+  // ─── 7. تفاصيل طرق الدفع + أفضل العملاء (زي القديم) ───
   const cashSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const cardSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'visa' || (s.payMethod || s.pay_method) === 'card').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const transferSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'transfer').reduce((sum, s) => sum + Number(s.paid || 0), 0);
 
-  // ✅ v7.5 — debtSales من customerBalances
   let debtSales;
   let debtIsFallback = false;
   if (state.customerBalances && Object.keys(state.customerBalances).length > 0) {
@@ -197,7 +227,7 @@ function renderReports() {
             ${topCustomers.map((c, idx) => `
               <tr>
                 <td>${idx + 1}. ${escapeHTML(c[0])}</td>
-                <td><b>${fmt(c[1])}</b> ${state.storeSettings.currency}</td>
+                <td><b>${fmt(c[1])}</b> ${currency}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -210,7 +240,7 @@ function renderReports() {
       <p style="margin:0 0 12px 0;font-size:12px;color:#7a5c00;line-height:1.6;">${tr('current_customer_debts_note')}</p>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #e8d79a;">
         <span style="font-weight:700;color:#17364c;">${tr('current_total_debts')}</span>
-        <span style="font-weight:900;font-size:20px;color:#c0392b;direction:ltr;">${fmt(debtSales)} ${state.storeSettings.currency}</span>
+        <span style="font-weight:900;font-size:20px;color:#c0392b;direction:ltr;">${fmt(debtSales)} ${currency}</span>
       </div>
       ${debtIsFallback ? `<p style="margin:8px 0 0 0;font-size:11px;color:#b8860b;">⚠️ ${tr('current_debts_fallback_note')}</p>` : ''}
     </div>
@@ -219,6 +249,7 @@ function renderReports() {
   let activityContainer = document.getElementById('activityDetailsReport');
   if (activityContainer) activityContainer.innerHTML = detailsHtml;
 
+  // ─── 8. الأكثر مبيعاً (زي القديم) ───
   const topContainer = document.getElementById('topProductsReportFinance');
   if (topContainer) {
     const salesByProduct = {};
@@ -243,10 +274,12 @@ function renderReports() {
     }
   }
 
-  // ✅ v7.2 — تقرير أرباح المنتجات
+  // ─── 9. تقرير أرباح المنتجات (زي القديم + شارة) ───
   const profitContainer = document.getElementById('productProfitReport');
   if (profitContainer && typeof financeCore.calcProductProfitReport === 'function') {
     try {
+      const startDate = from ? financeCore.startOfDay(new Date(from)) : new Date(0);
+      const endDate = to ? financeCore.endOfDay(new Date(to)) : new Date();
       const allRows = financeCore.calcProductProfitReport(startDate, endDate);
       const showAllEl = document.getElementById('productProfitShowAll');
       const showAll = showAllEl ? showAllEl.checked : false;
@@ -267,9 +300,9 @@ function renderReports() {
 
         const summaryCardsHtml =
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:15px;">' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_revenue') + '</h3><p style="font-size:15px;">' + fmt(sumRevenue) + ' ' + state.storeSettings.currency + '</p></div>' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_cost') + '</h3><p style="font-size:15px;">' + fmt(sumCost) + ' ' + state.storeSettings.currency + '</p></div>' +
-            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_profit') + '</h3><p style="font-size:15px;color:' + (sumProfit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(sumProfit) + ' ' + state.storeSettings.currency + '</p></div>' +
+            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_revenue') + '</h3><p style="font-size:15px;">' + fmt(sumRevenue) + ' ' + currency + '</p></div>' +
+            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_cost') + '</h3><p style="font-size:15px;">' + fmt(sumCost) + ' ' + currency + '</p></div>' +
+            '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_total_profit') + '</h3><p style="font-size:15px;color:' + (sumProfit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(sumProfit) + ' ' + currency + '</p></div>' +
             '<div class="stat-card" style="padding:12px;"><h3 style="font-size:12px;">' + tr('profit_avg_margin') + '</h3><p style="font-size:15px;">' + avgMargin.toFixed(1) + '%</p></div>' +
           '</div>';
 
@@ -314,7 +347,6 @@ function renderReports() {
     }
   }
 }
-
 function setReportPeriod(period) {
   const end = today();
   const d = new Date(end + 'T12:00:00');

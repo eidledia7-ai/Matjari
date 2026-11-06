@@ -2565,3 +2565,65 @@ html[dir="rtl"] .switch-row input[type="checkbox"]:checked::after {
   font-weight: 900;
   direction: ltr;
 }
+/* v7.23 — Skeletons & Load Older */
+.skeleton-line {
+  display: inline-block;
+  height: 1em;
+  min-width: 80px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s infinite;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+body.dark-mode .skeleton-line {
+  background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%);
+  background-size: 200% 100%;
+}
+
+.data-limited-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-inline-start: 6px;
+  cursor: help;
+}
+body.dark-mode .data-limited-badge {
+  background: #422006;
+  color: #fcd34d;
+}
+
+.load-older-btn {
+  display: inline-block;
+  padding: 8px 20px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.load-older-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+.load-older-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+body.dark-mode .load-older-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}

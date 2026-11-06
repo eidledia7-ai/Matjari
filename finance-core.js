@@ -1,6 +1,7 @@
 /* ============================================================
    finance-core.js — Single Source of Truth للعمليات المالية
    v7.2 — إضافة: calcProductProfitReport (تقرير أرباح المنتجات)
+   v7.22 — إضافة: calcInventoryValuation (تقييم المخزون)
    ============================================================ */
 
 window.financeCore = (function () {
@@ -10,11 +11,29 @@ window.financeCore = (function () {
     return (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
   }
 
-  function toISO(date) {
-    if (!date) return null;
-    if (typeof date === 'string') return date;
-    return date.toISOString();
+function toISO(date, isEnd) {
+  if (!date) return null;
+  let d;
+  if (typeof date === 'string') {
+    if (/T|:/.test(date)) {
+      d = new Date(date);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [y, m, dd] = date.split('-');
+      d = new Date(y, m - 1, dd);
+    } else {
+      return date;
+    }
+  } else {
+    d = new Date(date);
   }
+  if (isEnd) {
+    d.setHours(23, 59, 59, 999);
+    return new Date(d.getTime() + 1).toISOString();
+  } else {
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
+}
 
   function startOfDay(date) {
     const d = new Date(date);
@@ -76,23 +95,22 @@ window.financeCore = (function () {
     return { total: b, vat_amount: vat };
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // RPCs
-  // ══════════════════════════════════════════════════════════════
   async function getPeriodSummary(from, to) {
-    if (!supabaseClient) throw new Error('No Supabase client');
-    const { data, error } = await supabaseClient.rpc('get_period_summary', {
-      p_user_id: ownerId(),
-      p_from: toISO(from),
-      p_to: toISO(to)
-    });
-    if (error) throw error;
-    return data || {
-      gross_sales: 0, net_sales: 0, returns_total: 0, cash_collected: 0,
-      credit_remaining: 0, invoices_count: 0, expenses_total: 0,
-      collections_total: 0, cogs: 0, net_profit: 0, vat_collected: 0
-    };
-  }
+  if (!supabaseClient) throw new Error('No Supabase client');
+  const fromDate = from || '2000-01-01';
+  const toDate = to || new Date().toISOString().split('T')[0];
+  const { data, error } = await supabaseClient.rpc('get_period_summary', {
+    p_user_id: ownerId(),
+    p_from: toISO(fromDate, false),
+    p_to: toISO(toDate, true)
+  });
+  if (error) throw error;
+  return data || {
+    gross_sales: 0, net_sales: 0, returns_total: 0, cash_collected: 0,
+    credit_remaining: 0, invoices_count: 0, expenses_total: 0,
+    collections_total: 0, cogs: 0, net_profit: 0, vat_collected: 0
+  };
+}
 
   async function getShiftExpectedCash(shiftId) {
     if (!shiftId) return 0;
@@ -357,6 +375,30 @@ function calcCustomerBalance(customerId) {
     return result;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // v7.22 — تقييم المخزون (Single Source of Truth)
+  // الحساب المركزي الوحيد لتقييم المخزون في التطبيق كله.
+  // ممنوع أي حساب (stock * cost / stock * price / sale - cost)
+  // يكون inline في UI — أي استهلاك يمر عبر الدالة دي.
+  // ══════════════════════════════════════════════════════════════
+  function calcInventoryValuation(products) {
+    const list = Array.isArray(products) ? products : [];
+    let totalCost = 0;
+    let totalSale = 0;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      const stock = Number(p && p.stock) || 0;
+      totalCost += stock * (Number(p && p.cost) || 0);
+      totalSale += stock * (Number(p && p.price) || 0);
+    }
+    return {
+      count: list.length,
+      totalCost: totalCost,
+      totalSale: totalSale,
+      expectedProfit: totalSale - totalCost
+    };
+  }
+
   function getPeriod(type) {
     const now = new Date();
     switch (type) {
@@ -377,6 +419,7 @@ function calcCustomerBalance(customerId) {
     getSupplierBalance,
     calcPeriodSummary,
     calcProductProfitReport,   // ✅ v7.2
+    calcInventoryValuation,    // ✅ v7.22
     calcCustomerBalance,
     calcSupplierBalance,
     calcShiftExpectedCash,
