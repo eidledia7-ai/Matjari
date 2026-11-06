@@ -93,7 +93,7 @@
 
 <header class="app-header">
   <button class="menu-btn" onclick="toggleSidebar(true)" aria-label="فتح القائمة">☰</button>
-  <h1 class="logo-title" data-i18n="app_title">متجري</h1>
+  <h1 class="logo-title" data-i18n="app_title">متجري<span id="lastSyncBadge" class="last-sync-badge" style="display:none;"></span></h1>
 </header>
 
 <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
@@ -807,9 +807,10 @@
         <div class="form-group span-3"><label data-i18n="notes_label">ملاحظات</label><input type="text" id="shiftNotes" placeholder="أي ملاحظات..."></div>
       </div>
       <div id="shiftCashBreakdown" class="card" style="display:none; margin-top:12px;"></div>
-      <div style="display:flex; gap:8px; margin-top:15px;">
+    <div style="display:flex; gap:8px; margin-top:15px;">
   <button class="btn green" style="flex:2;" onclick="closeShift()" data-i18n="close_shift_btn">🔒 إغلاق الوردية وحفظها</button>
   <button class="btn secondary" style="flex:1; padding:0 10px;" onclick="printShiftReport()" title="طباعة"><span>🖨️</span></button>
+  <button class="btn primary" style="flex:1; padding:0 10px;" onclick="openReconciliationModal()" title="تقرير مطابقة"><span>📊</span></button>
 </div>
     </div>
   </div>
@@ -1394,6 +1395,22 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" class="moves-log-print" onclick="printMovesLog()" data-i18n="moves_log_print">🖨️ طباعة</button>
         <button type="button" class="moves-log-refresh" onclick="_movesLogFetch()" data-i18n="moves_log_refresh">🔄 تحديث</button>
       </div>
+    </div>
+  </div>
+</div>
+<!-- v7.23.2 — Reconciliation Modal -->
+<div id="reconciliationModal" class="recon-overlay" style="display:none;">
+  <div class="recon-container">
+    <div class="recon-header">
+      <h2 data-i18n="recon_title">📊 تقرير مطابقة الوردية</h2>
+      <button type="button" class="recon-close" onclick="closeReconciliationModal()">✕</button>
+    </div>
+    <div id="reconBody" class="recon-body">
+      <p class="recon-loading">...</p>
+    </div>
+    <div class="recon-footer">
+      <button type="button" class="recon-print-btn" onclick="printReconciliation()" data-i18n="recon_print">🖨️ طباعة</button>
+      <button type="button" class="recon-close-btn" onclick="closeReconciliationModal()" data-i18n="recon_close">إغلاق</button>
     </div>
   </div>
 </div>

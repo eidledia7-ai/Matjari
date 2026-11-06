@@ -527,6 +527,13 @@ async function closeShift() {
   const difference = actualCash - expectedCash;
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
+  // ✅ v7.23.3 — Read variance reason BEFORE building closedShift
+  const existingVariance = currentShift.variance_reason || currentShift.varianceReason || '';
+  let finalNotes = notes;
+  if (existingVariance && !notes.includes('--- سبب الفرق ---')) {
+    finalNotes = (notes ? notes + '\n\n' : '') + '--- سبب الفرق ---\n' + existingVariance;
+  }
+
   const closedShift = {
     id: currentShift.id, user_id: ownerId,
     cashier_name: cashierName, cashierName: cashierName,
@@ -542,7 +549,10 @@ async function closeShift() {
     cash_expenses: cashExpenses, cashExpenses: cashExpenses,
     total_sales: totalSales, totalSales: totalSales,
     actual_cash: actualCash, actualCash: actualCash,
-    difference: difference, notes: notes,
+    difference: difference,
+    notes: finalNotes,
+    variance_reason: existingVariance,
+    varianceReason: existingVariance,
     saleCount: shiftSales.length, drawerExpensesList: []
   };
 
@@ -554,7 +564,7 @@ async function closeShift() {
         opening_cash: closedShift.opening_cash, expected_cash: closedShift.expected_cash,
         cash_sales: closedShift.cash_sales, cash_collections: closedShift.cash_collections,
         cash_returns: closedShift.cash_returns, cash_expenses: closedShift.cash_expenses,
-        actual_cash: actualCash, difference: difference, notes: notes
+        actual_cash: actualCash, difference: difference, notes: finalNotes
       }, { onConflict: 'id' });
       if (error) { console.warn('Shift close upload failed:', error); showNotification(tr('save_offline_warning'), 'warning'); }
     } catch (e) { console.warn('Shift close failed:', e); }
@@ -578,13 +588,12 @@ async function closeShift() {
   renderShifts();
   renderDashboard();
   showNotification(tr('shift_closed'));
-   switchShiftTab('shift-log');
+  switchShiftTab('shift-log');
 
   if (typeof triggerAutoBackup === 'function') {
     setTimeout(() => triggerAutoBackup('shift_close').catch(e => console.warn('shift auto-backup:', e)), 800);
   }
 }
-
 function renderShifts() {
   const container = document.getElementById('shiftsTable');
   if (!container) return;
@@ -635,8 +644,12 @@ function printShiftReport(shiftId) {
     shift = state.currentShift || state.shifts[0] || null;
   }
   if (!shift) return showNotification(tr('no_closed_shifts'), 'warning');
-  
-  const sales = (state.sales || []).filter(s => (s.shift_id === shiftId || s.shiftId === shiftId));
+
+  // ✅ v7.23.2 — استخدام shift.id دايماً (إصلاح باج الأصفار للوردية المفتوحة)
+  const effectiveShiftId = shift.id;
+  const isOpenShift = !(shift.end_time || shift.endTime);
+
+  const sales = (state.sales || []).filter(s => (s.shift_id === effectiveShiftId || s.shiftId === effectiveShiftId));
   const shiftStart = new Date(shift.start_time || shift.startTime).getTime();
   const shiftEnd = (shift.end_time || shift.endTime) ? new Date(shift.end_time || shift.endTime).getTime() : Date.now();
 
@@ -647,17 +660,19 @@ function printShiftReport(shiftId) {
   const cashVat = shiftCashSales.reduce((sum, s) => sum + (Number(s.vat_amount ?? s.vatAmount ?? 0) || 0), 0);
   const cashInvoicesCount = shiftCashSales.length;
 
-  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === shiftId || p.shiftId === shiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const cashReturnsTotal = (state.returns || []).filter(r => (r.shift_id === shiftId || r.shiftId === shiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash')).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
-  const drawerExpensesTotal = (state.expenses || []).filter(e => (e.shift_id === shiftId || e.shiftId === shiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash')).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === effectiveShiftId || p.shiftId === effectiveShiftId) && (p.pay_method === 'cash' || p.payMethod === 'cash')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const cashReturnsTotal = (state.returns || []).filter(r => (r.shift_id === effectiveShiftId || r.shiftId === effectiveShiftId) && (r.refund_method === 'cash' || r.refundMethod === 'cash')).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const drawerExpensesTotal = (state.expenses || []).filter(e => (e.shift_id === effectiveShiftId || e.shiftId === effectiveShiftId) && (e.pay_method === 'cash' || e.payMethod === 'cash')).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-  const expectedCash = financeCore.calcShiftExpectedCash(shiftId);
+  const expectedCash = financeCore.calcShiftExpectedCash(effectiveShiftId);
   const totalSales = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
   const visaSales = sales.filter(s => (s.pay_method === 'visa' || s.payMethod === 'visa')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
   const transferSales = sales.filter(s => (s.pay_method === 'transfer' || s.payMethod === 'transfer')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
 
-  const isCurrent = !shiftId && state.currentShift;
-const actualCash = isCurrent ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift.actual_cash ?? shift.actualCash) || 0);
+  // ✅ v7.23.2 — لو الوردية مفتوحة، اقرأ الفعلي من خانة الإدخال
+  const actualCash = isOpenShift
+    ? (parseFloat(document.getElementById('shiftActualCash')?.value) || 0)
+    : (Number(shift.actual_cash ?? shift.actualCash) || 0);
   const difference = actualCash - expectedCash;
 
   const cur = escapeHTML(state.storeSettings.currency || 'ج.م');
@@ -682,12 +697,18 @@ const actualCash = isCurrent ? (parseFloat(document.getElementById('shiftActualC
   const en = currentLang === 'en';
   const dir = en ? 'ltr' : 'rtl';
 
+  // ✅ v7.23.2 — banner تحذيري للوردية المفتوحة
+  const openBanner = isOpenShift
+    ? '<div style="background:#fef3c7;border:2px solid #d97706;padding:12px;border-radius:8px;margin-bottom:16px;color:#92400e;font-weight:800;text-align:center;">⚠️ تقرير مؤقت — الوردية لم تُغلق بعد</div>'
+    : '';
+
   win.document.write(
     '<!doctype html><html lang="' + (en ? 'en' : 'ar') + '" dir="' + dir + '"><head><meta charset="utf-8"><title>' + tr('shift_report') + '</title>' +
     '<style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c}h1{color:#176b70;margin:0 0 6px}h2{color:#17364c;font-size:16px;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin:8px 0}th{background:#17364c;color:white;padding:9px;text-align:' + (en ? 'left' : 'right') + ';font-size:12px}td{padding:8px 10px;border:1px solid #ccd7df;font-size:12px;text-align:' + (en ? 'left' : 'right') + '}.breakdown td{border:1px solid #e1e8ed}.breakdown tr.total td{background:#e8f4f4;font-weight:900;color:#176b70;border-top:2px solid #176b70;font-size:13px}.breakdown tr.vat td{background:#f1f6f8;color:#4a5f70;font-size:11px}.breakdown tr.minus td{color:#c0392b}.recon-box{padding:14px;background:#f8fafb;border:1px solid #dce5ec;border-radius:8px;margin:12px 0}.recon-box table td{border:none;padding:6px 0}.recon-box .diff-row td{border-top:2px solid #dce5ec;padding-top:10px;font-weight:900;font-size:15px;color:' + (difference < 0 ? '#c0392b' : (difference > 0 ? '#176b70' : '#4a5f70')) + '}.note{padding:10px 14px;background:#fff8e1;border-left:3px solid #b8860b;border-radius:6px;font-size:11px;color:#7a5c00;line-height:1.6;margin-top:14px}@media print{button{display:none}body{padding:10px}}</style></head><body>' +
+    openBanner +
     '<h1>' + shop + ' — ' + tr('shift_report') + '</h1>' +
     '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + tr('th_cashier') + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + '</p>' +
-    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + tr('shift_start') + ':</b> ' + new Date(shiftStart).toLocaleString(en ? 'en-US' : 'ar-EG') + ' &nbsp;&nbsp; <b>' + tr('shift_end') + ':</b> ' + new Date(shiftEnd).toLocaleString(en ? 'en-US' : 'ar-EG') + '</p>' +
+    '<p style="margin:0 0 4px 0;font-size:13px;"><b>' + tr('shift_start') + ':</b> ' + new Date(shiftStart).toLocaleString(en ? 'en-US' : 'ar-EG') + ' &nbsp;&nbsp; <b>' + tr('shift_end') + ':</b> ' + (isOpenShift ? '—' : new Date(shiftEnd).toLocaleString(en ? 'en-US' : 'ar-EG')) + '</p>' +
     '<h2>' + tr('shift_cash_breakdown_title') + '</h2>' +
     '<table class="breakdown"><tbody>' +
       bdRow(tr('shift_opening_cash'), openingCash, '💵', '') +
@@ -719,7 +740,6 @@ const actualCash = isCurrent ? (parseFloat(document.getElementById('shiftActualC
   );
   win.document.close();
 }
-
 function openExportModal(tableType) {
   activeExportContext.type = tableType;
   const modal = document.getElementById('exportModal');
@@ -1013,4 +1033,293 @@ function fillShiftCash(amount) {
     input.value = amount;
   }
   calculateShiftDiff();
+}
+/* ═══════════════════════════════════════════════════════════ */
+/* v7.23.2 — Reconciliation Modal                              */
+/* ═══════════════════════════════════════════════════════════ */
+
+let _reconDonutChart = null;
+let _reconSparklineChart = null;
+let _reconCurrentShiftId = null;
+
+function openReconciliationModal(shiftId) {
+  const modal = document.getElementById('reconciliationModal');
+  if (!modal) return;
+
+  let targetShift = null;
+  if (shiftId) {
+    targetShift = (state.shifts || []).find(s => s.id === shiftId);
+  } else if (state.currentShift) {
+    targetShift = state.currentShift;
+  } else {
+    const closedShifts = (state.shifts || []).filter(s => s.end_time || s.endTime);
+    targetShift = closedShifts[0] || null;
+  }
+
+  if (!targetShift) {
+    return showNotification(tr('no_closed_shifts'), 'warning');
+  }
+
+  _reconCurrentShiftId = targetShift.id;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  _renderReconciliation(targetShift);
+}
+
+function closeReconciliationModal() {
+  const modal = document.getElementById('reconciliationModal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+  if (_reconDonutChart) { try { _reconDonutChart.destroy(); } catch(e){} _reconDonutChart = null; }
+  if (_reconSparklineChart) { try { _reconSparklineChart.destroy(); } catch(e){} _reconSparklineChart = null; }
+  _reconCurrentShiftId = null;
+}
+
+function _renderReconciliation(shift) {
+  const body = document.getElementById('reconBody');
+  if (!body) return;
+
+  const cur = state.storeSettings.currency || 'ج.م';
+  const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isOpen = !(shift.end_time || shift.endTime);
+  const sid = shift.id;
+
+  // ── بيانات الوردية ──
+  const opening = Number(shift.opening_cash ?? shift.openingCash) || 0;
+  const shiftSales = (state.sales || []).filter(s => s.shift_id === sid || s.shiftId === sid);
+  const cashSalesList = shiftSales.filter(s => (s.pay_method === 'cash' || s.payMethod === 'cash') && (Number(s.paid) || 0) > 0);
+  const cashSales = cashSalesList.reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const visaSales = shiftSales.filter(s => (s.pay_method === 'visa' || s.payMethod === 'visa') || (s.pay_method === 'card' || s.payMethod === 'card')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const transferSales = shiftSales.filter(s => (s.pay_method === 'transfer' || s.payMethod === 'transfer')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === sid || p.shiftId === sid) && (p.pay_method === 'cash' || p.payMethod === 'cash')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const cashReturns = (state.returns || []).filter(r => (r.shift_id === sid || r.shiftId === sid) && (r.refund_method === 'cash' || r.refundMethod === 'cash')).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const cashExpenses = (state.expenses || []).filter(e => (e.shift_id === sid || e.shiftId === sid) && (e.pay_method === 'cash' || e.payMethod === 'cash')).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  const expectedCash = financeCore.calcShiftExpectedCash(sid);
+  const actualCash = isOpen
+    ? (parseFloat(document.getElementById('shiftActualCash')?.value) || 0)
+    : (Number(shift.actual_cash ?? shift.actualCash) || 0);
+  const difference = actualCash - expectedCash;
+  const absDiff = Math.abs(difference);
+  const variancePct = expectedCash > 0 ? (absDiff / expectedCash) * 100 : 0;
+
+  // Badge
+  let badgeClass = 'excellent', badgeText = tr('recon_variance_excellent');
+  if (variancePct > 5) { badgeClass = 'warning'; badgeText = tr('recon_variance_warning'); }
+  else if (variancePct > 1) { badgeClass = 'ok'; badgeText = tr('recon_variance_ok'); }
+
+  const diffColorClass = difference > 0 ? 'recon-diff-positive' : (difference < 0 ? 'recon-diff-negative' : 'recon-diff-zero');
+  const diffPrefix = difference > 0 ? '+' : (difference < 0 ? '−' : '');
+
+  // ── بناء المحتوى ──
+  let html = '';
+
+  if (isOpen) {
+    html += '<div class="recon-warning-banner">' + tr('recon_open_warning') + '</div>';
+  }
+
+  // معلومات الوردية
+  html += '<div class="recon-shift-info">' +
+    '<div class="recon-info-item"><span class="recon-info-label">' + tr('th_cashier') + '</span><span class="recon-info-value">' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + '</span></div>' +
+    '<div class="recon-info-item"><span class="recon-info-label">' + tr('shift_start') + '</span><span class="recon-info-value">' + new Date(shift.start_time || shift.startTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) + '</span></div>' +
+    '<div class="recon-info-item"><span class="recon-info-label">' + tr('shift_end') + '</span><span class="recon-info-value">' + (isOpen ? '—' : new Date(shift.end_time || shift.endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})) + '</span></div>' +
+  '</div>';
+
+  // Stats cards
+  html += '<div class="recon-stats-grid">' +
+    '<div class="recon-stat-card"><span class="recon-stat-label">' + tr('recon_expected') + '</span><span class="recon-stat-value recon-expected">' + fmt(expectedCash) + ' ' + cur + '</span></div>' +
+    '<div class="recon-stat-card"><span class="recon-stat-label">' + tr('recon_actual') + '</span><span class="recon-stat-value recon-actual">' + fmt(actualCash) + ' ' + cur + '</span></div>' +
+    '<div class="recon-stat-card"><span class="recon-stat-label">' + tr('recon_difference') + '</span><span class="recon-stat-value ' + diffColorClass + '">' + diffPrefix + fmt(absDiff) + ' ' + cur + '</span></div>' +
+  '</div>';
+
+  // Badge
+  html += '<div style="text-align:center;"><span class="recon-variance-badge ' + badgeClass + '">' + badgeText + ' (' + variancePct.toFixed(2) + '%)</span></div>';
+
+  // Sparkline
+  html += '<div class="recon-chart-row" style="grid-template-columns:1fr;">' +
+    '<div class="recon-chart-card"><p class="recon-chart-title">' + tr('recon_sparkline_title') + '</p><div class="recon-chart-canvas-wrap"><canvas id="reconSparklineCanvas"></canvas></div></div>' +
+  '</div>';
+
+  // Donut + Breakdown
+  html += '<div class="recon-chart-row">' +
+    '<div class="recon-chart-card"><p class="recon-chart-title">' + tr('recon_payment_methods') + '</p><div class="recon-chart-canvas-wrap"><canvas id="reconDonutCanvas"></canvas></div></div>' +
+    '<div class="recon-chart-card"><p class="recon-chart-title">' + tr('recon_drawer_breakdown') + '</p><table class="recon-breakdown-table"><tbody>' +
+      '<tr><td>💵 ' + tr('shift_opening_cash') + '</td><td>' + fmt(opening) + ' ' + cur + '</td></tr>' +
+      '<tr><td>🛒 ' + tr('shift_cash_sales') + ' (' + cashSalesList.length + ')</td><td>+ ' + fmt(cashSales) + ' ' + cur + '</td></tr>' +
+      '<tr><td>💰 ' + tr('shift_cash_collections') + '</td><td>+ ' + fmt(cashCollections) + ' ' + cur + '</td></tr>' +
+      '<tr><td>↩️ ' + tr('shift_cash_returns') + '</td><td>− ' + fmt(cashReturns) + ' ' + cur + '</td></tr>' +
+      '<tr><td>📤 ' + tr('shift_cash_expenses') + '</td><td>− ' + fmt(cashExpenses) + ' ' + cur + '</td></tr>' +
+      '<tr class="total"><td>= ' + tr('recon_expected') + '</td><td>' + fmt(expectedCash) + ' ' + cur + '</td></tr>' +
+    '</tbody></table></div>' +
+  '</div>';
+
+  // Variance Reason (لو الفرق > 5%)
+  if (variancePct > 5) {
+    const existingReason = (shift.variance_reason || shift.varianceReason || '') || '';
+    html += '<div class="recon-reason-box">' +
+      '<label>' + tr('recon_variance_reason_label') + '</label>' +
+      '<textarea id="reconVarianceReason" maxlength="200" placeholder="' + tr('recon_variance_reason_ph') + '">' + escapeHTML(existingReason) + '</textarea>' +
+      '<button type="button" onclick="saveVarianceReason()">💾 ' + tr('recon_save_reason') + '</button>' +
+    '</div>';
+  } else {
+    html += '<p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:12px;">' + tr('recon_no_reason_needed') + '</p>';
+  }
+
+  body.innerHTML = html;
+
+  // ── رسم Charts بعد إدراج الـ HTML ──
+  setTimeout(() => _renderReconCharts(cashSales, visaSales, transferSales), 50);
+}
+
+function _renderReconCharts(cashSales, visaSales, transferSales) {
+  if (typeof Chart === 'undefined') return;
+
+  // Donut
+  const donutCanvas = document.getElementById('reconDonutCanvas');
+  if (donutCanvas) {
+    if (_reconDonutChart) { try { _reconDonutChart.destroy(); } catch(e){} }
+    _reconDonutChart = new Chart(donutCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: [tr('cash_sales_label'), tr('visa_sales_label'), tr('bank_transfers_label')],
+        datasets: [{
+          data: [cashSales, visaSales, transferSales],
+          backgroundColor: ['#176b70', '#2563eb', '#d97706'],
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 8 } }
+        },
+        cutout: '60%'
+      }
+    });
+  }
+
+  // Sparkline (آخر 7 ورديات)
+  const sparkCanvas = document.getElementById('reconSparklineCanvas');
+  if (sparkCanvas) {
+    const recent = (state.shifts || [])
+      .filter(s => s.end_time || s.endTime)
+      .sort((a, b) => new Date(b.end_time || b.endTime) - new Date(a.end_time || a.endTime))
+      .slice(0, 7)
+      .reverse();
+
+    if (recent.length < 2) {
+      sparkCanvas.parentElement.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px;">' + tr('recon_no_shifts') + '</p>';
+    } else {
+      if (_reconSparklineChart) { try { _reconSparklineChart.destroy(); } catch(e){} }
+      const labels = recent.map(s => new Date(s.end_time || s.endTime).toLocaleDateString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month:'short', day:'numeric'}));
+      const data = recent.map(s => Number(s.difference) || 0);
+      _reconSparklineChart = new Chart(sparkCanvas, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            borderColor: '#176b70',
+            backgroundColor: 'rgba(23, 107, 112, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: data.map(d => d >= 0 ? '#059669' : '#dc2626')
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, grid: { display: true, color: '#f1f5f9' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+  }
+}
+
+async function saveVarianceReason() {
+  if (!_reconCurrentShiftId) return;
+  const reasonEl = document.getElementById('reconVarianceReason');
+  if (!reasonEl) return;
+  const reason = reasonEl.value.trim();
+  if (!reason) return showNotification(tr('recon_variance_reason_ph'), 'warning');
+
+  const shiftIdx = (state.shifts || []).findIndex(s => s.id === _reconCurrentShiftId);
+  if (shiftIdx === -1) return;
+
+  state.shifts[shiftIdx].variance_reason = reason;
+  state.shifts[shiftIdx].varianceReason = reason;
+
+  // حفظ في السيرفر عبر تحديث notes
+  if (navigator.onLine && supabaseClient) {
+    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+    try {
+      const existing = state.shifts[shiftIdx].notes || '';
+      const marker = '\n\n--- سبب الفرق ---\n';
+      const newNotes = existing.includes(marker) 
+        ? existing.split(marker)[0] + marker + reason 
+        : existing + marker + reason;
+      state.shifts[shiftIdx].notes = newNotes;
+      await supabaseClient.from('shifts').update({ notes: newNotes }).eq('id', _reconCurrentShiftId).eq('user_id', ownerId);
+    } catch (err) { console.warn('Save reason failed:', err); }
+  }
+
+  saveData();
+  showNotification(tr('recon_reason_saved'), 'success');
+}
+
+function printReconciliation() {
+  if (!_reconCurrentShiftId) return;
+  const shift = (state.shifts || []).find(s => s.id === _reconCurrentShiftId);
+  if (!shift) return;
+
+  const cur = state.storeSettings.currency || 'ج.م';
+  const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sid = shift.id;
+
+  const opening = Number(shift.opening_cash ?? shift.openingCash) || 0;
+  const shiftSales = (state.sales || []).filter(s => s.shift_id === sid || s.shiftId === sid);
+  const cashSales = shiftSales.filter(s => (s.pay_method === 'cash' || s.payMethod === 'cash') && (Number(s.paid) || 0) > 0).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
+  const cashCollections = (state.customerPayments || []).filter(p => (p.shift_id === sid || p.shiftId === sid) && (p.pay_method === 'cash' || p.payMethod === 'cash')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const cashReturns = (state.returns || []).filter(r => (r.shift_id === sid || r.shiftId === sid) && (r.refund_method === 'cash' || r.refundMethod === 'cash')).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+  const cashExpenses = (state.expenses || []).filter(e => (e.shift_id === sid || e.shiftId === sid) && (e.pay_method === 'cash' || e.payMethod === 'cash')).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const expected = financeCore.calcShiftExpectedCash(sid);
+  const actual = Number(shift.actual_cash ?? shift.actualCash) || 0;
+  const diff = actual - expected;
+  const isOpen = !(shift.end_time || shift.endTime);
+
+  const w = window.open('', '_blank', 'width=800,height=700');
+  if (!w) return showNotification(tr('allow_popups_print'), 'warning');
+
+  const shop = escapeHTML(state.storeSettings.name || 'متجري');
+
+  w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>' + tr('recon_title') + '</title>' +
+    '<style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c;max-width:720px;margin:auto}h1{color:#176b70;margin:0 0 16px;font-size:20px;text-align:center}h2{font-size:15px;color:#17364c;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin:10px 0}td{padding:8px 10px;border-bottom:1px dashed #e1e8ed;font-size:13px}td:last-child{text-align:left;direction:ltr;font-weight:700}tr.total td{border-top:2px solid #176b70;border-bottom:2px solid #176b70;font-weight:900;color:#176b70;padding-top:10px;padding-bottom:10px}.banner{background:#fef3c7;border:2px solid #d97706;padding:12px;border-radius:8px;margin-bottom:16px;color:#92400e;font-weight:800;text-align:center;font-size:13px}.stats{display:flex;justify-content:space-between;gap:10px;margin:12px 0}.stat{flex:1;padding:12px;background:#f1f6f8;border-radius:8px;text-align:center}.stat-label{font-size:11px;color:#687b8b;font-weight:700}.stat-value{font-size:16px;font-weight:900;margin-top:4px;direction:ltr}@media print{body{padding:0}}</style></head><body>' +
+    (isOpen ? '<div class="banner">⚠️ تقرير مؤقت — الوردية لم تُغلق بعد</div>' : '') +
+    '<h1>' + shop + ' — ' + tr('recon_title') + '</h1>' +
+    '<p style="text-align:center;font-size:12px;color:#687b8b;"><b>' + tr('th_cashier') + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + ' &nbsp;|&nbsp; ' + tr('shift_start') + ': ' + new Date(shift.start_time || shift.startTime).toLocaleString('ar-EG') + '</p>' +
+    '<div class="stats">' +
+      '<div class="stat"><div class="stat-label">' + tr('recon_expected') + '</div><div class="stat-value" style="color:#176b70;">' + fmt(expected) + ' ' + cur + '</div></div>' +
+      '<div class="stat"><div class="stat-label">' + tr('recon_actual') + '</div><div class="stat-value" style="color:#2563eb;">' + fmt(actual) + ' ' + cur + '</div></div>' +
+      '<div class="stat"><div class="stat-label">' + tr('recon_difference') + '</div><div class="stat-value" style="color:' + (diff < 0 ? '#dc2626' : (diff > 0 ? '#059669' : '#64748b')) + ';">' + (diff > 0 ? '+' : (diff < 0 ? '−' : '')) + fmt(Math.abs(diff)) + ' ' + cur + '</div></div>' +
+    '</div>' +
+    '<h2>' + tr('recon_drawer_breakdown') + '</h2>' +
+    '<table><tbody>' +
+      '<tr><td>💵 ' + tr('shift_opening_cash') + '</td><td>' + fmt(opening) + ' ' + cur + '</td></tr>' +
+      '<tr><td>🛒 ' + tr('shift_cash_sales') + '</td><td>+ ' + fmt(cashSales) + ' ' + cur + '</td></tr>' +
+      '<tr><td>💰 ' + tr('shift_cash_collections') + '</td><td>+ ' + fmt(cashCollections) + ' ' + cur + '</td></tr>' +
+      '<tr><td>↩️ ' + tr('shift_cash_returns') + '</td><td>− ' + fmt(cashReturns) + ' ' + cur + '</td></tr>' +
+      '<tr><td>📤 ' + tr('shift_cash_expenses') + '</td><td>− ' + fmt(cashExpenses) + ' ' + cur + '</td></tr>' +
+      '<tr class="total"><td>= ' + tr('recon_expected') + '</td><td>' + fmt(expected) + ' ' + cur + '</td></tr>' +
+    '</tbody></table>' +
+    '<div style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 24px;border:0;border-radius:8px;background:#176b70;color:#fff;font-weight:700;cursor:pointer;font-size:14px;">🖨️ طباعة</button></div>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>');
+  w.document.close();
 }

@@ -311,3 +311,109 @@ function applySavedDarkMode() {
     document.body.classList.add('dark-mode');
   }
 }
+/* ═══════════════════════════════════════════════════════════ */
+/* v7.23.3 — Last Sync Indicator                              */
+/* ═══════════════════════════════════════════════════════════ */
+
+function _updateLastSyncBadge() {
+  const badge = document.getElementById('lastSyncBadge');
+  if (!badge) return;
+
+  const oid = state.currentUser?.id;
+  if (!oid) { badge.style.display = 'none'; return; }
+
+  const lastSync = Number(localStorage.getItem('matjari_last_sync_' + oid)) || 0;
+  if (!lastSync) { badge.style.display = 'none'; return; }
+
+  const diff = Date.now() - lastSync;
+  const min = Math.floor(diff / 60000);
+  const hr = Math.floor(diff / 3600000);
+  const day = Math.floor(diff / 86400000);
+
+  let text = '', cls = '';
+  if (diff < 60000) {
+    text = '🟢 ' + tr('sync_just_now');
+    cls = 'fresh';
+  } else if (min < 60) {
+    text = '🟢 ' + tr('sync_min_ago').replace('{n}', min);
+    cls = 'fresh';
+  } else if (hr < 24) {
+    text = '🟡 ' + tr('sync_hr_ago').replace('{n}', hr);
+    cls = 'stale';
+  } else {
+    text = '🔴 ' + tr('sync_day_ago').replace('{n}', day);
+    cls = 'old';
+  }
+
+  badge.textContent = text;
+  badge.className = 'last-sync-badge ' + cls;
+  badge.style.display = 'inline-block';
+}
+
+function _markSyncComplete() {
+  const oid = state.currentUser?.id;
+  if (!oid) return;
+  try {
+    localStorage.setItem('matjari_last_sync_' + oid, String(Date.now()));
+  } catch (e) {}
+  _updateLastSyncBadge();
+}
+
+// ✅ v7.23.3 — Listen for sync completion (from storage.js event)
+window.addEventListener('matjari:syncDownComplete', function() {
+  _markSyncComplete();
+});
+
+// Periodic badge refresh
+setInterval(() => {
+  if (state.currentUser) _updateLastSyncBadge();
+}, 60000);
+
+// Initial display
+setTimeout(() => {
+  if (state.currentUser) _updateLastSyncBadge();
+}, 1500);
+/* ═══════════════════════════════════════════════════════════ */
+/* v7.23.3 — Global ESC Handler for Modals                    */
+/* ═══════════════════════════════════════════════════════════ */
+
+(function _installEscHandler() {
+  if (window._escHandlerInstalled) return;
+  window._escHandlerInstalled = true;
+
+  const CLOSE_MAP = [
+    { id: 'reconciliationModal', fn: 'closeReconciliationModal' },
+    { id: 'movesFullLogModal',   fn: 'closeMovesFullLog' },
+    { id: 'excelImportModal',    fn: 'closeImportModal' },
+    { id: 'exportModal',         fn: 'closeExportModal' },
+    { id: 'checkoutModal',       fn: 'closeCheckoutModal' },
+    { id: 'heldInvoicesModal',   fn: 'closeHeldInvoices' },
+    { id: 'drawerExpenseModal',  fn: 'closeDrawerExpense' },
+    { id: 'customerStatementModal', fn: null }
+  ];
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+
+    for (let i = 0; i < CLOSE_MAP.length; i++) {
+      const m = CLOSE_MAP[i];
+      const el = document.getElementById(m.id);
+      if (el && (el.style.display === 'flex' || el.style.display === 'block')) {
+        e.preventDefault();
+        try {
+          if (m.fn && typeof window[m.fn] === 'function') {
+            window[m.fn]();
+          } else {
+            el.style.display = 'none';
+            document.body.style.overflow = '';
+          }
+        } catch (err) {
+          console.warn('ESC close failed:', err);
+          el.style.display = 'none';
+          document.body.style.overflow = '';
+        }
+        return;
+      }
+    }
+  }, true);
+})();

@@ -283,7 +283,13 @@ async function syncDown(ownerId) {
       const { data: conflicts } = await supabaseClient.rpc('get_flagged_sales', { p_user_id: ownerId });
       state._stockConflictCount = Array.isArray(conflicts) ? conflicts.length : 0;
     } catch (e) {}
+ }
+ // ✅ v7.23.3 — Emit sync completion event (root solution — decoupled)
+try {
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('matjari:syncDownComplete', { detail: { ownerId } }));
   }
+} catch (e) {}
 }
 async function syncUp(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;

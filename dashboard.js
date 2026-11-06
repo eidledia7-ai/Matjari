@@ -106,38 +106,114 @@ function renderMonthlyGoal() {
   const container = document.getElementById('monthlyGoalCard');
   if (!container) return;
   const goal = parseFloat(state.storeSettings.monthlyGoal) || 0;
-  if (goal <= 0) { container.innerHTML = ''; return; }
+  const cur = state.storeSettings.currency || 'ج.م';
+  const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const range = _getCurrentMonthRange();
-  let actualSales = 0;
-
-  const monthSummary = _safeCalcPeriodSummary(range.start, range.end);
-  if (monthSummary) {
-    actualSales = Number(monthSummary.net_sales) || 0;
-  } else {
-    const monthSales = state.sales.filter(function(s) {
-      const d = (s.date || '').split('T')[0];
-      return d >= range.start && d <= range.end;
-    });
-    actualSales = monthSales.reduce(function(sum, s) {
-      return sum + (Number(s.total) || 0);
-    }, 0);
+  // لا هدف محدد
+  if (goal <= 0) {
+    container.innerHTML =
+      '<div class="goal-card">' +
+        '<div class="monthly-goal-empty">' +
+          '<p>' + tr('monthly_goal_empty') + '</p>' +
+          '<button type="button" class="btn primary" onclick="_openMonthlyGoalEdit()" style="padding:10px 24px;">' + tr('monthly_goal_set_btn') + '</button>' +
+        '</div>' +
+        '<div id="monthlyGoalEditBox" style="display:none;">' +
+          '<div class="monthly-goal-input-row">' +
+            '<input type="number" id="monthlyGoalInput" min="0" step="any" placeholder="50000" />' +
+            '<button type="button" class="mg-save" onclick="_saveMonthlyGoal()">' + tr('monthly_goal_save') + '</button>' +
+            '<button type="button" class="mg-cancel" onclick="_cancelMonthlyGoalEdit()">' + tr('monthly_goal_cancel') + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    return;
   }
 
-  const percent   = Math.min(100, (actualSales / goal * 100));
-  const remaining = Math.max(0, goal - actualSales);
-  const cur       = state.storeSettings.currency;
+  // فيه هدف — نحسب التقدم
+  const range = _getCurrentMonthRange();
+  let actualSales = 0;
+  const monthSummary = _safeCalcPeriodSummary(range.start, range.end);
+  if (monthSummary) actualSales = Number(monthSummary.net_sales) || 0;
 
-  container.innerHTML =
-    '<div class="goal-card">' +
-    '<h3>🎯 ' + tr('monthly_goal_title') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></h3>' +
+  const percent = Math.min(100, (actualSales / goal * 100));
+  const remaining = Math.max(0, goal - actualSales);
+  const achieved = percent >= 100;
+
+  // "محتاج X في اليوم" — بناءً على أيام الشهر المتبقية
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = Math.max(1, lastDay - now.getDate() + 1);
+  const dailyNeeded = remaining > 0 ? remaining / daysLeft : 0;
+
+  let html = '<div class="goal-card">' +
+    '<h3 style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span>🎯 ' + tr('monthly_goal_title') + ' <span class="goal-badge on-track">' + percent.toFixed(1) + '%</span></span>' +
+      '<button type="button" class="monthly-goal-edit-btn" onclick="_openMonthlyGoalEdit()">' + tr('monthly_goal_edit') + '</button>' +
+    '</h3>' +
     '<div class="goal-header"><div class="goal-values">' +
-    '<div class="goal-value"><div class="label">' + tr('monthly_goal_sales') + '</div><div class="value">' + actualSales.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">' + tr('monthly_goal_target') + '</div><div class="value">' + goal.toFixed(2) + ' ' + cur + '</div></div>' +
-    '<div class="goal-value"><div class="label">' + tr('monthly_goal_remaining') + '</div><div class="value">' + remaining.toFixed(2) + ' ' + cur + '</div></div>' +
+      '<div class="goal-value"><div class="label">' + tr('monthly_goal_sales') + '</div><div class="value">' + fmt(actualSales) + ' ' + cur + '</div></div>' +
+      '<div class="goal-value"><div class="label">' + tr('monthly_goal_target') + '</div><div class="value">' + fmt(goal) + ' ' + cur + '</div></div>' +
+      '<div class="goal-value"><div class="label">' + tr('monthly_goal_remaining') + '</div><div class="value">' + fmt(remaining) + ' ' + cur + '</div></div>' +
     '</div></div>' +
-    '<div class="goal-bar-container"><div class="goal-bar" style="width: ' + percent + '%"></div></div>' +
-    '</div>';
+    '<div class="goal-bar-container"><div class="goal-bar" style="width:' + percent + '%"></div></div>';
+
+  if (achieved) {
+    html += '<div class="monthly-goal-achieved">' + tr('monthly_goal_achieved') + '</div>';
+  } else if (dailyNeeded > 0) {
+    html += '<div class="monthly-goal-daily-needed">' + tr('monthly_goal_daily_needed').replace('{amount}', fmt(dailyNeeded)).replace('{cur}', cur) + '</div>';
+  }
+
+  html += '<div id="monthlyGoalEditBox" style="display:none;">' +
+    '<div class="monthly-goal-input-row">' +
+      '<input type="number" id="monthlyGoalInput" min="0" step="any" value="' + goal + '" />' +
+      '<button type="button" class="mg-save" onclick="_saveMonthlyGoal()">' + tr('monthly_goal_save') + '</button>' +
+      '<button type="button" class="mg-cancel" onclick="_cancelMonthlyGoalEdit()">' + tr('monthly_goal_cancel') + '</button>' +
+    '</div>' +
+  '</div>' +
+  '</div>';
+
+  container.innerHTML = html;
+}
+
+function _openMonthlyGoalEdit() {
+  const box = document.getElementById('monthlyGoalEditBox');
+  if (!box) return;
+  box.style.display = 'block';
+  const inp = document.getElementById('monthlyGoalInput');
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function _cancelMonthlyGoalEdit() {
+  const box = document.getElementById('monthlyGoalEditBox');
+  if (box) box.style.display = 'none';
+}
+
+async function _saveMonthlyGoal() {
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  const inp = document.getElementById('monthlyGoalInput');
+  if (!inp) return;
+  const newGoal = parseFloat(inp.value) || 0;
+
+  state.storeSettings.monthlyGoal = newGoal;
+
+  // حفظ في السيرفر — حقل واحد بس عشان ما نلمسش باقي الإعدادات
+  if (navigator.onLine && supabaseClient) {
+    const ownerId = state.currentUser.id;
+    try {
+      await supabaseClient.from('store_settings').update({ 
+        monthly_goal: newGoal, 
+        updated_at: new Date().toISOString() 
+      }).eq('user_id', ownerId);
+    } catch (e) { console.warn('Monthly goal save failed:', e); }
+  }
+
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('save_monthly_goal', { goal: newGoal });
+  }
+
+  saveData();
+  _cancelMonthlyGoalEdit();
+  renderMonthlyGoal();
+  showNotification(tr('monthly_goal_saved'), 'success');
 }
 
 function renderSalesChart() {
