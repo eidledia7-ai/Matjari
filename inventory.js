@@ -355,12 +355,7 @@ function _renderMovesBatch(typeLabels) {
   tbody.insertAdjacentHTML('beforeend', html);
   _movesState.rendered = end;
 
-  // ✅ v7.23 — أضف زرار "اعرض الأقدم" لو كل الحركات اتعرضت
-  // ✅ v7.23.1 — زرار السجل الكامل بره الجدول (في renderStockMoves)
-if (_movesState.rendered < _movesState.filtered.length) {
-  tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
-}
-  } else {
+  if (_movesState.rendered < _movesState.filtered.length) {
     tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
   }
 }
