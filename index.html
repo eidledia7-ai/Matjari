@@ -1345,5 +1345,57 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+<!-- v7.23.1 — Moves Full Log Modal -->
+<div id="movesFullLogModal" class="moves-full-log-overlay" style="display:none;">
+  <div class="moves-log-container">
+    <div class="moves-log-header">
+      <h2 data-i18n="moves_full_log_title">📜 السجل الكامل — حركات المخزون</h2>
+      <button type="button" class="moves-log-close" onclick="closeMovesFullLog()" title="إغلاق">✕</button>
+    </div>
+
+    <div class="moves-log-filters">
+      <input type="text" id="movesLogSearch" data-i18n-placeholder="moves_log_search_ph" placeholder="🔎 بحث بالمنتج أو السبب..." oninput="_movesLogDebouncedFetch()" />
+      <select id="movesLogType" onchange="_movesLogDebouncedFetch()">
+        <option value="" data-i18n="moves_log_filter_all">كل الأنواع</option>
+        <option value="in">إضافة (+)</option>
+        <option value="out">خصم (-)</option>
+        <option value="set">ضبط (=)</option>
+        <option value="sale">بيع (-)</option>
+        <option value="sale_cancel">إلغاء بيع (+)</option>
+        <option value="return">مرتجع (+)</option>
+        <option value="purchase">مشتريات (+)</option>
+      </select>
+      <input type="date" id="movesLogFrom" onchange="_movesLogDebouncedFetch()" title="من تاريخ" />
+      <input type="date" id="movesLogTo" onchange="_movesLogDebouncedFetch()" title="إلى تاريخ" />
+      <button type="button" class="moves-log-reset" onclick="_resetMovesLogFilters()" data-i18n="moves_log_reset">إعادة تعيين</button>
+    </div>
+
+    <div id="movesLogStats" class="moves-log-stats"></div>
+
+    <div id="movesLogTableContainer" class="moves-log-table-container">
+      <p class="moves-log-loading" data-i18n="moves_log_loading">جارٍ تحميل الحركات...</p>
+    </div>
+
+    <div class="moves-log-footer">
+      <div class="moves-log-pagination">
+        <button type="button" id="movesLogPrevBtn" onclick="_movesLogPrevPage()" data-i18n="moves_log_prev_page" disabled>◀ السابق</button>
+        <span id="movesLogPageInfo" class="moves-log-page-info">—</span>
+        <button type="button" id="movesLogNextBtn" onclick="_movesLogNextPage()" data-i18n="moves_log_next_page">التالي ▶</button>
+        <select id="movesLogPageSize" onchange="_movesLogChangePageSize(this.value)">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div class="moves-log-actions">
+        <button type="button" class="moves-log-export" onclick="exportMovesLogCSV('page')" data-i18n="moves_log_export_page">📥 تصدير الصفحة</button>
+        <button type="button" class="moves-log-export" onclick="exportMovesLogCSV('all')" data-i18n="moves_log_export_all">📥 تصدير الكل</button>
+        <button type="button" class="moves-log-print" onclick="printMovesLog()" data-i18n="moves_log_print">🖨️ طباعة</button>
+        <button type="button" class="moves-log-refresh" onclick="_movesLogFetch()" data-i18n="moves_log_refresh">🔄 تحديث</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

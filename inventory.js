@@ -317,9 +317,14 @@ function renderStockMoves() {
   };
 
   container.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th>' + tr('th_date') + '</th><th>' + tr('th_product') + '</th><th>' + tr('th_movement') + '</th>' +
-    '<th>' + tr('th_quantity') + '</th><th>' + tr('th_before_after') + '</th><th>' + tr('th_reason') + '</th>' +
-    '</tr></thead><tbody id="stockMovesBody"></tbody></table></div>';
+  '<th>' + tr('th_date') + '</th><th>' + tr('th_product') + '</th><th>' + tr('th_movement') + '</th>' +
+  '<th>' + tr('th_quantity') + '</th><th>' + tr('th_before_after') + '</th><th>' + tr('th_reason') + '</th>' +
+  '</tr></thead><tbody id="stockMovesBody"></tbody></table></div>' +
+  '<div style="text-align:center; padding:15px 0 5px;">' +
+    '<button type="button" class="btn secondary" onclick="openMovesFullLog()" style="padding:10px 24px; font-size:14px;">' +
+      tr('moves_full_log_btn') +
+    '</button>' +
+  '</div>';
 
   _renderMovesBatch(typeLabels);
   _setupMovesObserver(typeLabels);
@@ -351,12 +356,10 @@ function _renderMovesBatch(typeLabels) {
   _movesState.rendered = end;
 
   // ✅ v7.23 — أضف زرار "اعرض الأقدم" لو كل الحركات اتعرضت
-  if (_movesState.rendered >= _movesState.filtered.length) {
-    tbody.insertAdjacentHTML('beforeend',
-      '<tr id="loadOlderRow"><td colspan="6" style="text-align:center;padding:15px;border:none;">' +
-        '<button id="loadOlderMovesBtn" class="load-older-btn" onclick="loadOlderStockMoves()">⬇️ ' + tr('load_older_moves') + '</button>' +
-      '</td></tr>'
-    );
+  // ✅ v7.23.1 — زرار السجل الكامل بره الجدول (في renderStockMoves)
+if (_movesState.rendered < _movesState.filtered.length) {
+  tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
+}
   } else {
     tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
   }
@@ -780,55 +783,403 @@ function renderInvSummary() {
   `;
 }
 /* ============ v7.23 — Load Older Stock Moves ============ */
-async function loadOlderStockMoves() {
-  if (window.isReadOnlyMode) return;
-  if (!navigator.onLine || !supabaseClient) {
-    return showNotification(tr('no_internet_for_load_more'), 'warning');
-  }
-  if (!state.stockMoves || !state.stockMoves.length) return;
 
-  const btn = document.getElementById('loadOlderMovesBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ ' + tr('loading_short'); }
+/* ═══════════════════════════════════════════════════════════ */
+/* v7.23.1 — Moves Full Log Modal (Server-side Pagination)    */
+/* ═══════════════════════════════════════════════════════════ */
+
+const _movesLogState = {
+  page: 1,
+  pageSize: 25,
+  totalCount: 0,
+  stats: { total: 0, in: 0, out: 0 },
+  filterType: '',
+  filterSearch: '',
+  filterFrom: '',
+  filterTo: '',
+  loading: false,
+  lastFetchRows: []
+};
+
+let _movesLogFetchTimer = null;
+
+function openMovesFullLog() {
+  const modal = document.getElementById('movesFullLogModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  // Reset state
+  _movesLogState.page = 1;
+  _movesLogState.pageSize = 25;
+  _movesLogState.filterType = '';
+  _movesLogState.filterSearch = '';
+  _movesLogState.filterFrom = '';
+  _movesLogState.filterTo = '';
+
+  const searchEl = document.getElementById('movesLogSearch');
+  const typeEl = document.getElementById('movesLogType');
+  const fromEl = document.getElementById('movesLogFrom');
+  const toEl = document.getElementById('movesLogTo');
+  const pageSizeEl = document.getElementById('movesLogPageSize');
+  if (searchEl) searchEl.value = '';
+  if (typeEl) typeEl.value = '';
+  if (fromEl) fromEl.value = '';
+  if (toEl) toEl.value = '';
+  if (pageSizeEl) pageSizeEl.value = '25';
+
+  _movesLogFetch();
+}
+
+function closeMovesFullLog() {
+  const modal = document.getElementById('movesFullLogModal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+  _movesLogState.lastFetchRows = [];
+}
+
+function _movesLogDebouncedFetch() {
+  clearTimeout(_movesLogFetchTimer);
+  _movesLogFetchTimer = setTimeout(() => {
+    _movesLogState.page = 1;
+    _movesLogState.filterSearch = (document.getElementById('movesLogSearch')?.value || '').trim();
+    _movesLogState.filterType = document.getElementById('movesLogType')?.value || '';
+    _movesLogState.filterFrom = document.getElementById('movesLogFrom')?.value || '';
+    _movesLogState.filterTo = document.getElementById('movesLogTo')?.value || '';
+    _movesLogFetch();
+  }, 350);
+}
+
+function _resetMovesLogFilters() {
+  _movesLogState.filterType = '';
+  _movesLogState.filterSearch = '';
+  _movesLogState.filterFrom = '';
+  _movesLogState.filterTo = '';
+  _movesLogState.page = 1;
+
+  const searchEl = document.getElementById('movesLogSearch');
+  const typeEl = document.getElementById('movesLogType');
+  const fromEl = document.getElementById('movesLogFrom');
+  const toEl = document.getElementById('movesLogTo');
+  if (searchEl) searchEl.value = '';
+  if (typeEl) typeEl.value = '';
+  if (fromEl) fromEl.value = '';
+  if (toEl) toEl.value = '';
+
+  _movesLogFetch();
+}
+
+async function _movesLogFetch() {
+  if (_movesLogState.loading) return;
+
+  if (!navigator.onLine || !supabaseClient) {
+    _movesLogRenderError(tr('moves_log_offline_msg'), false);
+    return;
+  }
+
+  _movesLogState.loading = true;
+  _movesLogRenderLoading();
+
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+  if (!ownerId) {
+    _movesLogState.loading = false;
+    _movesLogRenderError('No user', true);
+    return;
+  }
+
+  const from = _movesLogState.filterFrom;
+  const to = _movesLogState.filterTo;
+  const search = _movesLogState.filterSearch;
+  const type = _movesLogState.filterType;
+  const offset = (_movesLogState.page - 1) * _movesLogState.pageSize;
+  const limit = _movesLogState.pageSize;
 
   try {
-    const oldest = state.stockMoves[state.stockMoves.length - 1];
-    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+    // Build base query
+    const buildQuery = (isCount) => {
+      let q = isCount
+        ? supabaseClient.from('stock_moves').select('*', { count: 'exact', head: true })
+        : supabaseClient.from('stock_moves').select('*');
 
-    const { data, error } = await supabaseClient
-      .from('stock_moves')
-      .select('*')
-      .eq('user_id', ownerId)
-      .lt('date', oldest.date)
-      .order('date', { ascending: false })
-      .limit(500);
+      q = q.eq('user_id', ownerId);
+      if (type) q = q.eq('type', type);
+      if (search) q = q.or(`product_name.ilike.%${search}%,reason.ilike.%${search}%`);
+      if (from) q = q.gte('date', from + 'T00:00:00');
+      if (to) q = q.lte('date', to + 'T23:59:59');
 
-    if (error) throw error;
+      if (!isCount) {
+        q = q.order('date', { ascending: false }).range(offset, offset + limit - 1);
+      }
+      return q;
+    };
 
-    if (!data || data.length === 0) {
-      showNotification(tr('no_more_moves'), 'info');
-      if (btn) { btn.textContent = '✔️ ' + tr('all_moves_loaded'); btn.disabled = true; }
-      return;
+    // 3 parallel queries
+    const [rowsRes, countRes, statsRes] = await Promise.all([
+      buildQuery(false),
+      buildQuery(true),
+      supabaseClient.rpc('get_stock_moves_stats', {
+        p_user_id: ownerId,
+        p_from: from ? from + 'T00:00:00' : null,
+        p_to: to ? to + 'T23:59:59' : null,
+        p_type: type || null,
+        p_search: search || null
+      }).then(r => r).catch(() => ({ data: null, error: null })) // RPC optional — fallback to local stats
+    ]);
+
+    if (rowsRes.error) throw rowsRes.error;
+
+    const rows = rowsRes.data || [];
+    const totalCount = countRes.count || 0;
+
+    // Stats — try RPC first, fallback to computing from current page
+    let stats = { total: totalCount, in: 0, out: 0 };
+    if (statsRes && statsRes.data && typeof statsRes.data === 'object') {
+      stats.in = Number(statsRes.data.total_in) || 0;
+      stats.out = Number(statsRes.data.total_out) || 0;
+      stats.total = Number(statsRes.data.total_count) || totalCount;
+    } else {
+      // Fallback: compute from rows (approximate — only current page)
+      rows.forEach(r => {
+        const qty = Number(r.qty) || 0;
+        if (r.type === 'in' || r.type === 'purchase' || r.type === 'return' || r.type === 'sale_cancel') stats.in += qty;
+        else if (r.type === 'out' || r.type === 'sale') stats.out += qty;
+      });
     }
 
-    data.forEach(row => {
-      state.stockMoves.push({
-        id: row.id, date: row.date,
-        product_id: row.product_id, productId: row.product_id,
-        product_name: row.product_name, productName: row.product_name,
-        type: row.type, qty: row.qty,
-        old_stock: row.old_stock, oldStock: row.old_stock,
-        new_stock: row.new_stock, newStock: row.new_stock,
-        reason: row.reason
-      });
-    });
+    _movesLogState.totalCount = stats.total;
+    _movesLogState.stats = stats;
+    _movesLogState.lastFetchRows = rows;
+    _movesLogState.loading = false;
 
-    saveData();
-    renderStockMoves();
-    showNotification('✅ ' + data.length + ' ' + tr('moves_loaded_suffix'), 'success');
+    _movesLogRenderStats();
+    _movesLogRenderTable(rows);
+    _movesLogRenderPagination();
 
   } catch (err) {
-    console.error('loadOlderStockMoves failed:', err);
-    showNotification(tr('load_moves_failed') + ' ' + err.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '⬇️ ' + tr('load_older_moves'); }
+    _movesLogState.loading = false;
+    console.error('_movesLogFetch failed:', err);
+    _movesLogRenderError(tr('moves_log_error') + ' ' + (err.message || ''), true);
   }
+}
+
+function _movesLogRenderLoading() {
+  const c = document.getElementById('movesLogTableContainer');
+  if (c) c.innerHTML = '<p class="moves-log-loading">' + tr('moves_log_loading') + '</p>';
+}
+
+function _movesLogRenderError(msg, showRetry) {
+  const c = document.getElementById('movesLogTableContainer');
+  if (!c) return;
+  c.innerHTML = '<div class="moves-log-error">' + escapeHTML(msg) +
+    (showRetry ? '<br><button class="moves-log-retry-btn" onclick="_movesLogFetch()">' + tr('moves_log_retry') + '</button>' : '') +
+    '</div>';
+}
+
+function _movesLogRenderStats() {
+  const el = document.getElementById('movesLogStats');
+  if (!el) return;
+  const s = _movesLogState.stats;
+  el.innerHTML =
+    '<div class="moves-log-stat-card">' +
+      '<span class="moves-log-stat-label">' + tr('moves_log_stat_total') + '</span>' +
+      '<span class="moves-log-stat-value">' + s.total + '</span>' +
+    '</div>' +
+    '<div class="moves-log-stat-card stat-in">' +
+      '<span class="moves-log-stat-label">' + tr('moves_log_stat_in') + '</span>' +
+      '<span class="moves-log-stat-value">+' + s.in + '</span>' +
+    '</div>' +
+    '<div class="moves-log-stat-card stat-out">' +
+      '<span class="moves-log-stat-label">' + tr('moves_log_stat_out') + '</span>' +
+      '<span class="moves-log-stat-value">−' + s.out + '</span>' +
+    '</div>';
+}
+
+function _movesLogRenderTable(rows) {
+  const c = document.getElementById('movesLogTableContainer');
+  if (!c) return;
+
+  if (!rows.length) {
+    c.innerHTML = '<p class="moves-log-empty">' + tr('moves_log_no_results') + '</p>';
+    return;
+  }
+
+  const typeLabels = {
+    'in': tr('stock_movement_in'),
+    'out': tr('stock_movement_out'),
+    'set': tr('stock_movement_set'),
+    'sale': tr('stock_movement_sale'),
+    'sale_cancel': tr('stock_movement_sale_cancel'),
+    'return': tr('stock_movement_return'),
+    'purchase': tr('stock_movement_purchase')
+  };
+
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>' + tr('th_date') + '</th>' +
+    '<th>' + tr('th_product') + '</th>' +
+    '<th>' + tr('th_movement') + '</th>' +
+    '<th>' + tr('th_quantity') + '</th>' +
+    '<th>' + tr('th_before_after') + '</th>' +
+    '<th>' + tr('th_reason') + '</th>' +
+    '</tr></thead><tbody>';
+
+  rows.forEach(r => {
+    const oldS = r.old_stock ?? 0;
+    const newS = r.new_stock ?? 0;
+    html += '<tr>' +
+      '<td>' + new Date(r.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
+      '<td>' + escapeHTML(r.product_name || '-') + '</td>' +
+      '<td>' + (typeLabels[r.type] || r.type) + '</td>' +
+      '<td>' + r.qty + '</td>' +
+      '<td>' + oldS + ' ➔ ' + newS + '</td>' +
+      '<td>' + escapeHTML(r.reason || '') + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  c.innerHTML = html;
+
+  // Update "showing" info
+  const info = document.getElementById('movesLogPageInfo');
+  if (info) {
+    const from = ((_movesLogState.page - 1) * _movesLogState.pageSize) + 1;
+    const to = Math.min(from + rows.length - 1, _movesLogState.totalCount);
+    info.textContent = tr('moves_log_showing')
+      .replace('{from}', from)
+      .replace('{to}', to)
+      .replace('{total}', _movesLogState.totalCount);
+  }
+}
+
+function _movesLogRenderPagination() {
+  const totalPages = Math.max(1, Math.ceil(_movesLogState.totalCount / _movesLogState.pageSize));
+  const pageInfo = document.getElementById('movesLogPageInfo');
+  const prevBtn = document.getElementById('movesLogPrevBtn');
+  const nextBtn = document.getElementById('movesLogNextBtn');
+
+  if (prevBtn) prevBtn.disabled = _movesLogState.page <= 1;
+  if (nextBtn) nextBtn.disabled = _movesLogState.page >= totalPages;
+}
+
+function _movesLogPrevPage() {
+  if (_movesLogState.page <= 1) return;
+  _movesLogState.page--;
+  _movesLogFetch();
+}
+
+function _movesLogNextPage() {
+  const totalPages = Math.max(1, Math.ceil(_movesLogState.totalCount / _movesLogState.pageSize));
+  if (_movesLogState.page >= totalPages) return;
+  _movesLogState.page++;
+  _movesLogFetch();
+}
+
+function _movesLogChangePageSize(val) {
+  _movesLogState.pageSize = parseInt(val) || 25;
+  _movesLogState.page = 1;
+  _movesLogFetch();
+}
+
+function exportMovesLogCSV(scope) {
+  const rows = (scope === 'page')
+    ? _movesLogState.lastFetchRows
+    : null;
+
+  if (scope === 'page' && (!rows || !rows.length)) {
+    return showNotification(tr('moves_log_no_results'), 'info');
+  }
+
+  if (scope === 'all') {
+    // Fetch up to 5000 rows for export
+    _movesLogExportAll();
+    return;
+  }
+
+  _movesLogDoExportCSV(rows);
+}
+
+async function _movesLogExportAll() {
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(tr('moves_log_offline_msg'), 'warning');
+  }
+
+  showLoading(tr('moves_log_loading'));
+  try {
+    const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser?.id;
+    let q = supabaseClient.from('stock_moves').select('*').eq('user_id', ownerId);
+    if (_movesLogState.filterType) q = q.eq('type', _movesLogState.filterType);
+    if (_movesLogState.filterSearch) q = q.or(`product_name.ilike.%${_movesLogState.filterSearch}%,reason.ilike.%${_movesLogState.filterSearch}%`);
+    if (_movesLogState.filterFrom) q = q.gte('date', _movesLogState.filterFrom + 'T00:00:00');
+    if (_movesLogState.filterTo) q = q.lte('date', _movesLogState.filterTo + 'T23:59:59');
+    q = q.order('date', { ascending: false }).limit(5000);
+
+    const { data, error } = await q;
+    hideLoading();
+    if (error) throw error;
+    _movesLogDoExportCSV(data || []);
+  } catch (err) {
+    hideLoading();
+    showNotification(tr('moves_log_error') + ' ' + (err.message || ''), 'error');
+  }
+}
+
+function _movesLogDoExportCSV(rows) {
+  if (!rows || !rows.length) {
+    return showNotification(tr('moves_log_no_results'), 'info');
+  }
+  const typeLabels = {
+    'in': tr('stock_movement_in'),
+    'out': tr('stock_movement_out'),
+    'set': tr('stock_movement_set'),
+    'sale': tr('stock_movement_sale'),
+    'sale_cancel': tr('stock_movement_sale_cancel'),
+    'return': tr('stock_movement_return'),
+    'purchase': tr('stock_movement_purchase')
+  };
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  let csv = '\uFEFF' + esc(tr('moves_full_log_title')) + '\r\n';
+  csv += esc(tr('print_date') + ': ' + new Date().toLocaleString()) + '\r\n\r\n';
+  csv += [tr('th_date'), tr('th_product'), tr('th_movement'), tr('th_quantity'), tr('th_before_after'), tr('th_reason')].map(esc).join(',') + '\r\n';
+  rows.forEach(r => {
+    csv += [
+      new Date(r.date).toLocaleString(),
+      r.product_name || '',
+      typeLabels[r.type] || r.type || '',
+      r.qty || 0,
+      (r.old_stock ?? 0) + ' → ' + (r.new_stock ?? 0),
+      r.reason || ''
+    ].map(esc).join(',') + '\r\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'stock-moves-' + today() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 100);
+  showNotification(tr('exported_excel'));
+}
+
+function printMovesLog() {
+  const rows = _movesLogState.lastFetchRows;
+  if (!rows || !rows.length) {
+    return showNotification(tr('moves_log_no_results'), 'info');
+  }
+  const typeLabels = {
+    'in': tr('stock_movement_in'),
+    'out': tr('stock_movement_out'),
+    'set': tr('stock_movement_set'),
+    'sale': tr('stock_movement_sale'),
+    'sale_cancel': tr('stock_movement_sale_cancel'),
+    'return': tr('stock_movement_return'),
+    'purchase': tr('stock_movement_purchase')
+  };
+  const data = rows.map(r => [
+    new Date(r.date).toLocaleString(),
+    r.product_name || '-',
+    typeLabels[r.type] || r.type,
+    r.qty,
+    (r.old_stock ?? 0) + ' ➔ ' + (r.new_stock ?? 0),
+    r.reason || '-'
+  ]);
+  const headers = [tr('th_date'), tr('th_product'), tr('th_movement'), tr('th_quantity'), tr('th_before_after'), tr('th_reason')];
+  openPrintWindow(tr('moves_full_log_title'), headers, data, state.storeSettings);
 }
