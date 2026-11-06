@@ -2,18 +2,10 @@
 
 let _pcSearchTimer = null;
 let _activeCategory = '';
-
 function populateSalesDropdowns() {
-  const prodSelect = document.getElementById('saleProduct');
   const custSelect = document.getElementById('saleCustomer');
 
-  if (prodSelect) {
-    prodSelect.innerHTML = '<option value="">' + tr('opt_select_product') + '</option>';
-    state.products.forEach(function(p) {
-      prodSelect.innerHTML += '<option value="' + p.id + '">' + escapeHTML(p.name) + '</option>';
-    });
-  }
-
+  // ✅ v7.21 — Customer select فقط (المنتجات بتترسم في Grid مش select)
   if (custSelect) {
     custSelect.innerHTML = '';
     if (!state.customers || !state.customers.length) {
@@ -43,7 +35,6 @@ function populateSalesDropdowns() {
 
   renderCart();
 }
-
 function addToCartById(prodId, qty, isManualClick) {
   if (!prodId) return showNotification(tr('notify_select_product'), 'error');
   qty = parseInt(qty) || 1;

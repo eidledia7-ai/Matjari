@@ -288,11 +288,13 @@ function showPage(pageId) {
 
   if (pageId === 'home') renderDashboard();
   if (pageId === 'sales') {
-    populateSalesDropdowns();
-    setTimeout(() => { if (typeof initSalesWorkspaceV710 === 'function') initSalesWorkspaceV710(); }, 100);
+  // ✅ v7.21 — initSalesWorkspaceV710 بتنادي populateSalesDropdowns جواها (نداء واحد بس)
+  setTimeout(() => { 
+    if (typeof initSalesWorkspaceV710 === 'function') initSalesWorkspaceV710(); 
     const bc = document.getElementById('saleBarcode');
     if (bc) bc.focus();
-  }
+  }, 50);
+}
   if (pageId === 'invProducts') renderProducts();
   if (pageId === 'invMoves') { populateAdjustDropdown(); renderStockMoves(); }
   if (pageId === 'invReturns') { populateReturnDropdowns(); renderReturns(); }

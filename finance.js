@@ -557,7 +557,17 @@ function renderShifts() {
   const container = document.getElementById('shiftsTable');
   if (!container) return;
   if (state.shifts.length === 0) { container.innerHTML = '<p class="text-muted">' + tr('no_closed_shifts') + '</p>'; return; }
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th>' + tr('th_date') + '</th><th>' + tr('th_cashier') + '</th><th>' + tr('th_invoice_count') + '</th><th>' + tr('th_expected_cash') + '</th><th>' + tr('th_actual_cash') + '</th><th>' + tr('th_difference') + '</th></tr></thead><tbody>';
+  
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>' + tr('th_date') + '</th>' +
+    '<th>' + tr('th_cashier') + '</th>' +
+    '<th>' + tr('th_invoice_count') + '</th>' +
+    '<th>' + tr('th_expected_cash') + '</th>' +
+    '<th>' + tr('th_actual_cash') + '</th>' +
+    '<th>' + tr('th_difference') + '</th>' +
+    '<th>' + tr('th_action') + '</th>' +
+    '</tr></thead><tbody>';
+    
   state.shifts.forEach(function(s) {
     const diff = Number(s.difference) || 0;
     const diffClass = diff < 0 ? 'red-text' : (diff > 0 ? 'green-text' : '');
@@ -565,18 +575,35 @@ function renderShifts() {
     const cashierName = s.cashier_name || s.cashierName || '-';
     const expected = Number(s.expected_cash ?? s.expectedCash ?? s.cash_sales ?? s.cashSales ?? 0) || 0;
     const actual = Number(s.actual_cash ?? s.actualCash ?? 0) || 0;
-    html += '<tr><td>' + new Date(endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td><td>' + escapeHTML(cashierName) + '</td><td>' + (s.saleCount || s.sale_count || 0) + '</td><td>' + expected.toFixed(2) + '</td><td>' + actual.toFixed(2) + '</td><td class="' + diffClass + '"><b>' + diff.toFixed(2) + '</b></td></tr>';
+    
+    // ✅ حساب حي لعدد الفواتير من state.sales
+    const liveCount = state.sales.filter(function(sale) {
+      return (sale.shift_id === s.id || sale.shiftId === s.id);
+    }).length;
+    
+    html += '<tr>' +
+      '<td>' + new Date(endTime).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') + '</td>' +
+      '<td>' + escapeHTML(cashierName) + '</td>' +
+      '<td><b>' + liveCount + '</b></td>' +
+      '<td>' + expected.toFixed(2) + '</td>' +
+      '<td>' + actual.toFixed(2) + '</td>' +
+      '<td class="' + diffClass + '"><b>' + diff.toFixed(2) + '</b></td>' +
+      '<td><button class="small-btn primary" onclick="printShiftReport(\'' + s.id + '\')" title="عرض وطباعة">🖨️</button></td>' +
+      '</tr>';
   });
   html += '</tbody></table></div>';
   container.innerHTML = html;
 }
 
-function printShiftReport() {
-  const current = state.currentShift;
-  const shift = current || state.shifts[0] || null;
+function printShiftReport(shiftId) {
+  let shift;
+  if (shiftId) {
+    shift = state.shifts.find(s => s.id === shiftId);
+  } else {
+    shift = state.currentShift || state.shifts[0] || null;
+  }
   if (!shift) return showNotification(tr('no_closed_shifts'), 'warning');
-  const shiftId = shift.id;
-
+  
   const sales = (state.sales || []).filter(s => (s.shift_id === shiftId || s.shiftId === shiftId));
   const shiftStart = new Date(shift.start_time || shift.startTime).getTime();
   const shiftEnd = (shift.end_time || shift.endTime) ? new Date(shift.end_time || shift.endTime).getTime() : Date.now();
@@ -597,7 +624,8 @@ function printShiftReport() {
   const visaSales = sales.filter(s => (s.pay_method === 'visa' || s.payMethod === 'visa')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
   const transferSales = sales.filter(s => (s.pay_method === 'transfer' || s.payMethod === 'transfer')).reduce((sum, s) => sum + (Number(s.paid) || 0), 0);
 
-  const actualCash = current ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift.actual_cash ?? shift.actualCash) || 0);
+  const isCurrent = !shiftId && state.currentShift;
+const actualCash = isCurrent ? (parseFloat(document.getElementById('shiftActualCash').value) || 0) : (Number(shift.actual_cash ?? shift.actualCash) || 0);
   const difference = actualCash - expectedCash;
 
   const cur = escapeHTML(state.storeSettings.currency || 'ج.م');

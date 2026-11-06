@@ -339,6 +339,9 @@ refreshCurrentPage();
 showNotification(tr('move_saved'));
 }
 
+/* ============ v7.21 — Lazy Stock Moves ============ */
+let _movesState = { filtered: [], rendered: 0, batchSize: 60, observer: null };
+
 function renderStockMoves() {
   const container = document.getElementById('stockMovesTable');
   if (!container) return;
@@ -356,18 +359,34 @@ function renderStockMoves() {
     return;
   }
 
+  if (_movesState.observer) { _movesState.observer.disconnect(); _movesState.observer = null; }
+  _movesState.filtered = filtered;
+  _movesState.rendered = 0;
+
   const typeLabels = {
-    'in':          tr('stock_movement_in'),
-    'out':         tr('stock_movement_out'),
-    'set':         tr('stock_movement_set'),
-    'sale':        tr('stock_movement_sale'),
-    'sale_cancel': tr('stock_movement_sale_cancel'),
-    'return':      tr('stock_movement_return'),
-    'purchase':    tr('stock_movement_purchase')
+    'in': tr('stock_movement_in'), 'out': tr('stock_movement_out'), 'set': tr('stock_movement_set'),
+    'sale': tr('stock_movement_sale'), 'sale_cancel': tr('stock_movement_sale_cancel'),
+    'return': tr('stock_movement_return'), 'purchase': tr('stock_movement_purchase')
   };
 
-  let html = '<div class="table-wrap"><table class="data-table"><thead><tr><th data-i18n="th_date">' + tr('th_date') + '</th><th data-i18n="th_product">' + tr('th_product') + '</th><th data-i18n="th_movement">' + tr('th_movement') + '</th><th data-i18n="th_quantity">' + tr('th_quantity') + '</th><th data-i18n="th_before_after">' + tr('th_before_after') + '</th><th data-i18n="th_reason">' + tr('th_reason') + '</th></tr></thead><tbody>';
-  filtered.forEach(function(m) {
+  container.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>' + tr('th_date') + '</th><th>' + tr('th_product') + '</th><th>' + tr('th_movement') + '</th>' +
+    '<th>' + tr('th_quantity') + '</th><th>' + tr('th_before_after') + '</th><th>' + tr('th_reason') + '</th>' +
+    '</tr></thead><tbody id="stockMovesBody"></tbody></table></div>';
+
+  _renderMovesBatch(typeLabels);
+  _setupMovesObserver(typeLabels);
+}
+
+function _renderMovesBatch(typeLabels) {
+  const tbody = document.getElementById('stockMovesBody');
+  if (!tbody) return;
+  const start = _movesState.rendered;
+  const end = Math.min(start + _movesState.batchSize, _movesState.filtered.length);
+  const batch = _movesState.filtered.slice(start, end);
+
+  let html = '';
+  batch.forEach(function(m) {
     const label = typeLabels[m.type] || m.type;
     const productName = m.productName || m.product_name || '-';
     const oldS = m.oldStock ?? m.old_stock ?? 0;
@@ -381,8 +400,29 @@ function renderStockMoves() {
       '<td>' + escapeHTML(m.reason || '') + '</td>' +
       '</tr>';
   });
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
+  tbody.insertAdjacentHTML('beforeend', html);
+  _movesState.rendered = end;
+
+  if (_movesState.rendered < _movesState.filtered.length) {
+    tbody.insertAdjacentHTML('beforeend', '<tr id="movesSentinel"><td colspan="6" style="height:10px;padding:0;border:none;"></td></tr>');
+  }
+}
+
+function _setupMovesObserver(typeLabels) {
+  if (typeof IntersectionObserver === 'undefined') return;
+  const sentinel = document.getElementById('movesSentinel');
+  if (!sentinel) return;
+  _movesState.observer = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting) {
+      _renderMovesBatch(typeLabels);
+      const newSentinel = document.getElementById('movesSentinel');
+      if (_movesState.observer && newSentinel) {
+        _movesState.observer.disconnect();
+        _movesState.observer.observe(newSentinel);
+      }
+    }
+  }, { rootMargin: '200px' });
+  _movesState.observer.observe(sentinel);
 }
 
 /* ============ المرتجعات ============ */
