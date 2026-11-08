@@ -163,7 +163,7 @@ function showDiagnostics() {
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
   modal.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
-      <h3 style="margin:0 0 15px 0;color:#17364c;text-align:center;">📊 تشخيص التطبيق</h3>
+      <h3 style="margin:0 0 15px 0;color:#17364c;text-align:center;">${tr('diag_title')}</h3>
       <div style="background:#f1f6f8;padding:12px;border-radius:8px;margin-bottom:12px;font-size:12px;line-height:1.8;">
         <div><b>المتجر:</b> ${escapeHTML(storeName)}</div>
         <div><b>المستخدم:</b> ${escapeHTML(email)}</div>
@@ -174,9 +174,9 @@ function showDiagnostics() {
       <h4 style="margin:12px 0 8px 0;font-size:13px;color:#17364c;">المشاكل المكتشفة:</h4>
       ${issuesHtml}
       <div style="display:flex;gap:8px;margin-top:20px;">
-        <button id="diagCopyBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#176b70;color:#fff;font-weight:bold;cursor:pointer;">📋 نسخ</button>
-        <button id="diagSendBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#25D366;color:#fff;font-weight:bold;cursor:pointer;">📤 للمطور</button>
-        <button id="diagCloseBtn" style="flex:0 0 60px;padding:12px;border:none;border-radius:8px;background:#e5e7eb;color:#17364c;font-weight:bold;cursor:pointer;">✕</button>
+        <button id="diagCopyBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#176b70;color:#fff;font-weight:bold;cursor:pointer;">${tr('diag_copy_btn')}</button>
+        <button id="diagSendBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#25D366;color:#fff;font-weight:bold;cursor:pointer;">${tr('diag_send_btn')}</button>
+        <button id="diagCloseBtn" style="flex:0 0 60px;padding:12px;border:none;border-radius:8px;background:#e5e7eb;color:#17364c;font-weight:bold;cursor:pointer;>${tr('diag_close_btn')}</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -191,7 +191,7 @@ function showDiagnostics() {
   };
 
   document.getElementById('diagSendBtn').onclick = () => {
-    const devNumber = '201224764296';
+    const devNumber = DEVELOPER_WHATSAPP;
     window.open(`https://wa.me/${devNumber}?text=${encodeURIComponent(reportText)}`, '_blank');
     modal.remove();
   };

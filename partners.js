@@ -197,10 +197,10 @@ async function recordCustomerPayment() {
   }
 
  saveData();
-document.getElementById('supplierPaymentAmount').value = '';
-document.getElementById('supplierPaymentNotes').value = '';
+document.getElementById('customerPaymentAmount').value = '';
+document.getElementById('customerPaymentNotes').value = '';
 refreshCurrentPage();
-showNotification(tr('supplier_payment_success'));
+showNotification(tr('payment_success'));
 }
 
 function renderCustomerPayments() {
@@ -422,10 +422,6 @@ async function savePurchase() {
       p.cost = newCost;
       targetProdName = p.name;
 
-      if (navigator.onLine && supabaseClient) {
-        await supabaseClient.from('products').update({ cost: newCost }).eq('id', p.id);
-      }
-
       state.stockMoves.unshift({
         id: uid('SM'), date: new Date().toISOString(),
         product_id: p.id, productId: p.id,
@@ -449,10 +445,6 @@ async function savePurchase() {
       price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5
     });
     targetProdName = newName;
-
-    if (navigator.onLine && supabaseClient) {
-      await supabaseClient.from('products').insert(newProductData);
-    }
 
     state.stockMoves.unshift({
       id: uid('SM'), date: new Date().toISOString(),
@@ -485,13 +477,15 @@ async function savePurchase() {
     qty: qty, cost: cost, total: total, paid: paid, remaining: remaining
   });
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('purchases').insert(newPurchase);
-    if (error) {
-      console.warn('Purchase upload failed:', error);
-      return showNotification(tr('purchase_save_fail') + error.message, 'error');
-    }
-  }
+ if (newProductData) {
+  enqueueSyncOperation('insert_product', newProductData, newProductData.id);
+}
+enqueueSyncOperation('insert_purchase', {
+  id: newPurchase.id, supplier_id: newPurchase.supplier_id,
+  product_id: newPurchase.product_id, product_name: newPurchase.product_name,
+  qty: newPurchase.qty, cost: newPurchase.cost, total: newPurchase.total,
+  paid: newPurchase.paid, remaining: newPurchase.remaining, date: newPurchase.date
+}, newPurchase.id);
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_purchase', { purchaseId: newPurchase.id, total }, newPurchase.id);

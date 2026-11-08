@@ -25,13 +25,12 @@ async function saveExpense() {
     shift_id: currentShiftId, pay_method: 'cash'
   };
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('expenses').insert(newExpense);
-    if (error) {
-      console.warn('Expense upload failed:', error);
-      return showNotification(tr('expense_save_fail') + error.message, 'error');
-    }
-  }
+  enqueueSyncOperation('insert_expense', {
+  id: newExpense.id, name: newExpense.name, amount: newExpense.amount,
+  notes: newExpense.notes, date: newExpense.date,
+  shift_id: newExpense.shift_id, pay_method: newExpense.pay_method,
+  needs_review: false, created_by: null
+}, newExpense.id);
 
   state.expenses.unshift({
     id: newExpense.id, name: name, amount: amount, date: date, notes: notes,
@@ -63,10 +62,10 @@ function renderExpenses() {
   const en = currentLang === 'en';
   
   let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th>التاريخ والوقت</th>' +
-    '<th>البند</th>' +
-    '<th>المبلغ</th>' +
-    '<th>إجراء</th>' +
+    '<th>' + tr('th_date') + '</th>' +
+'<th>' + tr('th_item_name') + '</th>' +
+'<th>' + tr('th_amount') + '</th>' +
+'<th>' + tr('th_action') + '</th>' +
     '</tr></thead><tbody>';
     
   state.expenses.forEach(function(e) {
@@ -699,7 +698,7 @@ function printShiftReport(shiftId) {
 
   // ✅ v7.23.2 — banner تحذيري للوردية المفتوحة
   const openBanner = isOpenShift
-    ? '<div style="background:#fef3c7;border:2px solid #d97706;padding:12px;border-radius:8px;margin-bottom:16px;color:#92400e;font-weight:800;text-align:center;">⚠️ تقرير مؤقت — الوردية لم تُغلق بعد</div>'
+    ? '<div style="background:#fef3c7;border:2px solid #d97706;padding:12px;border-radius:8px;margin-bottom:16px;color:#92400e;font-weight:800;text-align:center;">⚠️ ' + tr('recon_open_warning') + '</div>'
     : '';
 
   win.document.write(
@@ -1302,7 +1301,7 @@ function printReconciliation() {
 
   w.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>' + tr('recon_title') + '</title>' +
     '<style>body{font-family:Arial,Tahoma,sans-serif;padding:24px;color:#17364c;max-width:720px;margin:auto}h1{color:#176b70;margin:0 0 16px;font-size:20px;text-align:center}h2{font-size:15px;color:#17364c;margin:20px 0 10px;border-bottom:2px solid #176b70;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin:10px 0}td{padding:8px 10px;border-bottom:1px dashed #e1e8ed;font-size:13px}td:last-child{text-align:left;direction:ltr;font-weight:700}tr.total td{border-top:2px solid #176b70;border-bottom:2px solid #176b70;font-weight:900;color:#176b70;padding-top:10px;padding-bottom:10px}.banner{background:#fef3c7;border:2px solid #d97706;padding:12px;border-radius:8px;margin-bottom:16px;color:#92400e;font-weight:800;text-align:center;font-size:13px}.stats{display:flex;justify-content:space-between;gap:10px;margin:12px 0}.stat{flex:1;padding:12px;background:#f1f6f8;border-radius:8px;text-align:center}.stat-label{font-size:11px;color:#687b8b;font-weight:700}.stat-value{font-size:16px;font-weight:900;margin-top:4px;direction:ltr}@media print{body{padding:0}}</style></head><body>' +
-    (isOpen ? '<div class="banner">⚠️ تقرير مؤقت — الوردية لم تُغلق بعد</div>' : '') +
+    (isOpen ? '<div class="banner">' + tr('recon_open_warning') + '</div>' : '') +
     '<h1>' + shop + ' — ' + tr('recon_title') + '</h1>' +
     '<p style="text-align:center;font-size:12px;color:#687b8b;"><b>' + tr('th_cashier') + ':</b> ' + escapeHTML(shift.cashier_name || shift.cashierName || '-') + ' &nbsp;|&nbsp; ' + tr('shift_start') + ': ' + new Date(shift.start_time || shift.startTime).toLocaleString('ar-EG') + '</p>' +
     '<div class="stats">' +

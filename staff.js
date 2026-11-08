@@ -106,10 +106,14 @@ async function deactivateStaff(userId) {
     if (data && data.email) staffEmail = data.email;
   } catch (e) { }
 
-  showLoading(tr('staff_deactivating'));
-  try {
-    const { error } = await supabaseClient.from('shop_user_roles').delete().eq('user_id', userId).eq('owner_id', state.currentUser.id);
-    if (error) throw error;
+ showLoading(tr('staff_deactivating'));
+try {
+  const { data, error } = await supabaseClient.functions.invoke('deactivate-staff', {
+    body: { target_user_id: userId }
+  });
+  if (error) throw error;
+  if (data && data.error) throw new Error(data.error);
+  
 
     if (typeof addAuditLog === 'function') {
       addAuditLog('deactivate_staff', { userId: userId, email: staffEmail, ownerId: state.currentUser.id }, userId);

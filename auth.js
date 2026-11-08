@@ -115,6 +115,29 @@ async function saveNewPassword() {
 function showLoggedOutUI(showAuthForm) {
   state.currentUser = null;
   state.role = 'employee';
+  state.ownerId = null;
+  state.ownerPlan = null;
+  state.subscription = { plan: 'trial', status: 'active', expires_at: null };
+  state.products = [];
+  state.sales = [];
+  state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 }];
+  state.suppliers = [];
+  state.expenses = [];
+  state.stockMoves = [];
+  state.returns = [];
+  state.customerPayments = [];
+  state.supplierPayments = [];
+  state.purchases = [];
+  state.shifts = [];
+  state.currentShift = null;
+  state.cart = [];
+  state.heldCarts = [];
+  state.saleItems = [];
+  state.auditLogs = [];
+  state.customerBalances = {};
+  state._stockConflictCount = 0;
+  state._negativeStockCount = 0;
+  
   document.body.classList.add('auth-locked');
   document.body.style.overflow = '';
 
@@ -250,8 +273,9 @@ async function openUserSession(user) {
     }
 
     if (navigator.onLine && supabaseClient) {
-      await syncDown(ownerId);
-    }
+  try { await drainSyncQueue(); } catch (e) { console.warn('drain before sync failed:', e); }
+  await syncDown(ownerId);
+}
 
     setTimeout(() => {
       if (typeof checkAndRunAutoBackup === 'function') {

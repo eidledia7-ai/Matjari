@@ -235,9 +235,9 @@ function renderSalesChart() {
     if (daySummary) {
       return Number(daySummary.net_sales) || 0;
     }
-    return state.sales
-      .filter(function(s) { return (s.date || '').split('T')[0] === day; })
-      .reduce(function(sum, s) { return sum + (Number(s.total) || 0); }, 0);
+ return state.sales
+  .filter(function(s) { return (s.date || '').split('T')[0] === day; })
+  .reduce(function(sum, s) { return sum + (Number(s.total) || 0) - (Number(s.returned_total) || 0); }, 0);
   });
 
   const labels = days.map(function(day) {
@@ -358,7 +358,7 @@ function _renderBigNumberUI(todaySummary, ySummary, cur, fromRPC) {
   if (bigEl) {
     bigEl.innerHTML = `
       <div class="big-card" onclick="showPage('salesLog')">
-        <div class="big-title">${tr('dash_net_sales')} (اليوم)${limitBadge} <span>⬅️</span></div>
+        <div class="big-title">${tr('dash_net_sales')} (${tr('today_word')})${limitBadge} <span>⬅️</span></div>
         <div class="big-value">${todaySales.toFixed(2)} <span style="font-size:20px;">${cur}</span></div>
         <div class="big-sub">${tr('dash_net_profit')}: ${todayProfit.toFixed(2)} ${cur}</div>
         ${trendHtml}
@@ -426,10 +426,10 @@ function renderSmartAlerts() {
   const lowStock = state.products.filter(p => (Number(p.stock)||0) <= (Number(p.minStock||p.min_stock)||5));
   if (lowStock.length > 0) {
     // إصلاح اللغة
-    const word = lowStock.length === 1 ? "منتج قارب على النفاذ" : "منتجات قاربت على النفاذ";
-    alerts.push({
-      type: 'danger', icon: '📦',
-      title: `⚠️ يوجد ${lowStock.length} ${word}`,
+   const word = lowStock.length === 1 ? tr('low_stock_singular') : tr('low_stock_plural');
+alerts.push({
+  type: 'danger', icon: '📦',
+  title: tr('low_stock_alert_title').replace('{n}', lowStock.length).replace('{word}', word),
       subtitle: tr('review_inventory'),
       actionText: tr('view_inventory'),
       actionPage: 'invProducts',

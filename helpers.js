@@ -47,9 +47,6 @@ async function quickAddStock(id) {
   prod.stock += qty;
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('products').update({ stock: prod.stock }).eq('id', prod.id);
-  }
 
   const moveObj = {
     id: uid('SM'), user_id: ownerId, product_id: prod.id, product_name: prod.name,
@@ -58,9 +55,11 @@ async function quickAddStock(id) {
   };
   state.stockMoves.unshift({ id: moveObj.id, date: moveObj.date, product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name, type: 'in', qty, old_stock: oldStock, oldStock: oldStock, new_stock: prod.stock, newStock: prod.stock, reason: moveObj.reason });
 
-  if (navigator.onLine && supabaseClient) {
-    await supabaseClient.from('stock_moves').insert(moveObj);
-  }
+enqueueSyncOperation('adjust_stock', {
+  id: moveObj.id, product_id: prod.id, product_name: prod.name,
+  qty: qty, old_stock: oldStock, new_stock: prod.stock,
+  reason: moveObj.reason, date: moveObj.date
+}, moveObj.id);
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('quick_add_stock', { productId: prod.id, qty: qty }, prod.id);
@@ -234,60 +233,6 @@ function sendCustomerStatementWhatsApp() {
   window.open(whatsappUrl, '_blank');
 }
 
-/* ============ استيراد المنتجات من CSV ============ */
-async function importProductsCSV(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'error');
-
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    const text = e.target.result;
-    const lines = text.split('\n');
-    let addedCount = 0;
-    const newProductsToUpload = [];
-    const ownerId = state.currentUser.id;
-
-    lines.forEach((line, index) => {
-      if (index === 0 || !line.trim()) return;
-      const cols = line.split(',');
-      if (cols.length >= 5) {
-        const name = cols[0].trim();
-        const barcode = cols[1].trim();
-        const price = parseFloat(cols[2]) || 0;
-        const cost = parseFloat(cols[3]) || 0;
-        const stock = parseInt(cols[4]) || 0;
-        if (name) {
-          const newProd = {
-            id: uid('PRD'), user_id: ownerId, name: name, barcode: barcode,
-            category: tr('general_cat'), price: price, cost: cost, stock: stock, min_stock: 5
-          };
-          state.products.push({
-            id: newProd.id, name: newProd.name, barcode: newProd.barcode,
-            category: newProd.category, price: newProd.price, cost: newProd.cost,
-            stock: newProd.stock, min_stock: newProd.min_stock, minStock: newProd.min_stock
-          });
-          newProductsToUpload.push(newProd);
-          addedCount++;
-        }
-      }
-    });
-
-    if (addedCount > 0) {
-      if (navigator.onLine && supabaseClient) {
-        await supabaseClient.from('products').insert(newProductsToUpload);
-      }
-      if (typeof addAuditLog === 'function') addAuditLog('import_products_csv', { count: addedCount });
-      saveData();
-      renderProducts();
-      showNotification(tr('csv_success') + addedCount + tr('csv_success_end'));
-    } else {
-      showNotification(tr('csv_no_data'), 'warning');
-    }
-    event.target.value = '';
-  };
-  reader.readAsText(file);
-}
 
 /* ============ قائمة خيارات الفاتورة ============ */
 function toggleActionMenu(event, id) {

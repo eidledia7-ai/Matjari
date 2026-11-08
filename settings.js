@@ -207,10 +207,13 @@ function removeStoreLogo() {
 }
 
 async function verifyCurrentUserPassword(password) {
-  if (!supabaseClient || !state.currentUser || !state.currentUser.email || !password) return false;
+  if (!supabaseClient || !state.currentUser || !password) return false;
   try {
-    const { error } = await supabaseClient.auth.signInWithPassword({ email: state.currentUser.email, password: password });
-    return !error;
+    const { data, error } = await supabaseClient.functions.invoke('verify-password', {
+      body: { password: password }
+    });
+    if (error) return false;
+    return data && data.valid === true;
   } catch (e) { return false; }
 }
 

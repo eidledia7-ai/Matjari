@@ -473,29 +473,22 @@ async function saveReturn() {
     reason: reason || tr('return_reason_default'), date: new Date().toISOString()
   };
 
-  if (navigator.onLine && supabaseClient) {
-    try {
-      const { error: retErr } = await supabaseClient.from('returns').insert({
-        id: newReturn.id, user_id: ownerId, sale_id: newReturn.sale_id,
-        product_id: newReturn.product_id, product_name: newReturn.product_name,
-        qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
-        vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
-        shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
-        reason: newReturn.reason, date: newReturn.date
-      });
-      if (retErr) throw retErr;
-    } catch (err) {
-      console.error('Return upload failed:', err);
-      return showNotification(tr('return_save_fail') + err.message, 'error');
-    }
-  }
+// ✅ X5: عبر queue (يدعم offline)
+enqueueSyncOperation('insert_return', {
+  id: newReturn.id, user_id: ownerId, sale_id: newReturn.sale_id,
+  product_id: newReturn.product_id, product_name: newReturn.product_name,
+  qty: newReturn.qty, price: newReturn.price, total: newReturn.total,
+  vat_amount: newReturn.vat_amount, refund_method: newReturn.refund_method,
+  shift_id: newReturn.shift_id, customer_id: newReturn.customer_id,
+  reason: newReturn.reason, date: newReturn.date
+}, newReturn.id);
 
   state.returns.unshift(newReturn);
 
   if (sale) {
     sale.returned_total = (Number(sale.returned_total) || 0) + returnValue;
     sale.returnedTotal = sale.returned_total;
-    sale.net_total = Math.max(0, (Number(sale.total) || 0) - sale.returned_total);
+    sale.net_total = (Number(sale.total) || 0) - sale.returned_total;
     sale.netTotal = sale.net_total;
   }
 

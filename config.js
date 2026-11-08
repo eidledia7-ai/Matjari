@@ -3,3 +3,4 @@ const SUPABASE_KEY = 'sb_publishable_8a5ZkcHUW_b51WRanlLGSg_tspTOLoV';
 let supabaseClient = null;
 
 /* ============ نظام الترجمة الثنائي (ar / en) ============ */
+const DEVELOPER_WHATSAPP = '201224764296';
