@@ -526,13 +526,8 @@ async function closeShift() {
   const difference = actualCash - expectedCash;
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // ✅ v7.23.3 — Read variance reason BEFORE building closedShift
-  const existingVariance = currentShift.variance_reason || currentShift.varianceReason || '';
-  let finalNotes = notes;
-  if (existingVariance && !notes.includes('--- سبب الفرق ---')) {
-    finalNotes = (notes ? notes + '\n\n' : '') + '--- سبب الفرق ---\n' + existingVariance;
-  }
-
+const existingVariance = currentShift.variance_reason || '';
+const finalNotes = notes;
   const closedShift = {
     id: currentShift.id, user_id: ownerId,
     cashier_name: cashierName, cashierName: cashierName,
@@ -563,7 +558,8 @@ async function closeShift() {
         opening_cash: closedShift.opening_cash, expected_cash: closedShift.expected_cash,
         cash_sales: closedShift.cash_sales, cash_collections: closedShift.cash_collections,
         cash_returns: closedShift.cash_returns, cash_expenses: closedShift.cash_expenses,
-        actual_cash: actualCash, difference: difference, notes: finalNotes
+        actual_cash: actualCash, difference: difference, notes: finalNotes,
+variance_reason: existingVariance
       }, { onConflict: 'id' });
       if (error) { console.warn('Shift close upload failed:', error); showNotification(tr('save_offline_warning'), 'warning'); }
     } catch (e) { console.warn('Shift close failed:', e); }
@@ -1266,7 +1262,7 @@ async function saveVarianceReason() {
         ? existing.split(marker)[0] + marker + reason 
         : existing + marker + reason;
       state.shifts[shiftIdx].notes = newNotes;
-      await supabaseClient.from('shifts').update({ notes: newNotes }).eq('id', _reconCurrentShiftId).eq('user_id', ownerId);
+      await supabaseClient.from('shifts').update({ variance_reason: reason }).eq('id', _reconCurrentShiftId).eq('user_id', ownerId);
     } catch (err) { console.warn('Save reason failed:', err); }
   }
 
