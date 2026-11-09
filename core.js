@@ -422,3 +422,25 @@ function _refreshVisibleProductCards() {
     if (typeof _updateProductCardStock === 'function') _updateProductCardStock(id);
   });
 }
+/* ============ مودال التأكيد المخصص ============ */
+function showCustomConfirm(title, message, onConfirm) {
+  const modalHtml = `
+    <div id="customConfirmModal" class="modal-overlay" style="display:flex; z-index:100000;">
+      <div class="modal-card" style="max-width:400px; text-align:center;">
+        <h3 style="color:var(--danger); margin-bottom:10px;">${title}</h3>
+        <p style="margin-bottom:20px;">${message}</p>
+        <div class="btn-group" style="justify-content:center;">
+          <button class="btn red" id="confirmBtn">${tr('confirm_btn')}</button>
+          <button class="btn grey" id="cancelBtn">${tr('cancel_btn')}</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('confirmBtn').onclick = () => {
+    document.getElementById('customConfirmModal').remove();
+    onConfirm();
+  };
+  document.getElementById('cancelBtn').onclick = () => {
+    document.getElementById('customConfirmModal').remove();
+  };
+}

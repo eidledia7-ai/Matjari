@@ -244,3 +244,33 @@ function hidePlanDetail() {
     document.body.style.overflow = '';
   }
 }
+/* ============ قفل التطبيق عند انتهاء الاشتراك ============ */
+function enforceSubscriptionBlock() {
+  const existing = document.getElementById('subscriptionBlock');
+  if (existing) existing.remove();
+  const oldBanner = document.getElementById('readOnlyBanner');
+  if (oldBanner) oldBanner.remove();
+  document.body.style.overflow = '';
+
+  const sub = state.subscription || {};
+  let endDate = null;
+  if (sub.plan === 'trial' && sub.trial_ends_at) endDate = new Date(sub.trial_ends_at).getTime();
+  else if (sub.expires_at) endDate = new Date(sub.expires_at).getTime();
+
+  const now = Date.now();
+  const isActive = sub.status === 'active' && (!endDate || endDate > now);
+  window.isReadOnlyMode = !isActive;
+
+  if (isActive) { document.body.style.paddingTop = '0'; return; }
+
+  const banner = document.createElement('div');
+  banner.id = 'readOnlyBanner';
+  banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#ef4444; color:#fff; text-align:center; padding:12px; z-index:99999; font-weight:bold; font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;';
+  banner.innerHTML = `
+    <span>⚠️ ${tr('sub_expired_banner')}</span>
+    <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">${tr('sub_renew_now_btn')}</button>
+    <button onclick="this.parentElement.remove(); document.body.style.paddingTop='0';" style="background:transparent; border:none; color:#fff; cursor:pointer; font-size:18px; padding:0 5px;">✕</button>
+  `;
+  document.body.prepend(banner);
+  document.body.style.paddingTop = '50px';
+}

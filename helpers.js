@@ -1,33 +1,3 @@
-/* ============ قفل التطبيق عند انتهاء الاشتراك ============ */
-function enforceSubscriptionBlock() {
-  const existing = document.getElementById('subscriptionBlock');
-  if (existing) existing.remove();
-  const oldBanner = document.getElementById('readOnlyBanner');
-  if (oldBanner) oldBanner.remove();
-  document.body.style.overflow = '';
-
-  const sub = state.subscription || {};
-  let endDate = null;
-  if (sub.plan === 'trial' && sub.trial_ends_at) endDate = new Date(sub.trial_ends_at).getTime();
-  else if (sub.expires_at) endDate = new Date(sub.expires_at).getTime();
-
-  const now = Date.now();
-  const isActive = sub.status === 'active' && (!endDate || endDate > now);
-  window.isReadOnlyMode = !isActive;
-
-  if (isActive) { document.body.style.paddingTop = '0'; return; }
-
-  const banner = document.createElement('div');
-  banner.id = 'readOnlyBanner';
-  banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#ef4444; color:#fff; text-align:center; padding:12px; z-index:99999; font-weight:bold; font-size:14px; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;';
-  banner.innerHTML = `
-    <span>⚠️ ${tr('sub_expired_banner')}</span>
-    <button onclick="showPage('settSubscription')" style="background:#fff; color:#ef4444; border:none; padding:6px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-family:inherit; font-size:13px;">${tr('sub_renew_now_btn')}</button>
-    <button onclick="this.parentElement.remove(); document.body.style.paddingTop='0';" style="background:transparent; border:none; color:#fff; cursor:pointer; font-size:18px; padding:0 5px;">✕</button>
-  `;
-  document.body.prepend(banner);
-  document.body.style.paddingTop = '50px';
-}
 
 /* ============ إضافة كمية سريعة للمخزون ============ */
 async function quickAddStock(id) {
@@ -261,25 +231,3 @@ function initiateReturnFromSale(saleId) {
   }, 150);
 }
 
-/* ============ مودال التأكيد المخصص ============ */
-function showCustomConfirm(title, message, onConfirm) {
-  const modalHtml = `
-    <div id="customConfirmModal" class="modal-overlay" style="display:flex; z-index:100000;">
-      <div class="modal-card" style="max-width:400px; text-align:center;">
-        <h3 style="color:var(--danger); margin-bottom:10px;">${title}</h3>
-        <p style="margin-bottom:20px;">${message}</p>
-        <div class="btn-group" style="justify-content:center;">
-          <button class="btn red" id="confirmBtn">${tr('confirm_btn')}</button>
-          <button class="btn grey" id="cancelBtn">${tr('cancel_btn')}</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-  document.getElementById('confirmBtn').onclick = () => {
-    document.getElementById('customConfirmModal').remove();
-    onConfirm();
-  };
-  document.getElementById('cancelBtn').onclick = () => {
-    document.getElementById('customConfirmModal').remove();
-  };
-}
