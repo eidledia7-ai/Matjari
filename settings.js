@@ -208,13 +208,49 @@ function removeStoreLogo() {
 
 async function verifyCurrentUserPassword(password) {
   if (!supabaseClient || !state.currentUser || !password) return false;
+  
+  // 1. نحفظ الجلسة الحالية الأول عشان منضيعش الدخول
+  const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+  if (sessionError || !session) return false;
+
   try {
-    const { data, error } = await supabaseClient.functions.invoke('verify-password', {
-      body: { password: password }
+    // 2. نحاول نسجل دخول بالباسورد اللي اتكتب (مع وضع مؤقت 10 ثواني عشان منعلقش)
+    const signInPromise = supabaseClient.auth.signInWithPassword({
+      email: state.currentUser.email,
+      password: password
     });
-    if (error) return false;
-    return data && data.valid === true;
-  } catch (e) { return false; }
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), 10000)
+    );
+
+    const { error: signInError } = await Promise.race([signInPromise, timeoutPromise]);
+
+    if (signInError) {
+       // لو الباسورد غلط، بنرجع الجلسة الأصلية برضه
+       await supabaseClient.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        }).catch(() => {});
+       return false;
+    }
+
+    // 3. الباسورد صح! نرجع الجلسة الأصلية فوراً عشان المستخدم ميتطردش
+    await supabaseClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    });
+
+    return true;
+  } catch (e) {
+    console.warn('Password verify error/timeout:', e.message);
+    // لو حصل أي خطأ أو Timeout، نرجع الجلسة الأصلية عشان نأمن الوضع
+    await supabaseClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    }).catch(() => {});
+    return false;
+  }
 }
 
 async function safeClearAllDataPrompt() {
