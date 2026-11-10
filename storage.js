@@ -10,9 +10,12 @@ const SYNC_ITEMS_CHUNK   = 200;
 async function syncDown(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
 
-  // ✅ v7.9 — حماية الفواتير والمرتجعات المعلقة من المسح
-  const _protectedSales = (state.sales || []).filter(s => s._pendingUpload === true);
-  const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload === true);
+// ✅ v7.9 — حماية الفواتير والمرتجعات المعلقة من المسح
+const _protectedSales = (state.sales || []).filter(s => s._pendingUpload === true);
+const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload === true);
+
+// ✅ X43: حماية المنتجات المعلقة من المسح
+const _protectedProducts = (state.products || []).filter(p => p._pendingUpload === true);
 
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
@@ -200,8 +203,18 @@ async function syncDown(ownerId) {
             if (t.name === 'held_carts') return { id: row.id, time: row.time, cart: row.cart_data, customer_id: row.customer_id, customerId: row.customer_id, customer_name: row.customer_name, customerName: row.customer_name, discount: row.discount, discount_type: row.discount_type, discountType: row.discount_type, notes: row.notes, shift_id: row.shift_id, shiftId: row.shift_id };
             return row;
           });
+           // ✅ X43: إرجاع المنتجات المعلقة اللي لسه ما اترفعتش
+          if (t.name === 'products' && _protectedProducts.length > 0) {
+            const existingIds = new Set(state.products.map(p => p.id));
+            _protectedProducts.forEach(pp => {
+              if (!existingIds.has(pp.id)) {
+                state.products.unshift(pp); // إرجاع المنتج المعلق عشان يفضل ظاهر
+              }
+            });
+          }
         }
-      }
+        
+      
     } catch (err) {
       console.warn(`SyncDown failed for ${t.name}:`, err.message);
     }

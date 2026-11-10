@@ -41,12 +41,31 @@ async function saveProduct() {
   }
 
   if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
-    if (error) {
-      console.warn('Product upload failed:', error);
-      return showNotification(tr('product_save_fail') + error.message, 'error');
-    }
+  // أونلاين: رفع مباشر (نفس السلوك الحالي)
+  const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
+  if (error) {
+    console.warn('Product upload failed:', error);
+    return showNotification(tr('product_save_fail') + error.message, 'error');
   }
+} else {
+  // أوفلاين: تحط في الـ Queue للرفع لما النت يرجع
+  if (typeof enqueueSyncOperation === 'function') {
+    enqueueSyncOperation('insert_product', {
+      id: productData.id,
+      name: productData.name,
+      barcode: productData.barcode,
+      category: productData.category,
+      price: productData.price,
+      cost: productData.cost,
+      stock: productData.stock,
+      min_stock: productData.min_stock
+    }, productData.id);
+    
+    // ✅ X43: تعليم المنتج بأنه معلق عشان ميتسمحش من الـ syncDown
+    const localProd = state.products.find(p => p.id === productData.id);
+    if (localProd) localProd._pendingUpload = true;
+  }
+}
 
   if (typeof addAuditLog === 'function') {
     addAuditLog(id ? 'edit_product' : 'add_product', { productId: productData.id, name }, productData.id);
