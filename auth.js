@@ -410,32 +410,33 @@ async function startAuth() {
       return;
     }
 
-  const result = await supabaseClient.auth.getSession();
-if (result.error) throw result.error;
-if (result.data.session && result.data.session.user) {
-  await openUserSession(result.data.session.user);
-} else {
-  // ✅ فحص: لو المستخدم مسجل قبل كده، افتحه من الكاش
-  const lastUser = localStorage.getItem('matjari_last_user');
-  if (lastUser) {
-    loadOfflineSession();
-  } else {
-    showLoggedOutUI();
-  }
-}
+    const result = await supabaseClient.auth.getSession();
+    if (result.error) throw result.error;
+
+    if (result.data.session && result.data.session.user) {
+      await openUserSession(result.data.session.user);
+    } else {
+      // ✅ X42 FIX: لو النت شغال ومفيش سيشن، نعرض شاشة الدخول ومندخلش أوفلاين
+      const lastUser = localStorage.getItem('matjari_last_user');
+      if (lastUser && !navigator.onLine) {
+        loadOfflineSession();
+      } else {
+        showLoggedOutUI(true); // true عشان تعرض شاشة تسجيل الدخول فوراً
+      }
+    }
 
   } catch (e) {
     const isNetworkErr = !navigator.onLine || /network|fetch|timeout/i.test((e && e.message) || '');
     if (isNetworkErr) {
       loadOfflineSession();
     } else {
-      // ✅ التعديل الجديد: لو المستخدم مسجل قبل كده، افتحله السيشن المحلي بدل صفحة الهبوط
+      // ✅ X42 FIX: لو فيه مشكلة ومفيش نت، نفتح أوفلاين. لو فيه نت، نطلب تسجيل دخول
       const lastUser = localStorage.getItem('matjari_last_user');
-      if (lastUser) {
+      if (lastUser && !navigator.onLine) {
         loadOfflineSession();
       } else {
         setAuthMessage(tr('auth_sign_in_fail_prefix') + (e.message || ''), true);
-        showLoggedOutUI();
+        showLoggedOutUI(true);
       }
     }
   }
