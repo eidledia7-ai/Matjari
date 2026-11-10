@@ -308,6 +308,67 @@ function populateAdjustDropdown() {
 /* ============ v7.21 — Lazy Stock Moves ============ */
 let _movesState = { filtered: [], rendered: 0, batchSize: 60, observer: null };
 
+async function saveStockAdjustment() {
+  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
+
+  const prodId = document.getElementById('adjustProduct').value;
+  const type = document.getElementById('adjustType').value;
+  const qty = parseInt(document.getElementById('adjustQty').value) || 0;
+  const reason = document.getElementById('adjustReason').value.trim();
+
+  if (!prodId) return showNotification(tr('notify_select_product'), 'error');
+  if (qty <= 0) return showNotification(tr('invalid_qty'), 'error');
+
+  const prod = state.products.find(p => p.id === prodId);
+  if (!prod) return;
+
+  const oldStock = Number(prod.stock) || 0;
+  let newStock = oldStock;
+  let moveQty = qty;
+
+  if (type === 'in') {
+    newStock += qty;
+  } else if (type === 'out') {
+    if (qty > oldStock) return showNotification(tr('qty_exceeds_stock_1') + oldStock + tr('qty_exceeds_stock_2'), 'error');
+    newStock -= qty;
+    moveQty = -qty;
+  } else if (type === 'set') {
+    newStock = qty;
+    moveQty = qty - oldStock;
+  }
+
+  const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const moveId = uid('SM');
+
+  // 1. تحديث الحالة المحلية
+  prod.stock = newStock;
+  state.stockMoves.unshift({
+    id: moveId, date: new Date().toISOString(),
+    product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name,
+    type: type, qty: moveQty, old_stock: oldStock, oldStock: oldStock, new_stock: newStock, newStock: newStock, reason: reason
+  });
+
+  // 2. إرسال للسيرفر عبر الـ Queue (عشان تدعم الأوفلاين)
+  if (typeof enqueueSyncOperation === 'function') {
+    enqueueSyncOperation('adjust_stock', {
+      id: moveId, product_id: prod.id, product_name: prod.name,
+      type: type, qty: moveQty, old_stock: oldStock, new_stock: newStock,
+      reason: reason, date: new Date().toISOString()
+    }, moveId);
+  }
+
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('adjust_stock', { productId: prod.id, productName: prod.name, type: type, qty: moveQty, oldStock, newStock, reason }, moveId);
+  }
+
+  saveData();
+  refreshCurrentPage();
+  document.getElementById('adjustQty').value = 10;
+  document.getElementById('adjustReason').value = '';
+  showNotification('تم تسجيل حركة المخزون بنجاح', 'success');
+}
+
 function renderStockMoves() {
   const container = document.getElementById('stockMovesTable');
   if (!container) return;
