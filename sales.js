@@ -479,7 +479,6 @@ function clearCart() {
   renderCart();
   refocusCashierInput && refocusCashierInput();
 }
-
 async function ensureOpenShift() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   if (state.currentShift && !state.currentShift.end_time && !state.currentShift.endTime) return state.currentShift.id;
@@ -487,18 +486,20 @@ async function ensureOpenShift() {
   if (openShift) { state.currentShift = openShift; return openShift.id; }
 
   const newShiftId = uid('SHIFT');
+  const now = new Date().toISOString();
   const newShift = {
     id: newShiftId, user_id: ownerId, cashier_name: state.currentUser.email,
-    cashierName: state.currentUser.email, start_time: new Date().toISOString(),
-    startTime: new Date().toISOString(), opening_cash: 0, openingCash: 0,
+    cashierName: state.currentUser.email, start_time: now,
+    startTime: now, opening_cash: 0, openingCash: 0,
     expected_cash: 0, expectedCash: 0
   };
 
+  // Online: upsert مباشر (نفس السلوك الحالي)
   if (navigator.onLine && supabaseClient) {
     try {
       const { error } = await supabaseClient.from('shifts').upsert({
         id: newShiftId, user_id: ownerId, cashier_name: newShift.cashier_name,
-        start_time: newShift.start_time, opening_cash: 0
+        start_time: now, opening_cash: 0
       }, { onConflict: 'id' });
       if (error) throw new Error(tr('shift_open_failed_prefix') + error.message);
     } catch (e) {
@@ -506,9 +507,21 @@ async function ensureOpenShift() {
       return null;
     }
   }
+
   if (!state.shifts) state.shifts = [];
   state.shifts.unshift(newShift);
   state.currentShift = newShift;
+
+  // Offline: enqueue للرفع لما النت يرجع
+  if (!navigator.onLine || !supabaseClient) {
+    if (typeof enqueueSyncOperation === 'function') {
+      enqueueSyncOperation('insert_shift', {
+        id: newShiftId, cashier_name: newShift.cashier_name,
+        start_time: now, opening_cash: 0
+      }, newShiftId);
+    }
+  }
+
   return newShiftId;
 }
 

@@ -8,6 +8,8 @@ const translations = {
     login_hint: "سجّل دخولك للوصول لبيانات محلك",
     wa_msg_remaining_line: "💰 المتبقي: {remaining} {currency}",
     invalid_qty_zero: "أدخل كمية صحيحة أكبر من صفر",
+    restoring_data: 'جاري استعادة البيانات...',
+backup_rpc_required: 'الاتصال بالإنترنت مطلوب للنسخ الاحتياطي الكامل',
     landing_cta_primary: "✨ ابدأ الآن مجاناً",
     upload_image_btn: "اختر صورة",
     tab_list: "قائمة المنتجات",
@@ -1352,7 +1354,8 @@ sync_day_ago: "{n}d ago",
   tab_compare: "📊 Period Comparison",
   tab_shift: "💵 Shift Closing",
   nav_operations_center: "Operations Center",
-
+restoring_data: 'Restoring data...',
+backup_rpc_required: 'Internet connection required for full backup',
   // ═══════════════════════════════════════════════════════════
   // ==== COMMON / ERROR ====
   // ═══════════════════════════════════════════════════════════

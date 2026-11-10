@@ -225,6 +225,7 @@ async function safeClearAllDataPrompt() {
 
   if (!confirm(tr('msg_wipe_all'))) return;
 
+  // 1. ناخد نسخة احتياطية أمان الأول (بقت بتسحب من السيرفر دلوقتي)
   try {
     if (typeof downloadEncryptedBackup !== 'function') throw new Error('Backup function not available');
     await downloadEncryptedBackup(pass, true);
@@ -233,62 +234,57 @@ async function safeClearAllDataPrompt() {
     return;
   }
 
-  const ownerId = state.currentUser.id;
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(tr('error_no_server_connection'), 'error');
+  }
 
-  if (navigator.onLine && supabaseClient) {
-    showLoading(tr('clearing_data'));
-    const tablesToClear = [
-      'sale_items', 'sales', 'returns', 'expenses', 'products', 
-      'customers', 'shifts', 'suppliers', 'purchases', 
-      'customer_payments', 'supplier_payments', 'stock_moves', 'held_carts'
-    ];
+  showLoading(tr('clearing_data'));
+
+  try {
+    // 2. 🔴 ننادي دالة المسح في السيرفر (اللي بتمسح كل حاجة بالترتيب الصح)
+    const { error } = await supabaseClient.rpc('wipe_user_data');
+    if (error) throw error;
+
+    // 3. تصفير الذاكرة المحلية (الفرونت إند)
+    state.products = [];
+    state.sales = [];
+    state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
+    state.suppliers = [];
+    state.expenses = [];
+    state.stockMoves = [];
+    state.returns = [];
+    state.customerPayments = [];
+    state.supplierPayments = [];
+    state.purchases = [];
+    state.shifts = [];
+    state.currentShift = null;
+    state.cart = [];
+    state.auditLogs = [];
+    state.saleItems = [];
+    state.heldCarts = [];
+
+    const ownerId = state.currentUser.id;
+    localStorage.removeItem('matjari_cache_' + ownerId);
     
-    try {
-      for (const table of tablesToClear) {
-        await supabaseClient.from(table).delete().eq('user_id', ownerId);
-      }
-    } catch (err) {
-      console.warn('Failed to clear server data:', err);
+    // 4. تصفير طابور المزامنة
+    if (typeof clearSyncQueue === 'function') clearSyncQueue();
+
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });
     }
+
+    saveData();
+    renderAll();
+    updateStockBadge();
+    showNotification(tr('wipe_success'));
+
+  } catch (err) {
+    console.error('Wipe failed:', err);
+    showNotification((tr('error_generic_prefix') || '') + err.message, 'error');
+  } finally {
     hideLoading();
   }
-
-  state.products = [];
-  state.sales = [];
-  state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, points: 0 }];
-  state.suppliers = [];
-  state.expenses = [];
-  state.stockMoves = [];
-  state.returns = [];
-  state.customerPayments = [];
-  state.supplierPayments = [];
-  state.purchases = [];
-  state.shifts = [];
-  state.currentShift = null;
-  state.cart = [];
-  state.auditLogs = [];
-  state.saleItems = [];
-  state.heldCarts = [];
-
-  localStorage.removeItem('matjari_cache_' + ownerId);
-  
-  if (typeof clearSyncQueue === 'function') clearSyncQueue();
-
-  if (typeof addAuditLog === 'function') {
-    addAuditLog('clear_all_data', { timestamp: new Date().toISOString() });
-  }
-
-  saveData();
-  renderAll();
-  updateStockBadge();
-  showNotification(tr('wipe_success'));
 }
-
-document.addEventListener('change', function(e) {
-  if (e.target && e.target.id === 'storeVatEnabled') {
-    toggleVatFields();
-  }
-});
 /* ============ v7.17 — Smart Settings (Auto-Save & Live Preview) ============ */
 
 function switchSettingsTab(tabId) {

@@ -219,6 +219,10 @@ function enqueueSyncOperation(type, payload, idempotencyKey) {
     const r = (state.returns || []).find(x => x.id === payload.id);
     if (r) r._pendingUpload = true;
   }
+  if (type === 'insert_shift' && payload && payload.id) {
+    const sh = (state.shifts || []).find(x => x.id === payload.id);
+    if (sh) sh._pendingUpload = true;
+  }
 
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
@@ -290,7 +294,6 @@ async function _executeOp(op, ownerId) {
     const { error } = await c.from('expenses').upsert({
       id: p.id, user_id: ownerId, name: p.name, amount: p.amount,
       notes: p.notes, date: p.date, shift_id: p.shift_id, pay_method: p.pay_method,
-      // ✅ v7.10.1
       needs_review: p.needs_review === true,
       created_by: p.created_by || null
     }, { onConflict: 'id' });
@@ -319,44 +322,56 @@ async function _executeOp(op, ownerId) {
     if (error) throw error;
     return;
   }
-if (t === 'insert_product') {
-  const { error } = await c.from('products').upsert({
-    id: p.id, user_id: ownerId, name: p.name, barcode: p.barcode || '',
-    category: p.category || null, price: p.price || 0, cost: p.cost || 0,
-    stock: p.stock || 0, min_stock: p.min_stock || 5
-  }, { onConflict: 'id' });
-  if (error) throw error;
-  return;
-}
 
-if (t === 'insert_purchase') {
-  const { error } = await c.from('purchases').upsert({
-    id: p.id, user_id: ownerId, supplier_id: p.supplier_id,
-    product_id: p.product_id, product_name: p.product_name,
-    qty: p.qty, cost: p.cost, total: p.total, paid: p.paid,
-    remaining: p.remaining, date: p.date
-  }, { onConflict: 'id' });
-  if (error) throw error;
-  return;
-}
-if (t === 'adjust_stock') {
-  // idempotency: لو الحركة اتسجلت قبل كده، متعملش حاجة
-  const { data: existing } = await c.from('stock_moves').select('id').eq('id', p.id).maybeSingle();
-  if (existing) return;
+  if (t === 'insert_product') {
+    const { error } = await c.from('products').upsert({
+      id: p.id, user_id: ownerId, name: p.name, barcode: p.barcode || '',
+      category: p.category || null, price: p.price || 0, cost: p.cost || 0,
+      stock: p.stock || 0, min_stock: p.min_stock || 5
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    return;
+  }
 
-  const { error: updErr } = await c.from('products')
-    .update({ stock: p.new_stock })
-    .eq('id', p.product_id).eq('user_id', ownerId);
-  if (updErr) throw updErr;
+  if (t === 'insert_shift') {
+    const { error } = await c.from('shifts').upsert({
+      id: p.id, user_id: ownerId, cashier_name: p.cashier_name,
+      start_time: p.start_time, opening_cash: Number(p.opening_cash) || 0
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    const idxSh = (state.shifts || []).findIndex(s => s.id === p.id);
+    if (idxSh !== -1) delete state.shifts[idxSh]._pendingUpload;
+    return;
+  }
 
-  const { error: moveErr } = await c.from('stock_moves').insert({
-    id: p.id, user_id: ownerId, product_id: p.product_id, product_name: p.product_name,
-    type: 'in', qty: p.qty, old_stock: p.old_stock, new_stock: p.new_stock,
-    reason: p.reason, date: p.date
-  });
-  if (moveErr) throw moveErr;
-  return;
-}
+  if (t === 'insert_purchase') {
+    const { error } = await c.from('purchases').upsert({
+      id: p.id, user_id: ownerId, supplier_id: p.supplier_id,
+      product_id: p.product_id, product_name: p.product_name,
+      qty: p.qty, cost: p.cost, total: p.total, paid: p.paid,
+      remaining: p.remaining, date: p.date
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    return;
+  }
+
+  if (t === 'adjust_stock') {
+    const { data: existing } = await c.from('stock_moves').select('id').eq('id', p.id).maybeSingle();
+    if (existing) return;
+
+    const { error: updErr } = await c.from('products')
+      .update({ stock: p.new_stock })
+      .eq('id', p.product_id).eq('user_id', ownerId);
+    if (updErr) throw updErr;
+
+    const { error: moveErr } = await c.from('stock_moves').insert({
+      id: p.id, user_id: ownerId, product_id: p.product_id, product_name: p.product_name,
+      type: 'in', qty: p.qty, old_stock: p.old_stock, new_stock: p.new_stock,
+      reason: p.reason, date: p.date
+    });
+    if (moveErr) throw moveErr;
+    return;
+  }
 
   throw new Error('Unknown op type: ' + t);
 }
