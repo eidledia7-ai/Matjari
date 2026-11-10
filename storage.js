@@ -213,7 +213,7 @@ const _protectedProducts = (state.products || []).filter(p => p._pendingUpload =
             });
           }
         }
-        
+      }
       
     } catch (err) {
       console.warn(`SyncDown failed for ${t.name}:`, err.message);
