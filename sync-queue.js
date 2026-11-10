@@ -411,49 +411,56 @@ async function drainSyncQueue() {
   const pending = queue.filter(q => q.status === 'pending');
   if (pending.length === 0) { _isDraining = false; _releaseDrainLock(); return { skipped: true, reason: 'empty' }; }
 
-  try { window.dispatchEvent(new CustomEvent('syncqueue:drainStart', { detail: { total: pending.length } })); } catch (e) {}
+  try {
+    try { window.dispatchEvent(new CustomEvent('syncqueue:drainStart', { detail: { total: pending.length } })); } catch (e) {}
 
-  let succeeded = 0;
-  let failed = 0;
-  const newlySyncedSaleIds = [];
+    let succeeded = 0;
+    let failed = 0;
+    const newlySyncedSaleIds = [];
 
-  for (let i = 0; i < queue.length; i++) {
-    const op = queue[i];
-    if (op.status !== 'pending') continue;
+    for (let i = 0; i < queue.length; i++) {
+      const op = queue[i];
+      if (op.status !== 'pending') continue;
 
-    try {
-      await _executeOp(op, ownerId);
-      op.status = 'synced';
-      op.lastError = null;
-      succeeded++;
-      if (op.type === 'insert_sale' && op.payload?.id) newlySyncedSaleIds.push(op.payload.id);
-    } catch (err) {
-      op.attempts = (op.attempts || 0) + 1;
-      op.lastError = err.message || String(err);
-      if (op.attempts >= op.maxAttempts) { op.status = 'failed'; failed++; }
+      try {
+        // ✅ X54: وضع مؤقت 15 ثانية لأي عملية عشان منعلقش لو النت باظ
+        const opPromise = _executeOp(op, ownerId);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000));
+        await Promise.race([opPromise, timeoutPromise]);
+        
+        op.status = 'synced';
+        op.lastError = null;
+        succeeded++;
+        if (op.type === 'insert_sale' && op.payload?.id) newlySyncedSaleIds.push(op.payload.id);
+      } catch (err) {
+        op.attempts = (op.attempts || 0) + 1;
+        op.lastError = err.message || String(err);
+        if (op.attempts >= op.maxAttempts) { op.status = 'failed'; failed++; }
+      }
+
+      _saveQueue(queue);
+      try { window.dispatchEvent(new CustomEvent('syncqueue:drainProgress', { detail: { done: succeeded + failed, total: pending.length } })); } catch (e) {}
     }
 
-    _saveQueue(queue);
-    try { window.dispatchEvent(new CustomEvent('syncqueue:drainProgress', { detail: { done: succeeded + failed, total: pending.length } })); } catch (e) {}
+    const now = Date.now();
+    const cleaned = queue.filter(q => {
+      if (q.status !== 'synced') return true;
+      return (now - new Date(q.createdAt).getTime()) < SYNC_QUEUE_KEEP_SYNCED_MS;
+    });
+    _saveQueue(cleaned);
+
+    if (newlySyncedSaleIds.length > 0) {
+      try { await checkAndFlagStockConflicts(newlySyncedSaleIds); } catch (e) {}
+    }
+
+    return { succeeded, failed, total: pending.length };
+
+  } finally {
+    // ✅ X54: ضمان تفكيك القفل وتصفير الحالة مهما حصل
+    _isDraining = false;
+    _releaseDrainLock();
+    try { window.dispatchEvent(new CustomEvent('syncqueue:drainEnd')); } catch (e) {}
   }
-
-  const now = Date.now();
-  const cleaned = queue.filter(q => {
-    if (q.status !== 'synced') return true;
-    return (now - new Date(q.createdAt).getTime()) < SYNC_QUEUE_KEEP_SYNCED_MS;
-  });
-  _saveQueue(cleaned);
-
-  if (newlySyncedSaleIds.length > 0) {
-    try { await checkAndFlagStockConflicts(newlySyncedSaleIds); } catch (e) {}
-  }
-
-  _isDraining = false;
-  _releaseDrainLock();
-
-  try { window.dispatchEvent(new CustomEvent('syncqueue:drainEnd', { detail: { succeeded, failed, total: pending.length } })); } catch (e) {}
-
-  return { succeeded, failed, total: pending.length };
 }
 
 async function initSyncQueue() {
