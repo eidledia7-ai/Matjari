@@ -259,7 +259,6 @@ function toggleSidebar(show) {
   }
 }
 
-const EMPLOYEE_ALLOWED_PAGES = ['sales', 'salesLog', 'finShift'];
 
 function showPage(pageId) {
   const allowed = typeof EMPLOYEE_ALLOWED_PAGES !== 'undefined' ? EMPLOYEE_ALLOWED_PAGES : ['sales', 'salesLog', 'finShift'];
