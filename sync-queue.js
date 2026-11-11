@@ -1,5 +1,6 @@
 /* ============================================================
-   sync-queue.js — v7.10.1
+   sync-queue.js — v7.10.2
+   X39 (2026-11-11): close_shift support + shift flag protection
    ============================================================ */
 
 const SYNC_QUEUE_KEY_PREFIX        = 'matjari_syncq_';
@@ -223,6 +224,11 @@ function enqueueSyncOperation(type, payload, idempotencyKey) {
     const sh = (state.shifts || []).find(x => x.id === payload.id);
     if (sh) sh._pendingUpload = true;
   }
+  // ✅ X39: close_shift يحمي الـ shift من syncDown
+  if (type === 'close_shift' && payload && payload.id) {
+    const sh = (state.shifts || []).find(x => x.id === payload.id);
+    if (sh) sh._pendingUpload = true;
+  }
 
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
@@ -247,6 +253,28 @@ function getPendingSaleIdsFromQueue() {
 function getPendingReturnIdsFromQueue() {
   const q = _loadQueue();
   return new Set(q.filter(o => o.type === 'insert_return' && o.status !== 'synced').map(o => o.payload?.id).filter(Boolean));
+}
+// ✅ X39: helper للـ storage.js (Phase 3) — كل الـ shifts اللي عندها ops غير مرفوعة
+function getPendingShiftIdsFromQueue() {
+  const q = _loadQueue();
+  return new Set(
+    q.filter(o => (o.type === 'insert_shift' || o.type === 'close_shift') && o.status !== 'synced')
+     .map(o => o.payload?.id)
+     .filter(Boolean)
+  );
+}
+
+// ✅ X39: هل في op غير مرفوع لنفس الـ shift (pending أو failed)؟
+// نستخدم !== 'synced' وليس === 'pending' — عشان لو op فشل نهائيًا نحمي الـ flag (منع data loss)
+function hasPendingOpForShift(shiftId, excludeOpId) {
+  if (!shiftId) return false;
+  const q = _loadQueue();
+  return q.some(o =>
+    o.id !== excludeOpId &&
+    (o.type === 'insert_shift' || o.type === 'close_shift') &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === shiftId
+  );
 }
 
 async function _executeOp(op, ownerId) {
@@ -340,7 +368,36 @@ async function _executeOp(op, ownerId) {
     }, { onConflict: 'id' });
     if (error) throw error;
     const idxSh = (state.shifts || []).findIndex(s => s.id === p.id);
-    if (idxSh !== -1) delete state.shifts[idxSh]._pendingUpload;
+    // ✅ X39: لا نمسح الـ flag لو في close_shift لسه pending
+    if (idxSh !== -1 && !hasPendingOpForShift(p.id, op.id)) {
+      delete state.shifts[idxSh]._pendingUpload;
+    }
+    return;
+  }
+
+  // ✅ X39: close_shift — upsert كامل بكل حقول DB
+  if (t === 'close_shift') {
+    const { error } = await c.from('shifts').upsert({
+      id: p.id, user_id: ownerId,
+      cashier_name: p.cashier_name || p.cashierName || null,
+      start_time: p.start_time || p.startTime || null,
+      end_time: p.end_time || p.endTime || null,
+      opening_cash: Number(p.opening_cash ?? p.openingCash) || 0,
+      expected_cash: Number(p.expected_cash ?? p.expectedCash) || 0,
+      cash_sales: Number(p.cash_sales ?? p.cashSales) || 0,
+      cash_collections: Number(p.cash_collections ?? p.cashCollections) || 0,
+      cash_returns: Number(p.cash_returns ?? p.cashReturns) || 0,
+      cash_expenses: Number(p.cash_expenses ?? p.cashExpenses) || 0,
+      actual_cash: Number(p.actual_cash ?? p.actualCash) || 0,
+      difference: Number(p.difference) || 0,
+      notes: p.notes ?? null,
+      variance_reason: p.variance_reason ?? p.varianceReason ?? null
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    const idxSh = (state.shifts || []).findIndex(s => s.id === p.id);
+    if (idxSh !== -1 && !hasPendingOpForShift(p.id, op.id)) {
+      delete state.shifts[idxSh]._pendingUpload;
+    }
     return;
   }
 
