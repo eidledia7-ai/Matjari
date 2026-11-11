@@ -526,8 +526,10 @@ async function closeShift() {
   const difference = actualCash - expectedCash;
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-const existingVariance = currentShift.variance_reason || '';
-const finalNotes = notes;
+  const existingVariance = currentShift.variance_reason || '';
+  const finalNotes = notes;
+
+  // ✅ X39: _pendingUpload يحمي الوردية من syncDown لغاية ما الـ queue تفرّغ
   const closedShift = {
     id: currentShift.id, user_id: ownerId,
     cashier_name: cashierName, cashierName: cashierName,
@@ -547,28 +549,35 @@ const finalNotes = notes;
     notes: finalNotes,
     variance_reason: existingVariance,
     varianceReason: existingVariance,
-    saleCount: shiftSales.length, drawerExpensesList: []
+    saleCount: shiftSales.length, drawerExpensesList: [],
+    _pendingUpload: true
   };
 
-  if (navigator.onLine && supabaseClient) {
-    try {
-      const { error } = await supabaseClient.from('shifts').upsert({
-        id: closedShift.id, user_id: ownerId,
-        cashier_name: cashierName, start_time: closedShift.start_time, end_time: closedShift.end_time,
-        opening_cash: closedShift.opening_cash, expected_cash: closedShift.expected_cash,
-        cash_sales: closedShift.cash_sales, cash_collections: closedShift.cash_collections,
-        cash_returns: closedShift.cash_returns, cash_expenses: closedShift.cash_expenses,
-        actual_cash: actualCash, difference: difference, notes: finalNotes,
-variance_reason: existingVariance
-      }, { onConflict: 'id' });
-      if (error) { console.warn('Shift close upload failed:', error); showNotification(tr('save_offline_warning'), 'warning'); }
-    } catch (e) { console.warn('Shift close failed:', e); }
-  }
-
+  // 1) تحديث الحالة المحلية أولاً (source of truth محلياً)
   const existingIdx = state.shifts.findIndex(s => s.id === currentShift.id);
   if (existingIdx !== -1) state.shifts[existingIdx] = closedShift;
   else state.shifts.unshift(closedShift);
   state.currentShift = null;
+
+  // 2) دفع العملية للـ queue (يعمل في الأونلاين والأوفلاين على السواء)
+  //    الـ enqueue يضع _pendingUpload تلقائيًا على الـ shift (idempotent مع السطر فوق)
+  enqueueSyncOperation('close_shift', {
+    id: closedShift.id,
+    user_id: ownerId,
+    cashier_name: cashierName,
+    start_time: closedShift.start_time,
+    end_time: closedShift.end_time,
+    opening_cash: closedShift.opening_cash,
+    expected_cash: closedShift.expected_cash,
+    cash_sales: cashSales,
+    cash_collections: cashCollections,
+    cash_returns: cashReturns,
+    cash_expenses: cashExpenses,
+    actual_cash: actualCash,
+    difference: difference,
+    notes: finalNotes,
+    variance_reason: existingVariance
+  }, closedShift.id);
 
   if (typeof addAuditLog === 'function') {
     addAuditLog('close_shift', { shiftId: closedShift.id, cashierName: cashierName, cashSales, cashCollections, cashReturns, cashExpenses, expectedCash, actualCash, difference }, closedShift.id);
