@@ -590,7 +590,7 @@ async function closeShift() {
     expectedCash, actualCash, difference
   }, closedShift.id);
 }
-  }
+  
 
   saveData();
   document.getElementById('shiftCashierName').value = '';
