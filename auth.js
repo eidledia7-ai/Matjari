@@ -366,14 +366,13 @@ function checkSubscriptionStatus() {
 }
 function applyRolePermissions() {
   const employee = state.role === 'employee';
+  const allowed = typeof EMPLOYEE_ALLOWED_PAGES !== 'undefined' ? EMPLOYEE_ALLOWED_PAGES : ['sales', 'salesLog', 'finShift'];
 
-  // 1) Show/hide each page button based on whitelist
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    btn.style.display = (employee && !EMPLOYEE_ALLOWED_PAGES.includes(page)) ? 'none' : '';
+    btn.style.display = (employee && !allowed.includes(page)) ? 'none' : '';
   });
 
-  // 2) Auto-hide nav-groups whose children are ALL hidden
   document.querySelectorAll('#mainNavigation .nav-group').forEach(function(group) {
     const hasVisible = Array.from(group.querySelectorAll('button[data-page]')).some(function(btn) {
       return btn.style.display !== 'none';
@@ -381,7 +380,6 @@ function applyRolePermissions() {
     group.style.display = hasVisible ? '' : 'none';
   });
 
-  // 3) Hide sync button for employee
   document.querySelectorAll('.sync-btn').forEach(function(btn) {
     btn.style.display = employee ? 'none' : '';
   });

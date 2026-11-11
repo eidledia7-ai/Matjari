@@ -1,3 +1,5 @@
+
+const EMPLOYEE_ALLOWED_PAGES = ['sales', 'salesLog', 'finShift'];
 let currentLang = localStorage.getItem('matjari_lang') || 'ar';
 
 function tr(key) {
@@ -260,7 +262,8 @@ function toggleSidebar(show) {
 const EMPLOYEE_ALLOWED_PAGES = ['sales', 'salesLog', 'finShift'];
 
 function showPage(pageId) {
-  if (state.role === 'employee' && !EMPLOYEE_ALLOWED_PAGES.includes(pageId)) {
+  const allowed = typeof EMPLOYEE_ALLOWED_PAGES !== 'undefined' ? EMPLOYEE_ALLOWED_PAGES : ['sales', 'salesLog', 'finShift'];
+  if (state.role === 'employee' && !allowed.includes(pageId)) {
     showNotification(tr('manager_only'), 'warning');
     pageId = 'sales';
   }
