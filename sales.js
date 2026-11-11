@@ -700,12 +700,20 @@ function renderSales() {
     return matchSearch && matchDate;
   });
 
-  // 1. حساب الملخص
+  // 1. حساب الملخص (اللي فوق)
   let totalSales = 0;
   let totalUnpaid = 0;
   filtered.forEach(s => {
     totalSales += (Number(s.total) || 0);
-    totalUnpaid += (Number(s.remaining) || 0);
+    
+    // ✅ X61: حساب المتبقي الفعلي للعميل (طرح المرتجعات الآجلة)
+    const creditReturnsForSale = (state.returns || [])
+      .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
+                   (r.refund_method === 'credit' || r.refundMethod === 'credit'))
+      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+      
+    const actualRemaining = Math.max(0, (Number(s.total) || 0) - (Number(s.paid) || 0) - creditReturnsForSale);
+    totalUnpaid += actualRemaining;
   });
 
   const summaryEl = document.getElementById('salesLogSummary');
@@ -731,18 +739,30 @@ function renderSales() {
     const cust = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = s.pay_method || s.payMethod;
     const payText = payLabels[payMethod] || payMethod || '-';
-    const remaining = Number(s.remaining) || 0;
-    
-    // تحديد حالة الفاتورة
+
+    // ✅ X61: حساب المتبقي الفعلي (طرح مرتجعات Credit)
+    const creditReturnsForSale = (state.returns || [])
+      .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
+                   (r.refund_method === 'credit' || r.refundMethod === 'credit'))
+      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+
+    const total = Number(s.total) || 0;
+    const paid = Number(s.paid) || 0;
+    const returnedTotal = Number(s.returned_total) || 0;
+    const actualRemaining = Math.max(0, total - paid - creditReturnsForSale);
+
+    // تحديد حالة الفاتورة (Badge)
     let statusHtml = '';
-    if (Number(s.returned_total) > 0) {
+    if (returnedTotal > 0 && actualRemaining <= 0.01) {
       statusHtml = `<span class="badge status-returned">${tr('status_badge_returned')}</span>`;
-    } else if (remaining === 0) {
-      statusHtml = `<span class="badge status-paid">${tr('status_badge_paid')}</span>`;
-    } else if (Number(s.paid) === 0) {
-      statusHtml = `<span class="badge status-credit">${tr('status_badge_credit')}</span>`;
-    } else {
+    } else if (returnedTotal > 0 && actualRemaining > 0.01) {
       statusHtml = `<span class="badge status-partial">${tr('status_badge_partial')}</span>`;
+    } else if (actualRemaining <= 0.01) {
+      statusHtml = `<span class="badge status-paid">${tr('status_badge_paid')}</span>`;
+    } else if (paid > 0) {
+      statusHtml = `<span class="badge status-partial">${tr('status_badge_partial')}</span>`;
+    } else {
+      statusHtml = `<span class="badge status-credit">${tr('status_badge_credit')}</span>`;
     }
 
     html += `
@@ -755,8 +775,8 @@ function renderSales() {
           <div class="inv-row"><span>📅 ${tr('th_date')}:</span> <b>${new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</b></div>
           <div class="inv-row"><span>👤 ${tr('th_customer')}:</span> <b>${cust ? escapeHTML(cust.name) : tr('cash_customer')}</b></div>
           <div class="inv-row"><span>💳 ${tr('th_payment_method')}:</span> <b>${escapeHTML(payText)}</b></div>
-          <div class="inv-row total-row"><span>${tr('th_total')}:</span> <b>${Number(s.total || 0).toFixed(2)}</b></div>
-          ${remaining > 0 ? `<div class="inv-row unpaid-row"><span>${tr('th_remaining')}:</span> <b>${remaining.toFixed(2)}</b></div>` : ''}
+          <div class="inv-row total-row"><span>${tr('th_total')}:</span> <b>${total.toFixed(2)}</b></div>
+          ${actualRemaining > 0 ? `<div class="inv-row unpaid-row"><span>${tr('th_remaining')}:</span> <b>${actualRemaining.toFixed(2)}</b></div>` : ''}
         </div>
         <div class="inv-card-footer">
           <button class="small-btn orange" onclick="printThermalInvoice('${s.id}')" title="${tr('sales_print_title')}">🖨️</button>
