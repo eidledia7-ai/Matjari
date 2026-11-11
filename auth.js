@@ -368,19 +368,21 @@ function checkSubscriptionStatus() {
 function applyRolePermissions() {
   const employee = state.role === 'employee';
 
-  document.querySelectorAll('.nav-group').forEach(function(group) {
-    group.style.display = employee ? 'none' : '';
-  });
-
+  // 1) Show/hide each page button based on whitelist (shared from core.js)
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    if (employee && page !== 'sales' && page !== 'invReturns') {
-      btn.style.display = 'none';
-    } else {
-      btn.style.display = '';
-    }
+    btn.style.display = (employee && !EMPLOYEE_ALLOWED_PAGES.includes(page)) ? 'none' : '';
   });
 
+  // 2) Auto-hide nav-groups whose children are ALL hidden (e.g., المخزون، الشركاء، الإعدادات)
+  document.querySelectorAll('#mainNavigation .nav-group').forEach(function(group) {
+    const hasVisible = Array.from(group.querySelectorAll('button[data-page]')).some(function(btn) {
+      return btn.style.display !== 'none';
+    });
+    group.style.display = hasVisible ? '' : 'none';
+  });
+
+  // 3) Hide sync button for employee
   document.querySelectorAll('.sync-btn').forEach(function(btn) {
     btn.style.display = employee ? 'none' : '';
   });

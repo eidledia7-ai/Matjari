@@ -257,9 +257,11 @@ function toggleSidebar(show) {
   }
 }
 
+const EMPLOYEE_ALLOWED_PAGES = ['sales', 'salesLog', 'finShift'];
+
 function showPage(pageId) {
-  if (state.role === 'employee' && pageId !== 'sales' && pageId !== 'salesLog' && pageId !== 'invReturns' && pageId !== 'home') {
-    showNotification('هذه الصفحة متاحة للمدير فقط', 'warning');
+  if (state.role === 'employee' && !EMPLOYEE_ALLOWED_PAGES.includes(pageId)) {
+    showNotification(tr('manager_only'), 'warning');
     pageId = 'sales';
   }
   if (pageId === 'finCompare' && !canUse('compare')) {
