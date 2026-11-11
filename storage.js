@@ -17,6 +17,9 @@ const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload ===
 // ✅ X43: حماية المنتجات المعلقة من المسح
 const _protectedProducts = (state.products || []).filter(p => p._pendingUpload === true);
 
+// ✅ X39: حماية الورديات المعلقة من المسح
+const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === true);
+
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
 
@@ -195,7 +198,7 @@ const _protectedProducts = (state.products || []).filter(p => p._pendingUpload =
             if (t.name === 'products') return { id: row.id, name: row.name, barcode: row.barcode, category: row.category, price: row.price, cost: row.cost, stock: row.stock, min_stock: row.min_stock, minStock: row.min_stock };
             if (t.name === 'customers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt, points: row.points };
             if (t.name === 'expenses') return { id: row.id, name: row.name, amount: row.amount, notes: row.notes, date: row.date, shift_id: row.shift_id, shiftId: row.shift_id, pay_method: row.pay_method, payMethod: row.pay_method };
-            if (t.name === 'shifts') return { id: row.id, cashier_name: row.cashier_name, cashierName: row.cashier_name, start_time: row.start_time, startTime: row.start_time, end_time: row.end_time, endTime: row.end_time, opening_cash: row.opening_cash, openingCash: row.opening_cash, expected_cash: row.expected_cash, expectedCash: row.expected_cash, actual_cash: row.actual_cash, actualCash: row.actual_cash, difference: row.difference, cash_sales: row.cash_sales, cashSales: row.cash_sales, cash_returns: row.cash_returns, cashReturns: row.cash_returns, cash_expenses: row.cash_expenses, cashExpenses: row.cash_expenses, cash_collections: row.cash_collections, cashCollections: row.cash_collections, notes: row.notes };
+            if (t.name === 'shifts') return { id: row.id, cashier_name: row.cashier_name, cashierName: row.cashier_name, start_time: row.start_time, startTime: row.start_time, end_time: row.end_time, endTime: row.end_time, opening_cash: row.opening_cash, openingCash: row.opening_cash, expected_cash: row.expected_cash, expectedCash: row.expected_cash, actual_cash: row.actual_cash, actualCash: row.actual_cash, difference: row.difference, cash_sales: row.cash_sales, cashSales: row.cash_sales, cash_returns: row.cash_returns, cashReturns: row.cash_returns, cash_expenses: row.cash_expenses, cashExpenses: row.cash_expenses, cash_collections: row.cash_collections, cashCollections: row.cash_collections, notes: row.notes, variance_reason: row.variance_reason, varianceReason: row.variance_reason };
             if (t.name === 'suppliers') return { id: row.id, name: row.name, phone: row.phone, opening_debt: row.opening_debt, openingDebt: row.opening_debt };
             if (t.name === 'purchases') return { id: row.id, date: row.date, supplier_id: row.supplier_id, supplierId: row.supplier_id, product_id: row.product_id, productId: row.product_id, product_name: row.product_name, productName: row.product_name, qty: row.qty, cost: row.cost, total: row.total, paid: row.paid, remaining: row.remaining };
             if (t.name === 'customer_payments') return { id: row.id, customer_id: row.customer_id, customerId: row.customer_id, customer_name: row.customer_name, customerName: row.customer_name, amount: row.amount, date: row.date, notes: row.notes, shift_id: row.shift_id, shiftId: row.shift_id, pay_method: row.pay_method, payMethod: row.pay_method };
@@ -209,6 +212,21 @@ const _protectedProducts = (state.products || []).filter(p => p._pendingUpload =
             _protectedProducts.forEach(pp => {
               if (!existingIds.has(pp.id)) {
                 state.products.unshift(pp); // إرجاع المنتج المعلق عشان يفضل ظاهر
+              }
+            });
+          }
+          // ✅ X39: استبدال نسخة السيرفر بالنسخة المحلية للورديات المعلقة
+          // (close_shift بيحصل قبل syncDown أحيانًا — محليًا النسخة الأحدث)
+          if (t.name === 'shifts' && _protectedShifts.length > 0) {
+            const serverIds = new Set((state.shifts || []).map(s => s.id));
+            _protectedShifts.forEach(ps => {
+              if (serverIds.has(ps.id)) {
+                // استبدال: النسخة المحلية (المغلقة أوفلاين) هي الأحدث
+                const idx = state.shifts.findIndex(s => s.id === ps.id);
+                if (idx !== -1) state.shifts[idx] = ps;
+              } else {
+                // إضافة: الوردية لم تصل للسيرفر إطلاقًا
+                state.shifts.unshift(ps);
               }
             });
           }
