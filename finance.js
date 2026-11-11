@@ -1022,6 +1022,11 @@ function switchExpenseTab(tabId) {
 }
 
 function switchShiftTab(tabId) {
+  // ✅ X59: حماية من فتح سجل الورديات للموظف
+  if (state.role === 'employee' && tabId === 'shift-log') {
+    showNotification(tr('manager_only'), 'warning');
+    tabId = 'shift-close';
+  }
   document.querySelectorAll('#finShift .tab-content').forEach(el => el.style.display = 'none');
   document.querySelectorAll('#finShift .tab-btn').forEach(el => el.classList.remove('active'));
   

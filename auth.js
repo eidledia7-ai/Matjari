@@ -394,6 +394,15 @@ function applyRolePermissions() {
     if (employee) btn.style.setProperty('display', 'none', 'important');
     else btn.style.display = '';
   });
+  // 4. إخفاء تاب سجل الورديات للموظف (عشان ميشوفش بيانات المحل التاريخية)
+const shiftLogBtn = document.querySelector('.tabs-container button[data-tab="shift-log"]');
+if (shiftLogBtn) {
+  if (employee) {
+    shiftLogBtn.style.setProperty('display', 'none', 'important');
+  } else {
+    shiftLogBtn.style.display = '';
+  }
+}
 }
 
 async function startAuth() {
