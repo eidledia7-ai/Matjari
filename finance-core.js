@@ -142,7 +142,6 @@ function toISO(date, isEnd) {
     if (!Number.isFinite(t)) return false;
     return t >= from.getTime() && t <= to.getTime();
   }
-
 function calcPeriodSummary(from, to) {
   const parseLocal = (val, isEnd) => {
     if (!val) return isEnd ? new Date() : new Date(0);
@@ -177,10 +176,39 @@ function calcPeriodSummary(from, to) {
   const collectionsTotal = collections.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const vatCollected = sales.reduce((sum, s) => sum + (Number(s.vat_amount) || 0), 0);
 
+  // ✅ X19: VAT صافي = ضريبة المبيعات - ضريبة المرتجعات
+  const vatReturned = returns.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0);
+  const vatNet = vatCollected - vatReturned;
+
+  // ✅ X22: COGS = تكلفة المبيعات - تكلفة المرتجعات (snapshot من sale_items)
   const saleIds = new Set(sales.map(s => s.id));
-  const cogs = (state.saleItems || [])
+
+  // Snapshot: sale_id|product_id → cost at sale time
+  const costLookup = new Map();
+  (state.saleItems || []).forEach(si => {
+    if (!saleIds.has(si.sale_id)) return;
+    costLookup.set(si.sale_id + '|' + si.product_id, Number(si.cost) || 0);
+  });
+
+  const soldCost = (state.saleItems || [])
     .filter(si => saleIds.has(si.sale_id))
     .reduce((sum, si) => sum + ((Number(si.cost) || 0) * (Number(si.qty) || 0)), 0);
+
+  // المرتجعات المرتبطة بفواتير داخل الفترة (Option A — نفس calcProductProfitReport)
+  const returnedCost = returns
+    .filter(r => saleIds.has(r.sale_id || r.saleId))
+    .reduce((sum, r) => {
+      const sId = r.sale_id || r.saleId;
+      const pId = r.product_id || r.productId;
+      const qty = Number(r.qty) || 0;
+      const c = costLookup.get(sId + '|' + pId);
+      return sum + ((c !== undefined ? c : 0) * qty);
+    }, 0);
+
+  const cogs = soldCost - returnedCost;
+
+  // ✅ X19: net_profit = صافي المبيعات بدون VAT - COGS - المصروفات
+  const netProfit = net - vatNet - cogs - expensesTotal;
 
   return {
     gross_sales: gross,
@@ -192,8 +220,10 @@ function calcPeriodSummary(from, to) {
     expenses_total: expensesTotal,
     collections_total: collectionsTotal,
     cogs: cogs,
-    net_profit: net - cogs - expensesTotal,
-    vat_collected: vatCollected
+    net_profit: netProfit,
+    vat_collected: vatCollected,  // Gross — backward compat
+    vat_net: vatNet,              // ✅ جديد
+    vat_returned: vatReturned     // ✅ جديد (مرجع)
   };
 }
 
