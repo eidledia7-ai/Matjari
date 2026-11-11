@@ -317,15 +317,16 @@ async function openUserSession(user) {
     const pageToShow = (state.role === 'employee') ? 'sales' : (validPages.includes(lastPage) ? lastPage : 'home');
     showPage(pageToShow);
 
-  } catch (e) {
-    console.error(e);
-    document.getElementById('skeletonLoader').style.display = 'none';
-    if (main) main.style.display = 'block';
-    setAuthMessage(tr('auth_data_load_fail_prefix') + (e.message || ''), true);
-    showLoggedOutUI();
-  } finally {
-    hideLoading();
-  }
+ } catch (e) {
+  alert('CRITICAL ERROR: ' + (e.message || '') + '\n\nSTACK: ' + (e.stack || ''));
+  console.error(e);
+  document.getElementById('skeletonLoader').style.display = 'none';
+  if (main) main.style.display = 'block';
+  setAuthMessage(tr('auth_data_load_fail_prefix') + (e.message || ''), true);
+  showLoggedOutUI();
+} finally {
+  hideLoading();
+}
 
   try {
     localStorage.setItem('matjari_last_user', JSON.stringify({
