@@ -65,6 +65,7 @@ function loadOfflineSession() {
   if (cache.storeSettings) state.storeSettings = Object.assign({}, state.storeSettings, cache.storeSettings);
   if (cache.auditLogs) state.auditLogs = cache.auditLogs;
   if (cache.heldCarts) state.heldCarts = cache.heldCarts;
+  if (cache.saleItems) state.saleItems = cache.saleItems;   // ✅ X57
 
   if (cache.subscription) state.subscription = cache.subscription;
   state.ownerPlan = state.subscription ? state.subscription.plan : null;
