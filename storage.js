@@ -20,6 +20,17 @@ const _protectedProducts = (state.products || []).filter(p => p._pendingUpload =
 // ✅ X39: حماية الورديات المعلقة من المسح
 const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === true);
 
+// ✅ X57: حماية sale_items التابعة لفواتير لسه في الـ queue
+const _protectedSaleItems = (function() {
+  if (typeof getPendingSaleIdsFromQueue !== 'function') return [];
+  const pendingSaleIds = getPendingSaleIdsFromQueue();
+  if (!pendingSaleIds || pendingSaleIds.size === 0) return [];
+  return (state.saleItems || []).filter(si => {
+    const sid = si.sale_id || si.saleId;
+    return sid && pendingSaleIds.has(sid);
+  });
+})();
+
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
 
@@ -211,21 +222,18 @@ const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === t
             const existingIds = new Set(state.products.map(p => p.id));
             _protectedProducts.forEach(pp => {
               if (!existingIds.has(pp.id)) {
-                state.products.unshift(pp); // إرجاع المنتج المعلق عشان يفضل ظاهر
+                state.products.unshift(pp);
               }
             });
           }
           // ✅ X39: استبدال نسخة السيرفر بالنسخة المحلية للورديات المعلقة
-          // (close_shift بيحصل قبل syncDown أحيانًا — محليًا النسخة الأحدث)
           if (t.name === 'shifts' && _protectedShifts.length > 0) {
             const serverIds = new Set((state.shifts || []).map(s => s.id));
             _protectedShifts.forEach(ps => {
               if (serverIds.has(ps.id)) {
-                // استبدال: النسخة المحلية (المغلقة أوفلاين) هي الأحدث
                 const idx = state.shifts.findIndex(s => s.id === ps.id);
                 if (idx !== -1) state.shifts[idx] = ps;
               } else {
-                // إضافة: الوردية لم تصل للسيرفر إطلاقًا
                 state.shifts.unshift(ps);
               }
             });
@@ -252,7 +260,8 @@ const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === t
   // ═══════════════════════════════════════════════════════
   try {
     if (loadedSaleIds.length === 0) {
-      state.saleItems = [];
+      // ✅ X57: احتفظ بالـ sale_items المعلقة لو مفيش فواتير من السيرفر
+      state.saleItems = _protectedSaleItems.slice();
       state.sales.forEach(s => { s.items = []; });
     } else {
       const allItems = [];
@@ -286,6 +295,20 @@ const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === t
       });
       state.sales.forEach(s => { s.items = itemsBySale.get(s.id) || []; });
       state.saleItems = flatItems;
+
+      // ✅ X57: دمج الـ sale_items المعلقة (فواتير لسه مش مرفوعة بالكامل)
+      if (_protectedSaleItems.length > 0) {
+        const existingKeys = new Set(state.saleItems.map(si =>
+          (si.sale_id || si.saleId) + '|' + (si.product_id || si.productId)
+        ));
+        _protectedSaleItems.forEach(si => {
+          const key = (si.sale_id || si.saleId) + '|' + (si.product_id || si.productId);
+          if (!existingKeys.has(key)) {
+            state.saleItems.push(si);
+            existingKeys.add(key);
+          }
+        });
+      }
     }
   } catch (err) {
     console.warn('Failed to load sale items:', err);
