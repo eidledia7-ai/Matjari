@@ -364,17 +364,16 @@ function checkSubscriptionStatus() {
     showNotification(tr('auth_trial_expires_in_days').replace('{days}', daysLeft), 'warning');
   }
 }
-
 function applyRolePermissions() {
   const employee = state.role === 'employee';
 
-  // 1) Show/hide each page button based on whitelist (shared from core.js)
+  // 1) Show/hide each page button based on whitelist
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
     btn.style.display = (employee && !EMPLOYEE_ALLOWED_PAGES.includes(page)) ? 'none' : '';
   });
 
-  // 2) Auto-hide nav-groups whose children are ALL hidden (e.g., المخزون، الشركاء، الإعدادات)
+  // 2) Auto-hide nav-groups whose children are ALL hidden
   document.querySelectorAll('#mainNavigation .nav-group').forEach(function(group) {
     const hasVisible = Array.from(group.querySelectorAll('button[data-page]')).some(function(btn) {
       return btn.style.display !== 'none';

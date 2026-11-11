@@ -495,7 +495,7 @@ function calculateShiftDiff() {
 }
 
 async function closeShift() {
-  if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
+  if (state.role !== 'manager' && state.role !== 'employee') return showNotification(tr('manager_only'), 'warning');
   const cashierName = (document.getElementById('shiftCashierName').value || '').trim();
   if (!cashierName) return showNotification(tr('enter_cashier_name'), 'error');
   const actualCash = parseFloat(document.getElementById('shiftActualCash').value) || 0;
@@ -579,8 +579,17 @@ async function closeShift() {
     variance_reason: existingVariance
   }, closedShift.id);
 
-  if (typeof addAuditLog === 'function') {
-    addAuditLog('close_shift', { shiftId: closedShift.id, cashierName: cashierName, cashSales, cashCollections, cashReturns, cashExpenses, expectedCash, actualCash, difference }, closedShift.id);
+  
+    if (typeof addAuditLog === 'function') {
+  addAuditLog('close_shift', {
+    shiftId: closedShift.id,
+    cashierName: cashierName,
+    closedBy: state.currentUser.email,     // ✅ الفاعل الحقيقي
+    closedByRole: state.role,
+    cashSales, cashCollections, cashReturns, cashExpenses,
+    expectedCash, actualCash, difference
+  }, closedShift.id);
+}
   }
 
   saveData();
