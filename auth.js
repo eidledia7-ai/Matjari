@@ -367,22 +367,32 @@ function checkSubscriptionStatus() {
 }
 function applyRolePermissions() {
   const employee = state.role === 'employee';
-  const allowed = typeof EMPLOYEE_ALLOWED_PAGES !== 'undefined' ? EMPLOYEE_ALLOWED_PAGES : ['sales', 'salesLog', 'finShift'];
+  const allowed = ['sales', 'salesLog', 'finShift'];
 
+  // 1. إخفاء أزرار الصفحات غير المسموحة (Home, Returns, Ops Center)
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
-    btn.style.display = (employee && !allowed.includes(page)) ? 'none' : '';
+    if (employee && !allowed.includes(page)) {
+      btn.style.setProperty('display', 'none', 'important');
+    } else {
+      btn.style.display = '';
+    }
   });
 
+  // 2. إخفاء القوائم المنسدلة اللي كل صفحاتها مخفية (المخزون، الشركاء، الإعدادات، الدعم)
   document.querySelectorAll('#mainNavigation .nav-group').forEach(function(group) {
-    const hasVisible = Array.from(group.querySelectorAll('button[data-page]')).some(function(btn) {
-      return btn.style.display !== 'none';
-    });
-    group.style.display = hasVisible ? '' : 'none';
+    const visibleBtns = Array.from(group.querySelectorAll('button[data-page]')).filter(btn => btn.style.display !== 'none');
+    if (employee && visibleBtns.length === 0) {
+      group.style.setProperty('display', 'none', 'important');
+    } else {
+      group.style.display = '';
+    }
   });
 
+  // 3. إخفاء زرار المزامنة
   document.querySelectorAll('.sync-btn').forEach(function(btn) {
-    btn.style.display = employee ? 'none' : '';
+    if (employee) btn.style.setProperty('display', 'none', 'important');
+    else btn.style.display = '';
   });
 }
 
