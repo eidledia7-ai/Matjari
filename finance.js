@@ -153,11 +153,22 @@ async function renderReports() {
   const filteredReturns = filterByPeriod(state.returns, 'date', from, to);
 
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
-  const avgInvoice = summary.invoices_count > 0 ? summary.gross_sales / summary.invoices_count : 0;
+  // ✅ X62: نستخدم صافي المبيعات بدل الإجمالي عشان نمنع التضليل
+const avgInvoice = summary.invoices_count > 0 ? summary.net_sales / summary.invoices_count : 0;
 
-  if (cardsContainer) {
-    cardsContainer.innerHTML =
-      '<div class="stat-card"><h3>' + tr('dash_total_sales') + limitBadge + '</h3><p>' + fmt(summary.gross_sales) + ' ' + currency + '</p></div>' +
+if (cardsContainer) {
+  cardsContainer.innerHTML =
+    // غيرنا الترجمة لـ net_sales_label (صافي المبيعات) والرقم لـ summary.net_sales
+    '<div class="stat-card"><h3>' + (tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات') + limitBadge + '</h3><p>' + fmt(summary.net_sales) + ' ' + currency + '</p></div>' +
+    '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
+    '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + currency + '</p></div>' +
+    '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + currency + '</p></div>' +
+    '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + fmt(summary.expenses_total) + ' ' + currency + '</p></div>' +
+    '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
+    '<h3>' + tr('dash_net_profit') + '</h3>' +
+    '<p style="color:' + (summary.net_profit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(summary.net_profit) + ' ' + currency + '</p>' +
+    '</div>';
+}
       '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + currency + '</p></div>' +
