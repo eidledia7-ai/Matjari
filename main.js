@@ -263,12 +263,17 @@ function setupBackButtonHandler() {
 
 window.addEventListener('online', function() {
   if (!state.currentUser) return;
-  if (state.role === 'manager' && typeof syncNow === 'function') {
-    syncNow();
-  } else if (state.role === 'employee' && typeof syncEmployeeChanges === 'function') {
-    syncEmployeeChanges().catch(function(e) { console.warn('syncEmployeeChanges failed:', e); });
-  }
-  if (typeof syncPendingSales === 'function') syncPendingSales();
+  
+  // ✅ X63: ننتظر ثانيتين عشان نتأكد إن الاتصال استقر فعلاً (مشكلة الموبايل)
+  setTimeout(() => {
+    if (!navigator.onLine) return; // لو لسه فاصل، منعملش حاجة
+    
+    if (state.role === 'manager' && typeof syncNow === 'function') {
+      syncNow();
+    } else if (state.role === 'employee' && typeof syncEmployeeChanges === 'function') {
+      syncEmployeeChanges().catch(function(e) { console.warn('syncEmployeeChanges failed:', e); });
+    }
+  }, 2000);
 });
 
 function renderAll() {
@@ -363,6 +368,11 @@ function _markSyncComplete() {
 // ✅ v7.23.3 — Listen for sync completion (from storage.js event)
 window.addEventListener('matjari:syncDownComplete', function() {
   _markSyncComplete();
+  
+  // ✅ X63: تحديث الواجهة فوراً بعد سحب البيانات الجديدة من السيرفر
+  if (typeof refreshCurrentPage === 'function') {
+    refreshCurrentPage();
+  }
 });
 
 // Periodic badge refresh
