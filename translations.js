@@ -1161,6 +1161,7 @@ tab_exp_add: "إضافة مصروف",
 auth_trial_expires_in_days: "تجربتك تنتهي خلال {days} أيام.",
 auth_no_permissions_found: "لم يتم العثور على صلاحيات لهذا الحساب. تواصل مع الدعم.",
 auth_data_load_fail_prefix: "تعذر تحميل البيانات: ",
+net_sales_label: "صافي المبيعات",
   // ═══════════════════════════════════════════════════════════
   // ==== CONFIRM DIALOGS (msg_*) ====
   // ═══════════════════════════════════════════════════════════
@@ -2382,6 +2383,7 @@ audit_detail_purchase_template: "Purchase amount: {total}",
     // ==== MISC / SUPPORT ====
     // ═══════════════════════════════════════════════════════════
     page_support_title: "Technical Support & Contact",
+    net_sales_label: "Net Sales",
     contact_us: "📞 Contact Technical Support",
     contact_desc: "We are here to help 24/7 through the following channels:",
     help_guide: "📖 Quick User Guide",

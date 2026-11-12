@@ -700,27 +700,35 @@ function renderSales() {
     return matchSearch && matchDate;
   });
 
-  // 1. حساب الملخص
-  let totalSales = 0;
-  let totalUnpaid = 0;
+  // ✅ X61: حساب صافي المبيعات (طرح المرتجعات) والمتبقي الفعلي
+  let totalNetSales = 0;
+  let totalActualRemaining = 0;
+  
   filtered.forEach(s => {
-    totalSales += (Number(s.total) || 0);
+    const total = Number(s.total) || 0;
+    const paid = Number(s.paid) || 0;
+    const returned = Number(s.returned_total) || 0;
     
+    // صافي المبيعات للفاتورة
+    totalNetSales += Math.max(0, total - returned);
+
+    // المتبقي الفعلي (بعد خصم المرتجعات الآجلة)
     const creditReturnsForSale = (state.returns || [])
       .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
                    (r.refund_method === 'credit' || r.refundMethod === 'credit'))
       .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
       
-    const finalRemaining = Math.max(0, (Number(s.total) || 0) - (Number(s.paid) || 0) - creditReturnsForSale);
-    totalUnpaid += finalRemaining;
+    totalActualRemaining += Math.max(0, total - paid - creditReturnsForSale);
   });
 
+  // بناء الـ Summary
   const summaryEl = document.getElementById('salesLogSummary');
   if (summaryEl) {
+    const netLabel = tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات';
     summaryEl.innerHTML = `
-      <div class="summary-card"><span>${tr('log_summary_total')}</span><b>${totalSales.toFixed(2)} ${state.storeSettings.currency}</b></div>
+      <div class="summary-card"><span>${netLabel}</span><b>${totalNetSales.toFixed(2)} ${state.storeSettings.currency}</b></div>
       <div class="summary-card"><span>${tr('log_summary_invoices')}</span><b>${filtered.length}</b></div>
-      <div class="summary-card"><span>${tr('log_summary_unpaid')}</span><b class="${totalUnpaid > 0 ? 'red-text' : ''}">${totalUnpaid.toFixed(2)} ${state.storeSettings.currency}</b></div>
+      <div class="summary-card"><span>${tr('log_summary_unpaid')}</span><b class="${totalActualRemaining > 0 ? 'red-text' : ''}">${totalActualRemaining.toFixed(2)} ${state.storeSettings.currency}</b></div>
     `;
   }
 
@@ -731,7 +739,6 @@ function renderSales() {
 
   const payLabels = { cash: tr('cash_label'), visa: tr('th_visa_sales'), transfer: tr('th_bank_transfers'), card: tr('card_label') };
 
-  // 2. عرض الفواتير ككروت
   let html = '<div class="invoice-cards-grid">';
   filtered.forEach(function(s) {
     const custId = s.customer_id || s.customerId;
@@ -739,7 +746,6 @@ function renderSales() {
     const payMethod = s.pay_method || s.payMethod;
     const payText = payLabels[payMethod] || payMethod || '-';
 
-    // ✅ X61: حسابات المرتجع والصافي
     const creditReturnsForSale = (state.returns || [])
       .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
                    (r.refund_method === 'credit' || r.refundMethod === 'credit'))
@@ -752,7 +758,6 @@ function renderSales() {
     const netTotal = Math.max(0, total - returnedTotal); 
     const finalRemaining = Math.max(0, total - paid - creditReturnsForSale);
 
-    // تحديد الحالة
     let statusHtml = '';
     if (returnedTotal > 0 && finalRemaining <= 0.01) {
       statusHtml = `<span class="badge status-returned">${tr('status_badge_returned')}</span>`;
@@ -766,7 +771,6 @@ function renderSales() {
       statusHtml = `<span class="badge status-credit">${tr('status_badge_credit')}</span>`;
     }
 
-    // ✅ عرض الإجمالي الصافي + سطر المرتجع
     let totalHtml = `<b>${netTotal.toFixed(2)}</b>`;
     if (returnedTotal > 0.01) {
       const retLabel = currentLang === 'en' ? 'Ret: ' : 'مرتجع: ';
