@@ -113,7 +113,7 @@ async function renderReports() {
   const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const currency = state.storeSettings.currency;
 
-  // ─── 1. Skeleton فوري (إحساس إن التطبيق شغال) ───
+  // ─── 1. Skeleton فوري ───
   const cardsContainer = document.getElementById('reportCards');
   if (cardsContainer) {
     const skelCard = '<div class="stat-card"><h3><span class="skeleton-line" style="width:70%"></span></h3><p><span class="skeleton-line" style="width:90%;height:28px"></span></p></div>';
@@ -136,39 +136,29 @@ async function renderReports() {
     }
   }
 
-  // ─── 3. Fallback محلي (زي القديم بالظبط) ───
+  // ─── 3. Fallback محلي ───
   if (!summary) {
     const startDate = from ? financeCore.startOfDay(new Date(from)) : new Date(0);
     const endDate = to ? financeCore.endOfDay(new Date(to)) : new Date();
     summary = financeCore.calcPeriodSummary(startDate, endDate);
   }
 
-  // ─── 4. شارة "بيانات مقطوعة" (لو رجعنا للمحلي والبيانات محدودة) ───
+  // ─── 4. شارة "بيانات مقطوعة" ───
   const limitBadge = (!fromRPC && state.salesDataLimited)
     ? '<span class="data-limited-badge" title="' + tr('data_limited_hint') + '">' + tr('data_limited_warning') + '</span>'
     : '';
 
-  // ─── 5. كروت الملخص (زي القديم + الشارة) ───
+  // ─── 5. كروت الملخص (✅ X62: صافي المبيعات) ───
   const filteredSales = filterByPeriod(state.sales, 'date', from, to);
   const filteredReturns = filterByPeriod(state.returns, 'date', from, to);
 
   const totalDiscount = filteredSales.reduce(function(sum, s) { return sum + Number(s.discount || 0); }, 0);
-  // ✅ X62: نستخدم صافي المبيعات بدل الإجمالي عشان نمنع التضليل
-const avgInvoice = summary.invoices_count > 0 ? summary.net_sales / summary.invoices_count : 0;
+  const avgInvoice = summary.invoices_count > 0 ? summary.net_sales / summary.invoices_count : 0;
 
-if (cardsContainer) {
-  cardsContainer.innerHTML =
-    // غيرنا الترجمة لـ net_sales_label (صافي المبيعات) والرقم لـ summary.net_sales
-    '<div class="stat-card"><h3>' + (tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات') + limitBadge + '</h3><p>' + fmt(summary.net_sales) + ' ' + currency + '</p></div>' +
-    '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
-    '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + currency + '</p></div>' +
-    '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + currency + '</p></div>' +
-    '<div class="stat-card"><h3>' + tr('dash_expenses') + '</h3><p>' + fmt(summary.expenses_total) + ' ' + currency + '</p></div>' +
-    '<div class="stat-card" style="background:linear-gradient(135deg,#c8e5d2,#a9d5bb);border-color:#8ab99f">' +
-    '<h3>' + tr('dash_net_profit') + '</h3>' +
-    '<p style="color:' + (summary.net_profit >= 0 ? '#17643a' : '#c0392b') + '">' + fmt(summary.net_profit) + ' ' + currency + '</p>' +
-    '</div>';
-}
+  if (cardsContainer) {
+    const netLabel = tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات';
+    cardsContainer.innerHTML =
+      '<div class="stat-card"><h3>' + netLabel + limitBadge + '</h3><p>' + fmt(summary.net_sales) + ' ' + currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('th_invoice_count') + '</h3><p>' + summary.invoices_count + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('avg_invoice') + '</h3><p>' + fmt(avgInvoice) + ' ' + currency + '</p></div>' +
       '<div class="stat-card"><h3>' + tr('total_cost') + '</h3><p>' + fmt(summary.cogs) + ' ' + currency + '</p></div>' +
@@ -191,7 +181,7 @@ if (cardsContainer) {
       '<p>' + tr('collections_label') + ' <b>' + fmt(summary.collections_total) + ' ' + currency + '</b></p>';
   }
 
-  // ─── 7. تفاصيل طرق الدفع + أفضل العملاء (زي القديم) ───
+  // ─── 7. تفاصيل طرق الدفع + أفضل العملاء ───
   const cashSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'cash').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const cardSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'visa' || (s.payMethod || s.pay_method) === 'card').reduce((sum, s) => sum + Number(s.paid || 0), 0);
   const transferSales = filteredSales.filter(s => (s.payMethod || s.pay_method) === 'transfer').reduce((sum, s) => sum + Number(s.paid || 0), 0);
@@ -259,7 +249,7 @@ if (cardsContainer) {
   let activityContainer = document.getElementById('activityDetailsReport');
   if (activityContainer) activityContainer.innerHTML = detailsHtml;
 
-  // ─── 8. الأكثر مبيعاً (زي القديم) ───
+  // ─── 8. الأكثر مبيعاً ───
   const topContainer = document.getElementById('topProductsReportFinance');
   if (topContainer) {
     const salesByProduct = {};
@@ -284,7 +274,7 @@ if (cardsContainer) {
     }
   }
 
-  // ─── 9. تقرير أرباح المنتجات (زي القديم + شارة) ───
+  // ─── 9. تقرير أرباح المنتجات ───
   const profitContainer = document.getElementById('productProfitReport');
   if (profitContainer && typeof financeCore.calcProductProfitReport === 'function') {
     try {
