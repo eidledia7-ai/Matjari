@@ -700,33 +700,25 @@ function renderSales() {
     return matchSearch && matchDate;
   });
 
-  // ✅ X61: حساب صافي المبيعات (طرح المرتجعات) والمتبقي الفعلي
-  let totalNetSales = 0;
-  let totalActualRemaining = 0;
-  
-  filtered.forEach(s => {
-    const total = Number(s.total) || 0;
-    const paid = Number(s.paid) || 0;
-    const returned = Number(s.returned_total) || 0;
-    
-    // صافي المبيعات للفاتورة
-    totalNetSales += Math.max(0, total - returned);
+  // ✅ X61: حساب صافي المبيعات (Net) والمتبقي الفعلي
+  const totalNet = filtered.reduce((sum, s) => {
+    return sum + Math.max(0, (Number(s.total) || 0) - (Number(s.returned_total) || 0));
+  }, 0);
 
-    // المتبقي الفعلي (بعد خصم المرتجعات الآجلة)
-    const creditReturnsForSale = (state.returns || [])
-      .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
-                   (r.refund_method === 'credit' || r.refundMethod === 'credit'))
-      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
-      
-    totalActualRemaining += Math.max(0, total - paid - creditReturnsForSale);
-  });
+  const totalActualRemaining = filtered.reduce((sum, s) => {
+    const creditReturns = (state.returns || [])
+      .filter(ret => (ret.sale_id === s.id || ret.saleId === s.id) && 
+                     (ret.refund_method === 'credit' || ret.refundMethod === 'credit'))
+      .reduce((sumRet, ret) => sumRet + (Number(ret.total) || 0), 0);
+    return sum + Math.max(0, (Number(s.total) || 0) - (Number(s.paid) || 0) - creditReturns);
+  }, 0);
 
-  // بناء الـ Summary
+  // تحديث الكروت العلوية
   const summaryEl = document.getElementById('salesLogSummary');
   if (summaryEl) {
     const netLabel = tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات';
     summaryEl.innerHTML = `
-      <div class="summary-card"><span>${netLabel}</span><b>${totalNetSales.toFixed(2)} ${state.storeSettings.currency}</b></div>
+      <div class="summary-card"><span>${netLabel}</span><b>${totalNet.toFixed(2)} ${state.storeSettings.currency}</b></div>
       <div class="summary-card"><span>${tr('log_summary_invoices')}</span><b>${filtered.length}</b></div>
       <div class="summary-card"><span>${tr('log_summary_unpaid')}</span><b class="${totalActualRemaining > 0 ? 'red-text' : ''}">${totalActualRemaining.toFixed(2)} ${state.storeSettings.currency}</b></div>
     `;
