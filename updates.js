@@ -138,7 +138,7 @@ function showDiagnostics() {
   if (issues.length === 0) lines.push('✅ لا توجد مشاكل');
   else issues.forEach(i => lines.push(`${i.l === 'critical' ? '🔴' : (i.l === 'warning' ? '🟡' : 'ℹ️')} ${i.t}`));
   lines.push('');
-  lines.push('📱 الإصدار: v7.20.0');
+  lines.push('📱 الإصدار: v7.25.0'); // ✅ تحديث رقم الإصدار
   lines.push(`🕐 ${new Date().toLocaleString('ar-EG')}`);
   const reportText = lines.join('\n');
 
@@ -160,7 +160,12 @@ function showDiagnostics() {
 
   const modal = document.createElement('div');
   modal.id = 'diagnosticsModal';
+  
+  // ✅ X64: إضافة كلاس modal-overlay عشان زرار الرجوع (Back Button) يشتغل
+  modal.className = 'modal-overlay'; 
+  
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
+  
   modal.innerHTML = `
     <div style="background:#fff;border-radius:14px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
       <h3 style="margin:0 0 15px 0;color:#17364c;text-align:center;">${tr('diag_title')}</h3>
@@ -176,7 +181,8 @@ function showDiagnostics() {
       <div style="display:flex;gap:8px;margin-top:20px;">
         <button id="diagCopyBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#176b70;color:#fff;font-weight:bold;cursor:pointer;">${tr('diag_copy_btn')}</button>
         <button id="diagSendBtn" style="flex:1;padding:12px;border:none;border-radius:8px;background:#25D366;color:#fff;font-weight:bold;cursor:pointer;">${tr('diag_send_btn')}</button>
-        <button id="diagCloseBtn" style="flex:0 0 60px;padding:12px;border:none;border-radius:8px;background:#e5e7eb;color:#17364c;font-weight:bold;cursor:pointer;>${tr('diag_close_btn')}</button>
+        <!-- ✅ X64: إصلاح علامة التنصيص الناقصة في cursor:pointer;"> -->
+        <button id="diagCloseBtn" style="flex:0 0 60px;padding:12px;border:none;border-radius:8px;background:#e5e7eb;color:#17364c;font-weight:bold;cursor:pointer;">${tr('diag_close_btn')}</button>
       </div>
     </div>`;
   document.body.appendChild(modal);

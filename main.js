@@ -229,7 +229,7 @@ function setupBackButtonHandler() {
   try { history.pushState({ __matjari: true, page: 'home' }, ''); } catch (e) {}
 
   window.addEventListener('popstate', function(e) {
-    const modals = document.querySelectorAll('.modal-overlay, #paymobIframeModal, #planDetailModal, #customConfirmModal');
+    const modals = document.querySelectorAll('.modal-overlay, #paymobIframeModal, #planDetailModal, #customConfirmModal, #diagnosticsModal');
     let anyOpen = false;
     modals.forEach(function(m) {
       if (m.style.display !== 'none' && m.style.display !== '') {
@@ -393,6 +393,7 @@ setTimeout(() => {
   window._escHandlerInstalled = true;
 
   const CLOSE_MAP = [
+    { id: 'diagnosticsModal', fn: null },
     { id: 'reconciliationModal', fn: 'closeReconciliationModal' },
     { id: 'movesFullLogModal',   fn: 'closeMovesFullLog' },
     { id: 'excelImportModal',    fn: 'closeImportModal' },
