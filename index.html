@@ -107,9 +107,16 @@
     <button data-page="home" onclick="showPage('home')" data-i18n="menu_home">🏠 الرئيسية</button>
     <button data-page="sales" onclick="showPage('sales')" data-i18n="menu_sales">🛒 نقطة البيع</button>
     
+  <div class="nav-group">
+  <button type="button" class="nav-toggle" onclick="toggleSubMenu('salesSubMenu')" aria-expanded="false" aria-controls="salesSubMenu" aria-label="توسيع/طي قائمة المبيعات" data-i18n-aria-label="nav_group_sales_aria">
+    <span>💼 <span data-i18n="nav_group_sales">المبيعات</span></span>
+    <span class="arrow">▼</span>
+  </button>
+  <div id="salesSubMenu" class="sub-menu">
     <button data-page="salesLog" onclick="showPage('salesLog')" data-i18n="sales_log">📋 سجل المبيعات</button>
-    
     <button data-page="invReturns" onclick="showPage('invReturns')" data-i18n="tab_returns">🔄 المرتجعات</button>
+  </div>
+</div>
 
     <div class="nav-group">
       <button type="button" class="nav-toggle" onclick="toggleSubMenu('invSubMenu')">
