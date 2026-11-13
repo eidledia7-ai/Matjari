@@ -37,6 +37,10 @@ function setLanguage(lang) {
   const key = el.getAttribute('data-i18n-title');
   if (dict[key]) el.title = dict[key];
 });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria-label');
+    if (dict[key]) el.setAttribute('aria-label', dict[key]);
+  });
 
   const langDisp = document.getElementById('currentLangDisplay');
   if (langDisp) langDisp.textContent = lang === 'ar' ? 'العربية (Arabic)' : 'English';
@@ -59,14 +63,25 @@ function toggleSubMenu(id) {
   const menu = document.getElementById(id);
   if (!menu) return;
   const isOpened = menu.classList.contains('open');
-  
-  document.querySelectorAll('.sub-menu').forEach(m => m.classList.remove('open'));
+
+  // إغلاق كل الـ sub-menus + تصفير aria-expanded على كل toggle
+  document.querySelectorAll('.sub-menu').forEach(m => {
+    m.classList.remove('open');
+    const toggle = m.previousElementSibling;
+    if (toggle && toggle.classList.contains('nav-toggle')) {
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
   document.querySelectorAll('.nav-toggle').forEach(b => b.classList.remove('open'));
 
   if (!isOpened) {
     menu.classList.add('open');
-    if (menu.previousElementSibling) {
-      menu.previousElementSibling.classList.add('open');
+    const toggle = menu.previousElementSibling;
+    if (toggle) {
+      toggle.classList.add('open');
+      if (toggle.classList.contains('nav-toggle')) {
+        toggle.setAttribute('aria-expanded', 'true');
+      }
     }
   }
 }

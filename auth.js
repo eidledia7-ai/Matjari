@@ -369,7 +369,30 @@ function applyRolePermissions() {
   const employee = state.role === 'employee';
   const allowed = ['sales', 'salesLog', 'finShift'];
 
-  // 1. إخفاء أزرار الصفحات غير المسموحة (Home, Returns, Ops Center)
+  // 0. استعادة finShift لمكانه الأصلي داخل finSubMenu (لو كان قد اتنقل في جلسة موظف سابقة)
+  const finSubMenu = document.getElementById('finSubMenu');
+  const finShiftBtn = document.querySelector('#finSubMenu button[data-page="finShift"]')
+                    || document.querySelector('#mainNavigation > button[data-page="finShift"]');
+  if (finShiftBtn && finSubMenu && finShiftBtn.parentElement !== finSubMenu) {
+    finSubMenu.appendChild(finShiftBtn);
+  }
+
+  // 1. نقل finShift كـ Standalone للموظف (قبل الفلترة عشان finSubMenu يتقيّم فاضي)
+  if (employee && finShiftBtn && finSubMenu) {
+    const finGroup = finSubMenu.closest('.nav-group');
+    const salesGroupEl = document.getElementById('salesSubMenu');
+    const salesGroup = salesGroupEl ? salesGroupEl.closest('.nav-group') : null;
+    if (finGroup && finGroup.parentElement) {
+      const parent = finGroup.parentElement;
+      const reference = (salesGroup && salesGroup.parentElement === parent && salesGroup.nextSibling)
+        ? salesGroup.nextSibling
+        : finGroup;
+      parent.insertBefore(finShiftBtn, reference);
+      finShiftBtn.style.display = '';
+    }
+  }
+
+  // 2. إخفاء أزرار الصفحات غير المسموحة
   document.querySelectorAll('#mainNavigation button[data-page]').forEach(function(btn) {
     const page = btn.getAttribute('data-page');
     if (employee && !allowed.includes(page)) {
@@ -379,7 +402,7 @@ function applyRolePermissions() {
     }
   });
 
-  // 2. إخفاء القوائم المنسدلة اللي كل صفحاتها مخفية (المخزون، الشركاء، الإعدادات، الدعم)
+  // 3. إخفاء القوائم المنسدلة اللي كل صفحاتها مخفية
   document.querySelectorAll('#mainNavigation .nav-group').forEach(function(group) {
     const visibleBtns = Array.from(group.querySelectorAll('button[data-page]')).filter(btn => btn.style.display !== 'none');
     if (employee && visibleBtns.length === 0) {
@@ -389,20 +412,21 @@ function applyRolePermissions() {
     }
   });
 
-  // 3. إخفاء زرار المزامنة
+  // 4. إخفاء زرار المزامنة
   document.querySelectorAll('.sync-btn').forEach(function(btn) {
     if (employee) btn.style.setProperty('display', 'none', 'important');
     else btn.style.display = '';
   });
-  // 4. إخفاء تاب سجل الورديات للموظف (عشان ميشوفش بيانات المحل التاريخية)
-const shiftLogBtn = document.querySelector('.tabs-container button[data-tab="shift-log"]');
-if (shiftLogBtn) {
-  if (employee) {
-    shiftLogBtn.style.setProperty('display', 'none', 'important');
-  } else {
-    shiftLogBtn.style.display = '';
+
+  // 5. إخفاء تاب سجل الورديات للموظف
+  const shiftLogBtn = document.querySelector('.tabs-container button[data-tab="shift-log"]');
+  if (shiftLogBtn) {
+    if (employee) {
+      shiftLogBtn.style.setProperty('display', 'none', 'important');
+    } else {
+      shiftLogBtn.style.display = '';
+    }
   }
-}
 }
 
 async function startAuth() {
