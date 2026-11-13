@@ -676,7 +676,35 @@ async function completeSale() {
   closeCheckoutModal();
 }
 }
+/* ============ v7.26.0 — Sales Log Sort & Presentation Helpers ============ */
 
+function _saleTimestamp(s) {
+  const t = Date.parse(s && s.date);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function _salesCompareDesc(a, b) {
+  const ta = _saleTimestamp(a);
+  const tb = _saleTimestamp(b);
+  if (ta !== tb) return tb - ta;                 // date DESC
+  const ida = String((a && a.id) || '');
+  const idb = String((b && b.id) || '');
+  if (ida !== idb) return idb < ida ? -1 : 1;    // id DESC (tiebreaker)
+  return 0;
+}
+
+function _buildCreditReturnsMap(returnsList) {
+  const map = new Map();
+  (returnsList || []).forEach(function(r) {
+    const method = r.refund_method || r.refundMethod;
+    if (method !== 'credit') return;
+    const sid = r.sale_id || r.saleId;
+    if (!sid) return;
+    const amount = Number(r.total) || 0;
+    map.set(sid, (map.get(sid) || 0) + amount);
+  });
+  return map;
+}
 function renderSales() {
   const container = document.getElementById('salesTable');
   if (!container) return;
@@ -688,6 +716,7 @@ function renderSales() {
   const from = fromInput ? fromInput.value : '';
   const to = toInput ? toInput.value : '';
 
+  // 1) فلترة (نفس المنطق القديم بالحرف)
   const filtered = state.sales.filter(function(s) {
     const custId = s.customer_id || s.customerId;
     const cust = state.customers.find(function(c) { return c.id === custId; });
@@ -700,20 +729,22 @@ function renderSales() {
     return matchSearch && matchDate;
   });
 
-  // ✅ X61: حساب صافي المبيعات (Net) والمتبقي الفعلي
-  const totalNet = filtered.reduce((sum, s) => {
+  // 2) ترتيب موحّد — date DESC ثم id DESC (Doubt 1)
+  filtered.sort(_salesCompareDesc);
+
+  // 3) precompute credit returns (Doubt 3)
+  const creditReturnsMap = _buildCreditReturnsMap(state.returns);
+
+  // 4) إجماليات الكروت العلوية (نفس معادلات X61/X62 بالحرف)
+  const totalNet = filtered.reduce(function(sum, s) {
     return sum + Math.max(0, (Number(s.total) || 0) - (Number(s.returned_total) || 0));
   }, 0);
 
-  const totalActualRemaining = filtered.reduce((sum, s) => {
-    const creditReturns = (state.returns || [])
-      .filter(ret => (ret.sale_id === s.id || ret.saleId === s.id) && 
-                     (ret.refund_method === 'credit' || ret.refundMethod === 'credit'))
-      .reduce((sumRet, ret) => sumRet + (Number(ret.total) || 0), 0);
+  const totalActualRemaining = filtered.reduce(function(sum, s) {
+    const creditReturns = creditReturnsMap.get(s.id) || 0;
     return sum + Math.max(0, (Number(s.total) || 0) - (Number(s.paid) || 0) - creditReturns);
   }, 0);
 
-  // تحديث الكروت العلوية
   const summaryEl = document.getElementById('salesLogSummary');
   if (summaryEl) {
     const netLabel = tr('net_sales_label') !== 'net_sales_label' ? tr('net_sales_label') : 'صافي المبيعات';
@@ -724,56 +755,56 @@ function renderSales() {
     `;
   }
 
-  if (filtered.length === 0) { 
-    container.innerHTML = '<p class="text-muted text-center" style="padding:20px;">' + tr('empty_invoices') + '</p>'; 
-    return; 
+  // 5) بانر تحديد البيانات (لو مفعّل)
+  const bannerHtml = (state.salesDataLimited === true)
+    ? '<div class="sales-limited-banner">' + tr('sales_data_limited_banner') + '</div>'
+    : '';
+
+  if (filtered.length === 0) {
+    container.innerHTML = bannerHtml + '<p class="text-muted text-center" style="padding:20px;">' + tr('empty_invoices') + '</p>';
+    return;
   }
 
   const payLabels = { cash: tr('cash_label'), visa: tr('th_visa_sales'), transfer: tr('th_bank_transfers'), card: tr('card_label') };
 
-  let html = '<div class="invoice-cards-grid">';
+  let html = bannerHtml + '<div class="invoice-cards-grid">';
   filtered.forEach(function(s) {
     const custId = s.customer_id || s.customerId;
     const cust = state.customers.find(function(c) { return c.id === custId; });
     const payMethod = s.pay_method || s.payMethod;
     const payText = payLabels[payMethod] || payMethod || '-';
 
-    const creditReturnsForSale = (state.returns || [])
-      .filter(r => (r.sale_id === s.id || r.saleId === s.id) && 
-                   (r.refund_method === 'credit' || r.refundMethod === 'credit'))
-      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+    // precomputed (O(1) بدل filter+reduce لكل sale)
+    const creditReturnsForSale = creditReturnsMap.get(s.id) || 0;
 
     const total = Number(s.total) || 0;
     const paid = Number(s.paid) || 0;
     const returnedTotal = Number(s.returned_total) || 0;
-    
-    const netTotal = Math.max(0, total - returnedTotal); 
+    const netTotal = Math.max(0, total - returnedTotal);
     const finalRemaining = Math.max(0, total - paid - creditReturnsForSale);
 
-    let statusHtml = '';
-    if (returnedTotal > 0 && finalRemaining <= 0.01) {
-      statusHtml = `<span class="badge status-returned">${tr('status_badge_returned')}</span>`;
-    } else if (returnedTotal > 0 && finalRemaining > 0.01) {
-      statusHtml = `<span class="badge status-partial">${tr('status_badge_partial')}</span>`;
-    } else if (finalRemaining <= 0.01) {
-      statusHtml = `<span class="badge status-paid">${tr('status_badge_paid')}</span>`;
+    // badge الدفع فقط (Doubt 5 = A — فصل كامل)
+    let payStatusHtml = '';
+    if (finalRemaining <= 0.01) {
+      payStatusHtml = '<span class="badge status-paid">' + tr('status_badge_paid') + '</span>';
     } else if (paid > 0) {
-      statusHtml = `<span class="badge status-partial">${tr('status_badge_partial')}</span>`;
+      payStatusHtml = '<span class="badge status-partial">' + tr('status_badge_partial') + '</span>';
     } else {
-      statusHtml = `<span class="badge status-credit">${tr('status_badge_credit')}</span>`;
+      payStatusHtml = '<span class="badge status-credit">' + tr('status_badge_credit') + '</span>';
     }
 
-    let totalHtml = `<b>${netTotal.toFixed(2)}</b>`;
+    // سطر المرتجع تحت الإجمالي (نص صغير — مش badge)
+    let totalHtml = '<b>' + netTotal.toFixed(2) + '</b>';
     if (returnedTotal > 0.01) {
       const retLabel = currentLang === 'en' ? 'Ret: ' : 'مرتجع: ';
-      totalHtml += `<br><span style="font-size:10px;color:#c0392b;">(${retLabel}${returnedTotal.toFixed(2)})</span>`;
+      totalHtml += '<br><span style="font-size:10px;color:#c0392b;">(' + retLabel + returnedTotal.toFixed(2) + ')</span>';
     }
 
     html += `
       <div class="invoice-card">
         <div class="inv-card-header">
           <div class="inv-id">#${escapeHTML(s.id)}</div>
-          ${statusHtml}
+          ${payStatusHtml}
         </div>
         <div class="inv-card-body">
           <div class="inv-row"><span>📅 ${tr('th_date')}:</span> <b>${new Date(s.date).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</b></div>
@@ -799,7 +830,6 @@ function renderSales() {
   html += '</div>';
   container.innerHTML = html;
 }
-
 function safeDeleteRecord(type, id) {
   if (state.role === 'employee') {
     const perms = state.storeSettings.permissions || {};

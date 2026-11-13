@@ -11,6 +11,7 @@ const translations = {
     // 🆕 Sidebar Groups — v7.26.0 (Beta Prep UI/UX)
 nav_group_sales: "المبيعات",
 nav_group_sales_aria: "توسيع/طي قائمة المبيعات",
+sales_data_limited_banner: "⚠️ البيانات معروضة لآخر 500 فاتورة / 30 يوم — للتقارير الكاملة استخدم صفحة التقارير المالية.",
 nav_group_system: "النظام",
 nav_group_system_aria: "توسيع/طي قائمة النظام",
     restoring_data: 'جاري استعادة البيانات...',
@@ -1378,6 +1379,7 @@ backup_rpc_required: 'Internet connection required for full backup',
   back_to_login: "← Back",
   error_generic_prefix: "Error: ",
   error_no_server_connection: "No connection to server",
+  sales_data_limited_banner: "⚠️ Data is limited to the last 500 invoices / 30 days — use Financial Reports for full data.",
   // 🆕 Sidebar Groups — v7.26.0 (Beta Prep UI/UX)
 nav_group_sales: "Sales",
 nav_group_sales_aria: "Expand/Collapse Sales menu",
