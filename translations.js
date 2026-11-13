@@ -1101,6 +1101,7 @@ monthly_goal_cancel: "إلغاء",
 monthly_goal_saved: "تم تحديث الهدف ✅",
 monthly_goal_daily_needed: "محتاج {amount} {cur} في اليوم عشان توصل.",
 monthly_goal_achieved: "🎉 مبروك! حققت هدف الشهر!",
+msg_delete_sale_confirm_title: "تأكيد حذف الفاتورة",
   // ═══════════════════════════════════════════════════════════
   // ==== MISC / SUPPORT ====
   // ═══════════════════════════════════════════════════════════
@@ -1379,6 +1380,7 @@ backup_rpc_required: 'Internet connection required for full backup',
   back_to_login: "← Back",
   error_generic_prefix: "Error: ",
   error_no_server_connection: "No connection to server",
+ msg_delete_sale_confirm_title: "Confirm Invoice Delete", 
   sales_data_limited_banner: "⚠️ Data is limited to the last 500 invoices / 30 days — use Financial Reports for full data.",
   // 🆕 Sidebar Groups — v7.26.0 (Beta Prep UI/UX)
 nav_group_sales: "Sales",

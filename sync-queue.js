@@ -230,6 +230,19 @@ function enqueueSyncOperation(type, payload, idempotencyKey) {
     if (sh) sh._pendingUpload = true;
   }
 
+if (type === 'insert_customer' && payload && payload.id) {
+  const c = (state.customers || []).find(x => x.id === payload.id);
+  if (c) c._pendingUpload = true;
+}
+if (type === 'insert_customer_payment' && payload && payload.id) {
+  const cp = (state.customerPayments || []).find(x => x.id === payload.id);
+  if (cp) cp._pendingUpload = true;
+}
+if (type === 'insert_supplier_payment' && payload && payload.id) {
+  const sp = (state.supplierPayments || []).find(x => x.id === payload.id);
+  if (sp) sp._pendingUpload = true;
+}
+
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
     const synced  = queue.filter(q => q.status === 'synced');
@@ -276,7 +289,16 @@ function hasPendingOpForShift(shiftId, excludeOpId) {
     o.payload && o.payload.id === shiftId
   );
 }
-
+function hasPendingOpForCustomer(customerId, excludeOpId) {
+  if (!customerId) return false;
+  const q = _loadQueue();
+  return q.some(o =>
+    o.id !== excludeOpId &&
+    o.type === 'insert_customer' &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === customerId
+  );
+}
 async function _executeOp(op, ownerId) {
   const c = supabaseClient;
   const t = op.type;
@@ -330,14 +352,44 @@ async function _executeOp(op, ownerId) {
   }
 
   if (t === 'insert_customer_payment') {
-    const { error } = await c.from('customer_payments').upsert({
-      id: p.id, user_id: ownerId, customer_id: p.customer_id,
-      customer_name: p.customer_name, amount: p.amount,
-      date: p.date, notes: p.notes, shift_id: p.shift_id, pay_method: p.pay_method
-    }, { onConflict: 'id' });
-    if (error) throw error;
-    return;
+  const { error } = await c.from('customer_payments').upsert({
+    id: p.id, user_id: ownerId, customer_id: p.customer_id,
+    customer_name: p.customer_name, amount: p.amount,
+    date: p.date, notes: p.notes, shift_id: p.shift_id, pay_method: p.pay_method
+  }, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Part 2: مسح الـ flag بعد النجاح
+  const idxCp = (state.customerPayments || []).findIndex(x => x.id === p.id);
+  if (idxCp !== -1) delete state.customerPayments[idxCp]._pendingUpload;
+  return;
+}
+
+if (t === 'insert_customer') {
+  const { error } = await c.from('customers').upsert({
+    id: p.id, user_id: ownerId, name: p.name, phone: p.phone || '',
+    opening_debt: Number(p.opening_debt) || 0, points: Number(p.points) || 0
+  }, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Part 2: مسح الـ flag — بشرط عدم وجود op أخرى معلقة
+  const idxC = (state.customers || []).findIndex(x => x.id === p.id);
+  if (idxC !== -1 && !hasPendingOpForCustomer(p.id, op.id)) {
+    delete state.customers[idxC]._pendingUpload;
   }
+  return;
+}
+
+if (t === 'insert_supplier_payment') {
+  const { error } = await c.from('supplier_payments').upsert({
+    id: p.id, user_id: ownerId, supplier_id: p.supplier_id,
+    supplier_name: p.supplier_name, amount: p.amount,
+    date: p.date, notes: p.notes
+  }, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Part 2: مسح الـ flag بعد النجاح
+  const idxSp = (state.supplierPayments || []).findIndex(x => x.id === p.id);
+  if (idxSp !== -1) delete state.supplierPayments[idxSp]._pendingUpload;
+  return;
+}
 
   if (t === 'delete_sale') {
     const { error } = await c.from('sales').delete().eq('id', p.id).eq('user_id', ownerId);
