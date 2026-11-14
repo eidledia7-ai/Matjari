@@ -157,10 +157,18 @@ async function retryAllFailedOps() {
   renderOperationsCenter();
 }
 
-function deleteFailedOp(opId) {
+async function deleteFailedOp(opId) {
   const queue = _loadQueue();
   const op = queue.find(o => o.id === opId);
   if (!op) return;
+
+  // ✅ Part B Phase 1: insert_sale → server check + full reversal
+  if (op.type === 'insert_sale') {
+    return await _deleteFailedSaleOp(op);
+  }
+
+  // Legacy path للـ 3 أنواع الأخرى (insert_return / insert_expense / insert_customer_payment)
+  // — بدون تغيير، سيتم ترقيتها في مراحل لاحقة
   if (!confirm(tr('op_delete_confirm') + '\n\n' + tr('op_delete_warning'))) return;
 
   const idx = queue.findIndex(o => o.id === opId);
@@ -187,7 +195,152 @@ function _removeLocalDataForOp(op) {
     state.customerPayments = (state.customerPayments || []).filter(cp => cp.id !== p.id);
   }
 }
+async function _deleteFailedSaleOp(op) {
+  const p = op.payload || {};
+  const saleId = p.id;
+  if (!saleId) return;
 
+  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
+  //             في مرحلة التنظيف بعد Part B (المراحل 2-11 + cleanup pass).
+  const MSG_OFFLINE         = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
+  const MSG_SERVER_ERROR    = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
+  const MSG_EXISTS_TITLE    = 'الفاتورة موجودة على السيرفر';
+  const MSG_EXISTS_BODY     = 'الفاتورة رُفعت بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
+  const MSG_EXISTS_CONFIRM  = 'حذف من القائمة فقط (البيانات تبقى)';
+  const MSG_REVERSAL_CONFIRM= 'لم يتم رفع الفاتورة. سيتم عكس المخزون والرصيد وحذف العملية. متابعة؟';
+  const MSG_REVERSAL_FAIL   = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 1: Server check (precondition إجباري)
+  // ═══════════════════════════════════════════════════════
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(MSG_OFFLINE, 'warning');
+  }
+
+  let existsOnServer = false;
+  try {
+    const { data, error } = await supabaseClient
+      .from('sales').select('id').eq('id', saleId).maybeSingle();
+    if (error) throw error;
+    existsOnServer = !!data;
+  } catch (e) {
+    return showNotification(MSG_SERVER_ERROR(e.message || 'network'), 'error');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2أ: موجود على السيرفر → حذف من القائمة فقط
+  // ═══════════════════════════════════════════════════════
+  if (existsOnServer) {
+    const choice = confirm(
+      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+    );
+    if (!choice) return;
+
+    const q = _loadQueue();
+    const idx = q.findIndex(o => o.id === op.id);
+    if (idx !== -1) q.splice(idx, 1);
+    _saveQueue(q);
+
+    // امسح _pendingUpload عشان syncDown التالي يجيب النسخة من السيرفر
+    const localSale = (state.sales || []).find(s => s.id === saleId);
+    if (localSale) delete localSale._pendingUpload;
+
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('remove_stale_sale_op', {
+        saleId, reason: 'server_has_it', total: Number(p.total) || 0
+      }, saleId);
+    }
+
+    saveData();
+    if (typeof renderAll === 'function') renderAll();
+    renderOperationsCenter();
+    return showNotification(tr('op_deleted'), 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2ب: مش موجود → تأكيد + reversal
+  // ═══════════════════════════════════════════════════════
+  if (!confirm(MSG_REVERSAL_CONFIRM)) return;
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 3: Reversal (synchronous، قبل splice)
+  // ═══════════════════════════════════════════════════════
+  const sale = (state.sales || []).find(s => s.id === saleId);
+
+  // Idempotency: لو sale مش موجود (reversal سابق نجح، splice فشل)، نروح للمرحلة 4
+  if (sale) {
+    try {
+      const missingProducts = [];
+      const items = sale.items || [];
+
+      // 3.1 عكس المخزون
+      items.forEach(item => {
+        const prod = (state.products || []).find(pr => pr.id === item.id);
+        if (prod) {
+          prod.stock = (Number(prod.stock) || 0) + (Number(item.qty) || 0);
+        } else {
+          missingProducts.push(item.id);
+        }
+      });
+
+      // 3.2 عكس رصيد العميل
+      const cid = sale.customer_id || sale.customerId;
+      const remaining = Number(sale.remaining) || 0;
+      if (cid && remaining > 0) {
+        state.customerBalances = state.customerBalances || {};
+        state.customerBalances[cid] = (Number(state.customerBalances[cid]) || 0) - remaining;
+      }
+
+      // 3.3 عكس points_used (Option A — earned مش بنلمسه)
+      const pointsUsed = Number(sale.points_used ?? sale.pointsUsed ?? 0);
+      if (cid && pointsUsed > 0) {
+        const cust = (state.customers || []).find(c => c.id === cid);
+        if (cust) cust.points = (Number(cust.points) || 0) + pointsUsed;
+      }
+
+      // 3.4 إزالة من الـ state
+      state.sales = (state.sales || []).filter(s => s.id !== saleId);
+      state.saleItems = (state.saleItems || []).filter(si =>
+        si.sale_id !== saleId && si.saleId !== saleId);
+
+      // 3.5 audit log
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_sale_op', {
+          saleId,
+          total: Number(sale.total) || 0,
+          itemsRestored: items.length,
+          missingProducts,
+          balanceReverted: remaining,
+          pointsReverted: pointsUsed
+        }, saleId);
+      }
+    } catch (err) {
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_sale_op_error', {
+          saleId, error: err.message || String(err)
+        }, saleId);
+      }
+      return showNotification(MSG_REVERSAL_FAIL(err.message || ''), 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 4: Splice from queue (فقط بعد نجاح reversal)
+  // ═══════════════════════════════════════════════════════
+  const q = _loadQueue();
+  const idx = q.findIndex(o => o.id === op.id);
+  if (idx !== -1) q.splice(idx, 1);
+  _saveQueue(q);
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 5: Finalize
+  // ═══════════════════════════════════════════════════════
+  saveData();
+  if (typeof renderAll === 'function') renderAll();
+  renderOperationsCenter();
+  showNotification(tr('op_deleted'), 'success');
+}
 async function renderStockConflicts() {
   const container = document.getElementById('stockConflictsTable');
   if (!container) return;
