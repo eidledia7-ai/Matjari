@@ -617,6 +617,8 @@ async function initSyncQueue() {
 function clearSyncQueue() {
   const oid = _getQueueOwnerId();
   if (!oid) return;
+  _queueMem = null;      
+  _queueMemOwner = null; 
   try {
     localStorage.removeItem(SYNC_QUEUE_KEY_PREFIX + oid);
     localStorage.removeItem(SYNC_QUEUE_COUNTS_PREFIX + oid);
