@@ -13,26 +13,34 @@ async function saveCustomer() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = id || uid('CUST');
+  const preservedPoints = id ? (state.customers.find(c => c.id === id)?.points || 0) : 0;
 
-  const newCustomer = {
+  // Part 2: payload يطابق ما يتوقعه _executeOp('insert_customer') في sync-queue.js
+  const payload = {
     id: customerId, user_id: ownerId, name: name, phone: phone,
-    opening_debt: openingDebt,
-    points: id ? (state.customers.find(c => c.id === id)?.points || 0) : 0
+    opening_debt: openingDebt, points: preservedPoints
   };
 
-  if (id) {
-    const c = state.customers.find(function(item) { return item.id === id; });
-    if (c) { c.name = name; c.phone = phone; c.openingDebt = openingDebt; c.opening_debt = openingDebt; }
-  } else {
-    state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt, points: 0 });
-  }
+  // Part 2: Half-Commit Precondition — enqueue أولاً
+  // لو الـ queue ممتلئ → null → نوقف قبل أي state mutation
+  const opId = enqueueSyncOperation('insert_customer', payload, customerId);
+  if (opId === null) return;
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('customers').upsert(newCustomer, { onConflict: 'id' });
-    if (error) {
-      console.warn('Customer upload failed:', error);
-      return showNotification(tr('customer_save_fail') + error.message, 'error');
+  // Part 2: state mutation بعد enqueue ناجح
+  if (id) {
+    // Edit — الكائن موجود، flag-marking اتعمل جوّه enqueueSyncOperation على نفس الـ reference
+    const c = state.customers.find(function(item) { return item.id === id; });
+    if (c) {
+      c.name = name; c.phone = phone;
+      c.openingDebt = openingDebt; c.opening_debt = openingDebt;
     }
+  } else {
+    // Create — الكائن مش موجود وقت الـ enqueue، فالعلم صريح في الـ push
+    state.customers.push({
+      id: customerId, name: name, phone: phone,
+      openingDebt: openingDebt, opening_debt: openingDebt, points: 0,
+      _pendingUpload: true
+    });
   }
 
   if (typeof addAuditLog === 'function') {
@@ -167,40 +175,41 @@ async function recordCustomerPayment() {
     if (openShift) currentShiftId = openShift.id;
   }
 
-  const newPayment = {
-    id: uid('CP'), user_id: ownerId, customer_id: customerId, customer_name: cust.name,
+  const paymentId = uid('CP');
+
+  // Part 2: payload يطابق _executeOp('insert_customer_payment')
+  const payload = {
+    id: paymentId, user_id: ownerId, customer_id: customerId, customer_name: cust.name,
     amount: amount, date: date, notes: notes, shift_id: currentShiftId, pay_method: 'cash'
   };
 
+  // Part 2: Half-Commit Precondition — enqueue أولاً
+  const opId = enqueueSyncOperation('insert_customer_payment', payload, paymentId);
+  if (opId === null) return;
+
+  // Part 2: state mutation بعد enqueue ناجح
   state.customerPayments.unshift({
-    id: newPayment.id, customer_id: customerId, customerId: customerId,
+    id: paymentId, customer_id: customerId, customerId: customerId,
     customer_name: cust.name, customerName: cust.name, amount: amount, date: date, notes: notes,
-    shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
+    shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash',
+    _pendingUpload: true
   });
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('customer_payments').insert(newPayment);
-    if (error) {
-      console.warn('Payment upload failed:', error);
-      return showNotification(tr('payment_save_fail') + error.message, 'error');
-    }
-  }
-
   if (typeof addAuditLog === 'function') {
-    addAuditLog('record_customer_payment', { paymentId: newPayment.id, amount, customerId }, newPayment.id);
+    addAuditLog('record_customer_payment', { paymentId: paymentId, amount, customerId }, paymentId);
   }
 
-  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش
+  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (safe update)
   if (customerId) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - amount;
   }
 
- saveData();
-document.getElementById('customerPaymentAmount').value = '';
-document.getElementById('customerPaymentNotes').value = '';
-refreshCurrentPage();
-showNotification(tr('payment_success'));
+  saveData();
+  document.getElementById('customerPaymentAmount').value = '';
+  document.getElementById('customerPaymentNotes').value = '';
+  refreshCurrentPage();
+  showNotification(tr('payment_success'));
 }
 
 function renderCustomerPayments() {
@@ -534,6 +543,8 @@ function renderPurchases() {
 }
 
 async function recordSupplierPayment() {
+  // Part 2: isReadOnlyMode check — كان مفقود (مخالف للمقدس #2) — أُضيف ضمن نطاق الـ 3 دوال
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const supplierId = document.getElementById('supplierPaymentSupplier').value;
@@ -544,33 +555,31 @@ async function recordSupplierPayment() {
   if (!supplierId || !Number.isFinite(amount) || amount <= 0) return showNotification(tr('notify_select_supplier_amount'), 'error');
 
   const sup = state.suppliers.find(function(s) { return s.id === supplierId; });
-  // ✅ v7.10.2 — ترجمة
   if (!sup) return showNotification(tr('supplier_not_found'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const paymentId = uid('SUPP');
 
-  const newPayment = {
-    id: uid('SUPP'), user_id: ownerId, supplier_id: supplierId,
+  // Part 2: payload يطابق _executeOp('insert_supplier_payment')
+  const payload = {
+    id: paymentId, user_id: ownerId, supplier_id: supplierId,
     supplier_name: sup.name, amount: amount, date: date, notes: notes
   };
 
+  // Part 2: Half-Commit Precondition — enqueue أولاً
+  const opId = enqueueSyncOperation('insert_supplier_payment', payload, paymentId);
+  if (opId === null) return;
+
+  // Part 2: state mutation بعد enqueue ناجح
   state.supplierPayments.unshift({
-    id: newPayment.id, supplier_id: supplierId, supplierId: supplierId,
+    id: paymentId, supplier_id: supplierId, supplierId: supplierId,
     supplier_name: sup.name, supplierName: sup.name,
-    amount: amount, date: date, notes: notes
+    amount: amount, date: date, notes: notes,
+    _pendingUpload: true
   });
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('supplier_payments').insert(newPayment);
-    if (error) {
-      console.warn('Supplier payment upload failed:', error);
-      // ✅ v7.10.2 — ترجمة
-      return showNotification(tr('supplier_payment_save_fail') + error.message, 'error');
-    }
-  }
-
   if (typeof addAuditLog === 'function') {
-    addAuditLog('record_supplier_payment', { paymentId: newPayment.id, amount, supplierId }, newPayment.id);
+    addAuditLog('record_supplier_payment', { paymentId: paymentId, amount, supplierId }, paymentId);
   }
 
   saveData();

@@ -1421,64 +1421,81 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 STORAGE TEST PANEL -->
-<div id="storageTestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runStorageTests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Storage</button>
-  <button onclick="document.getElementById('storageTestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="storageTestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:300px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 PARTNERS TEST PANEL -->
+<div id="partnersTestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runPartnersTests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Partners</button>
+  <button onclick="document.getElementById('partnersTestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="partnersTestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:300px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runStorageTests() {
-  const results = document.getElementById('storageTestResults');
+async function runPartnersTests() {
+  const results = document.getElementById('partnersTestResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   
   try {
     log('⏳ جاري الاختبار...');
     
-    // Test 1: Customer Offline Create Protection
-    const cId = 'CUST-TEST-' + Date.now();
-    state.customers.push({ id: cId, name: 'Test Customer', phone: '', opening_debt: 0, _pendingUpload: true });
-    log('1️⃣ اختبار حماية عميل أوفلاين:');
-    log('   - محاكاة syncDown...');
-    await syncDown(state.currentUser.id);
-    const exists = state.customers.find(c => c.id === cId);
-    log(exists && exists._pendingUpload ? '   ✅ العميل محمي ولم يمسح' : '   ❌ العميل اختفى!');
+    // Mock enqueue to avoid actual DB insert (for safe testing)
+    const originalEnqueue = window.enqueueSyncOperation;
+    window.enqueueSyncOperation = function(type, payload, key) {
+      if (['insert_customer', 'insert_customer_payment', 'insert_supplier_payment'].includes(type)) {
+         return 'OP-MOCK';
+      }
+      return originalEnqueue(type, payload, key);
+    };
+
+    // 1. Test saveCustomer (Create)
+    const testCustName = 'Test Cust ' + Date.now();
+    document.getElementById('customerName').value = testCustName;
+    document.getElementById('customerPhone').value = '010';
+    document.getElementById('customerId').value = '';
     
-    // Test 2: Customer Payment + Balance Recalc
-    const cpId = 'CP-TEST-' + Date.now();
-    const testAmount = 150;
-    // بنفترض إن العميل ده ليه رصيد في السيرفر (أو صفر)
-    const beforeBal = Number(state.customerBalances[cId]) || 0;
+    await saveCustomer();
+    const createdCust = state.customers.find(c => c.name === testCustName);
+    log('1️⃣ اختبار إضافة عميل جديد (Create):');
+    log(createdCust && createdCust._pendingUpload ? '   ✅ العميل اتضاف مع flag' : '   ❌ فشل');
+
+    // 2. Test recordCustomerPayment
+    const testAmount = 100;
+    document.getElementById('customerPaymentCustomer').value = createdCust.id;
+    document.getElementById('customerPaymentAmount').value = testAmount;
+    document.getElementById('customerPaymentDate').value = today();
     
-    state.customerPayments.push({ id: cpId, customer_id: cId, amount: testAmount, _pendingUpload: true });
+    // Need to set balance first to avoid confirm
+    state.customerBalances[createdCust.id] = 500;
+
+    await recordCustomerPayment();
+    const createdPayment = state.customerPayments.find(p => p.customer_id === createdCust.id && p.amount === testAmount);
+    log('\n2️⃣ اختبار إضافة دفعة عميل (Payment):');
+    log(createdPayment && createdPayment._pendingUpload ? '   ✅ الدفعة اتضافت مع flag' : '   ❌ فشل');
+    log('   الرصيد بعد الدفعة: ' + state.customerBalances[createdCust.id] + ' (المفروض 400)');
+    log(state.customerBalances[createdCust.id] === 400 ? '   ✅ الرصيد اتخصم صح' : '   ❌ الرصيد غلط');
+
+    // 3. Test recordSupplierPayment
+    const testSupId = 'SUP-TEST';
+    if (!state.suppliers.find(s => s.id === testSupId)) {
+        state.suppliers.push({ id: testSupId, name: 'Test Sup', phone: '', openingDebt: 0, opening_debt: 0 });
+    }
     
-    log('\n2️⃣ اختبار حماية الدفعة وتصحيح الرصيد:');
-    log('   - الرصيد قبل: ' + beforeBal);
-    log('   - محاكاة syncDown...');
-    await syncDown(state.currentUser.id);
-    
-    const paymentExists = state.customerPayments.find(p => p.id === cpId);
-    const afterBal = Number(state.customerBalances[cId]) || 0;
-    
-    log(paymentExists ? '   ✅ الدفعة محمية' : '   ❌ الدفعة اختفت!');
-    log('   - الرصيد بعد: ' + afterBal);
-    log('   - المفروض يكون: ' + (beforeBal - testAmount));
-    log(afterBal === (beforeBal - testAmount) ? '   ✅ الرصيد اتخصم صح' : '   ❌ الرصيد غلط!');
-    
-    // Cleanup
-    state.customers = state.customers.filter(c => c.id !== cId);
-    state.customerPayments = state.customerPayments.filter(p => p.id !== cpId);
-    delete state.customerBalances[cId];
-    saveData();
+    document.getElementById('supplierPaymentSupplier').value = testSupId;
+    document.getElementById('supplierPaymentAmount').value = 50;
+    document.getElementById('supplierPaymentDate').value = today();
+
+    await recordSupplierPayment();
+    const createdSupPayment = state.supplierPayments.find(p => p.supplier_id === testSupId && p.amount === 50);
+    log('\n3️⃣ اختبار إضافة دفعة مورد (Supplier Payment):');
+    log(createdSupPayment && createdSupPayment._pendingUpload ? '   ✅ الدفعة اتضافت مع flag' : '   ❌ فشل');
+
+    // Restore enqueue
+    window.enqueueSyncOperation = originalEnqueue;
     log('\n🧹 تم التنظيف.');
-    
   } catch (e) {
     log('❌ خطأ: ' + e.message);
   }
 }
 </script>
-<!-- 🧪 END STORAGE TEST PANEL -->
+<!-- 🧪 END PARTNERS TEST PANEL -->
 </body>
 </html>
