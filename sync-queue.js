@@ -234,6 +234,10 @@ if (type === 'insert_customer' && payload && payload.id) {
   const c = (state.customers || []).find(x => x.id === payload.id);
   if (c) c._pendingUpload = true;
 }
+if (type === 'insert_customer' && payload && payload.id) {
+  const c = (state.customers || []).find(x => x.id === payload.id);
+  if (c) c._pendingUpload = true;
+}
 if (type === 'insert_customer_payment' && payload && payload.id) {
   const cp = (state.customerPayments || []).find(x => x.id === payload.id);
   if (cp) cp._pendingUpload = true;
@@ -242,31 +246,24 @@ if (type === 'insert_supplier_payment' && payload && payload.id) {
   const sp = (state.supplierPayments || []).find(x => x.id === payload.id);
   if (sp) sp._pendingUpload = true;
 }
-if (type === 'insert_supplier_payment' && payload && payload.id) {
-  const sp = (state.supplierPayments || []).find(x => x.id === payload.id);
-  if (sp) sp._pendingUpload = true;
+
+// ✅ Part B Phase 3: insert_expense — defensive marking
+if (type === 'insert_expense' && payload && payload.id) {
+  const ex = (state.expenses || []).find(x => x.id === payload.id);
+  if (ex) ex._pendingUpload = true;
 }
 
-+ // ✅ Part B Phase 3: insert_expense — defensive marking
-+ // (redundant في create لأن saveExpense بيضيفه يدويًا، لكنه ضروري لو
-+ //  الـ entity موجودة في state — edit case مستقبلي أو replay)
-+ if (type === 'insert_expense' && payload && payload.id) {
-+   const ex = (state.expenses || []).find(x => x.id === payload.id);
-+   if (ex) ex._pendingUpload = true;
-+ }
+if (queue.length > SYNC_QUEUE_MAX_SIZE) {
+  const pending = queue.filter(q => q.status !== 'synced');
+  const synced  = queue.filter(q => q.status === 'synced');
+  const keepSynced = Math.max(0, SYNC_QUEUE_MAX_SIZE - pending.length);
+  _saveQueue(synced.slice(-keepSynced).concat(pending));
+} else {
+  _saveQueue(queue);
+}
 
-  if (queue.length > SYNC_QUEUE_MAX_SIZE) {
-  if (queue.length > SYNC_QUEUE_MAX_SIZE) {
-    const pending = queue.filter(q => q.status !== 'synced');
-    const synced  = queue.filter(q => q.status === 'synced');
-    const keepSynced = Math.max(0, SYNC_QUEUE_MAX_SIZE - pending.length);
-    _saveQueue(synced.slice(-keepSynced).concat(pending));
-  } else {
-    _saveQueue(queue);
-  }
-
-  if (navigator.onLine && supabaseClient) setTimeout(() => drainSyncQueue(), 100);
-  return op.id;
+if (navigator.onLine && supabaseClient) setTimeout(() => drainSyncQueue(), 100);
+return op.id;
 }
 
 function getPendingSyncCount() { return getSyncQueueCounts().pending; }
