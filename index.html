@@ -1421,16 +1421,16 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 PART B TEST PANEL -->
-<div id="partBTestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runPartBTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Part B</button>
-  <button onclick="document.getElementById('partBTestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="partBTestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:400px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 PHASE 2 TEST PANEL -->
+<div id="phase2TestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runPhase2Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Phase 2</button>
+  <button onclick="document.getElementById('phase2TestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="phase2TestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:400px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runPartBTest() {
-  const results = document.getElementById('partBTestResults');
+async function runPhase2Test() {
+  const results = document.getElementById('phase2TestResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
@@ -1440,129 +1440,111 @@ async function runPartBTest() {
   
   try {
     // ═══════════════════════════════════════════════════════
-    log('=== اختبار 1: Reversal logic (server 404) ===');
-    // Setup: fake product, customer, sale, op
-    const testProdId = 'TEST-PROD-' + Date.now();
-    const testCustId = 'TEST-CUST-' + Date.now();
-    const testSaleId = 'TEST-SALE-' + Date.now();
-    const testOpId = 'TEST-OP-' + Date.now();
+    log('=== اختبار 1: Reversal cash ===');
+    const tId = Date.now();
+    const testProdId = 'TP-' + tId;
+    const testSaleId = 'TS-' + tId;
+    const testReturnId = 'TR-' + tId;
+    const testOpId = 'TO-' + tId;
     
-    state.products.push({ id: testProdId, name: 'Test Product', stock: 8, price: 100, cost: 50 });
-    state.customers.push({ id: testCustId, name: 'Test Cust', points: -5, opening_debt: 0 });
-    state.customerBalances[testCustId] = 700;
-    state.sales.push({
-      id: testSaleId, total: 200, paid: 0, remaining: 200,
-      customer_id: testCustId, points_used: 5,
-      items: [{ id: testProdId, name: 'Test Product', qty: 2, price: 100 }],
-      _pendingUpload: true
-    });
-    state.saleItems.push({ id: 'SI-TEST-' + Date.now(), sale_id: testSaleId, product_id: testProdId, product_name: 'Test Product', qty: 2, price: 100 });
+    state.products.push({ id: testProdId, name: 'Test Prod', stock: 8, price: 100, cost: 50 });
+    state.sales.push({ id: testSaleId, total: 200, paid: 200, returned_total: 50, net_total: 150, items: [] });
+    state.returns.push({ id: testReturnId, sale_id: testSaleId, product_id: testProdId, qty: 2, total: 50, refund_method: 'cash', _pendingUpload: true });
+    state.stockMoves.push({ id: 'SM-' + tId, type: 'return', product_id: testProdId, qty: 2, reason: tr('return_for_invoice_prefix') + testSaleId, date: new Date().toISOString() });
     
     const q = _loadQueue();
-    q.push({
-      id: testOpId, type: 'insert_sale',
-      payload: { id: testSaleId, total: 200 },
-      idempotencyKey: testSaleId, attempts: 5, maxAttempts: 5,
-      status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
-    });
+    q.push({ id: testOpId, type: 'insert_return', payload: { id: testReturnId, sale_id: testSaleId, product_id: testProdId, qty: 2, total: 50, refund_method: 'cash' }, idempotencyKey: testReturnId, attempts: 5, maxAttempts: 5, status: 'failed', lastError: 'Test', createdAt: new Date().toISOString() });
     _saveQueue(q);
     
-    log('  Before: stock=8, balance=700, points=-5');
+    log('  Before: stock=8, sale.returned_total=50, net_total=150');
     
-    // Mock confirm → true, showNotification → silent
     window.confirm = () => true;
     window.showNotification = () => {};
-    
     await deleteFailedOp(testOpId);
-    
     window.confirm = originalConfirm;
     window.showNotification = originalShowNotif;
     
-    // Verify
-    const prodAfter = state.products.find(p => p.id === testProdId);
-    const custAfter = state.customers.find(c => c.id === testCustId);
-    const saleAfter = state.sales.find(s => s.id === testSaleId);
+    const pAfter = state.products.find(p => p.id === testProdId);
+    const sAfter = state.sales.find(s => s.id === testSaleId);
+    const rAfter = state.returns.find(r => r.id === testReturnId);
+    const smAfter = state.stockMoves.find(sm => sm.reason === tr('return_for_invoice_prefix') + testSaleId);
     const opAfter = _loadQueue().find(o => o.id === testOpId);
     
-    log('  After: stock=' + (prodAfter ? prodAfter.stock : 'N/A') + ', balance=' + state.customerBalances[testCustId] + ', points=' + (custAfter ? custAfter.points : 'N/A'));
+    log('  After: stock=' + (pAfter ? pAfter.stock : 'N/A') + ', returned_total=' + (sAfter ? sAfter.returned_total : 'N/A') + ', net_total=' + (sAfter ? sAfter.net_total : 'N/A'));
     
-    check('Stock restored (8 → 10)', prodAfter && prodAfter.stock === 10);
-    check('Balance restored (700 → 500)', state.customerBalances[testCustId] === 500);
-    check('Points restored (-5 → 0)', custAfter && custAfter.points === 0);
-    check('Sale removed from state', !saleAfter);
-    check('Op removed from queue', !opAfter);
+    check('Stock restored (8 → 10)', pAfter && pAfter.stock === 10);
+    check('returned_total reset (50 → 0)', sAfter && sAfter.returned_total === 0);
+    check('net_total reset (150 → 200)', sAfter && sAfter.net_total === 200);
+    check('Return removed', !rAfter);
+    check('Stock move removed', !smAfter);
+    check('Op removed', !opAfter);
     
-    // Cleanup
+    // Cleanup 1
     state.products = state.products.filter(p => p.id !== testProdId);
-    state.customers = state.customers.filter(c => c.id !== testCustId);
-    state.saleItems = state.saleItems.filter(si => si.sale_id !== testSaleId);
-    delete state.customerBalances[testCustId];
+    state.sales = state.sales.filter(s => s.id !== testSaleId);
     
     // ═══════════════════════════════════════════════════════
-    log('\n=== اختبار 2: Offline block ===');
+    log('\n=== اختبار 2: Reversal credit (balance) ===');
+    const tId2 = Date.now();
+    const testProd2 = 'TP2-' + tId2;
+    const testCust2 = 'TC2-' + tId2;
+    const testSale2 = 'TS2-' + tId2;
+    const testRet2 = 'TR2-' + tId2;
+    const testOp2 = 'TO2-' + tId2;
+    
+    state.products.push({ id: testProd2, name: 'Test', stock: 5, price: 100 });
+    state.customers.push({ id: testCust2, name: 'Test Cust', points: 0, opening_debt: 0 });
+    state.customerBalances[testCust2] = 500; // بعد credit return 100
+    state.sales.push({ id: testSale2, total: 200, paid: 200, returned_total: 100, net_total: 100, customer_id: testCust2, items: [] });
+    state.returns.push({ id: testRet2, sale_id: testSale2, product_id: testProd2, customer_id: testCust2, qty: 1, total: 100, refund_method: 'credit', _pendingUpload: true });
+    state.stockMoves.push({ id: 'SM2-' + tId2, type: 'return', product_id: testProd2, qty: 1, reason: tr('return_for_invoice_prefix') + testSale2, date: new Date().toISOString() });
+    
+    const q2 = _loadQueue();
+    q2.push({ id: testOp2, type: 'insert_return', payload: { id: testRet2, sale_id: testSale2, product_id: testProd2, customer_id: testCust2, qty: 1, total: 100, refund_method: 'credit' }, idempotencyKey: testRet2, attempts: 5, maxAttempts: 5, status: 'failed', lastError: 'Test', createdAt: new Date().toISOString() });
+    _saveQueue(q2);
+    
+    log('  Before: balance=500 (بعد خصم 100 credit return)');
+    
+    window.confirm = () => true;
+    window.showNotification = () => {};
+    await deleteFailedOp(testOp2);
+    window.confirm = originalConfirm;
+    window.showNotification = originalShowNotif;
+    
+    log('  After: balance=' + state.customerBalances[testCust2] + ' (المفروض 600)');
+    check('Balance restored (500 → 600)', state.customerBalances[testCust2] === 600);
+    
+    // Cleanup 2
+    state.products = state.products.filter(p => p.id !== testProd2);
+    state.customers = state.customers.filter(c => c.id !== testCust2);
+    state.sales = state.sales.filter(s => s.id !== testSale2);
+    state.stockMoves = state.stockMoves.filter(sm => sm.id !== 'SM2-' + tId2);
+    delete state.customerBalances[testCust2];
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== اختبار 3: Offline block ===');
     const origOnLine = navigator.onLine;
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
     
-    const testOp2Id = 'TEST-OP2-' + Date.now();
-    const q2 = _loadQueue();
-    q2.push({
-      id: testOp2Id, type: 'insert_sale',
-      payload: { id: 'FAKE-NOT-EXIST', total: 100 },
-      idempotencyKey: 'FAKE-NOT-EXIST', attempts: 5, maxAttempts: 5,
-      status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
-    });
-    _saveQueue(q2);
+    const tId3 = Date.now();
+    const testOp3 = 'TO3-' + tId3;
+    const q3 = _loadQueue();
+    q3.push({ id: testOp3, type: 'insert_return', payload: { id: 'FAKE', sale_id: 'FAKE', product_id: 'FAKE', qty: 1, total: 10 }, idempotencyKey: 'FAKE', attempts: 5, maxAttempts: 5, status: 'failed', lastError: 'Test', createdAt: new Date().toISOString() });
+    _saveQueue(q3);
     
-    window.confirm = () => true;
     let notifCalled = false;
     window.showNotification = (msg, type) => { if (msg.includes('الاتصال')) notifCalled = true; };
     
-    await deleteFailedOp(testOp2Id);
+    await deleteFailedOp(testOp3);
     
     window.showNotification = originalShowNotif;
-    window.confirm = originalConfirm;
     Object.defineProperty(navigator, 'onLine', { value: origOnLine, configurable: true });
     
-    const op2After = _loadQueue().find(o => o.id === testOp2Id);
     check('Offline notified', notifCalled);
-    check('Op NOT removed (blocked)', op2After !== undefined);
+    check('Op NOT removed', !!_loadQueue().find(o => o.id === testOp3));
     
-    // Cleanup
-    const q3 = _loadQueue().filter(o => o.id !== testOp2Id);
-    _saveQueue(q3);
-    
-    // ═══════════════════════════════════════════════════════
-    log('\n=== اختبار 3: Server has it (real sale) ===');
-    if (state.sales.length > 0 && navigator.onLine) {
-      const realSale = state.sales[0];
-      log('  Using real sale: ' + realSale.id);
-      
-      const testOp3Id = 'TEST-OP3-' + Date.now();
-      const q4 = _loadQueue();
-      q4.push({
-        id: testOp3Id, type: 'insert_sale',
-        payload: { id: realSale.id, total: realSale.total },
-        idempotencyKey: realSale.id, attempts: 5, maxAttempts: 5,
-        status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
-      });
-      _saveQueue(q4);
-      
-      window.confirm = () => true;
-      window.showNotification = () => {};
-      
-      await deleteFailedOp(testOp3Id);
-      
-      window.confirm = originalConfirm;
-      window.showNotification = originalShowNotif;
-      
-      const saleStillThere = state.sales.find(s => s.id === realSale.id);
-      const op3After = _loadQueue().find(o => o.id === testOp3Id);
-      
-      check('Real sale still in state (server has it)', !!saleStillThere);
-      check('Op removed from queue', !op3After);
-    } else {
-      log('  (skipped - no real sales or offline)');
-    }
+    // Cleanup 3
+    _saveQueue(_loadQueue().filter(o => o.id !== testOp3));
     
     saveData();
     log('\n🧹 تم التنظيف');
@@ -1575,6 +1557,6 @@ async function runPartBTest() {
   }
 }
 </script>
-<!-- 🧪 END PART B TEST PANEL -->
+<!-- 🧪 END PHASE 2 TEST PANEL -->
 </body>
 </html>

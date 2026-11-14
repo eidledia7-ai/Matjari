@@ -167,8 +167,13 @@ async function deleteFailedOp(opId) {
     return await _deleteFailedSaleOp(op);
   }
 
-  // Legacy path للـ 3 أنواع الأخرى (insert_return / insert_expense / insert_customer_payment)
-  // — بدون تغيير، سيتم ترقيتها في مراحل لاحقة
+  // ✅ Part B Phase 2: insert_return → server check + full reversal
+  if (op.type === 'insert_return') {
+    return await _deleteFailedReturnOp(op);
+  }
+
+  // Legacy path للأنواع الأخرى (insert_expense / insert_customer_payment)
+  // — بدون تغيير، سيتم ترقيتها في مراحل لاحقة (Phase 3+)
   if (!confirm(tr('op_delete_confirm') + '\n\n' + tr('op_delete_warning'))) return;
 
   const idx = queue.findIndex(o => o.id === opId);
@@ -341,6 +346,199 @@ async function _deleteFailedSaleOp(op) {
   renderOperationsCenter();
   showNotification(tr('op_deleted'), 'success');
 }
+async function _deleteFailedReturnOp(op) {
+  const p = op.payload || {};
+  const returnId = p.id;
+  if (!returnId) return;
+
+  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
+  //             في مرحلة التنظيف بعد Part B (المراحل 3-11 + cleanup pass).
+  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
+  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
+  const MSG_EXISTS_TITLE     = 'المرتجع موجود على السيرفر';
+  const MSG_EXISTS_BODY      = 'المرتجع رُفع بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
+  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
+  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع المرتجع. سيتم عكس المخزون والرصيد وحذف العملية. متابعة؟';
+  const MSG_REVERSAL_FAIL    = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
+  const MSG_DUPLICATE_TITLE  = 'يوجد مرتجع آخر معلّق بنفس الرقم';
+  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس المرتجع. راجع مركز العمليات أولاً.';
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 0: Duplicate op check
+  // ═══════════════════════════════════════════════════════
+  const dupQueue = _loadQueue();
+  const hasDuplicate = dupQueue.some(o =>
+    o.id !== op.id &&
+    o.type === 'insert_return' &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === returnId
+  );
+  if (hasDuplicate) {
+    return showNotification(MSG_DUPLICATE_TITLE + ' — ' + MSG_DUPLICATE_BODY, 'warning');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 1: Server check (precondition إجباري)
+  // ═══════════════════════════════════════════════════════
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(MSG_OFFLINE, 'warning');
+  }
+
+  let existsOnServer = false;
+  try {
+    const { data, error } = await supabaseClient
+      .from('returns').select('id').eq('id', returnId).maybeSingle();
+    if (error) throw error;
+    existsOnServer = !!data;
+  } catch (e) {
+    return showNotification(MSG_SERVER_ERROR(e.message || 'network'), 'error');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2أ: موجود على السيرفر → حذف من القائمة فقط
+  // ═══════════════════════════════════════════════════════
+  if (existsOnServer) {
+    const choice = confirm(
+      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+    );
+    if (!choice) return;
+
+    const q = _loadQueue();
+    const idx = q.findIndex(o => o.id === op.id);
+    if (idx !== -1) q.splice(idx, 1);
+    _saveQueue(q);
+
+    // امسح _pendingUpload عشان syncDown التالي يجيب النسخة من السيرفر
+    const localReturn = (state.returns || []).find(r => r.id === returnId);
+    if (localReturn) delete localReturn._pendingUpload;
+
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('remove_stale_return_op', {
+        returnId, saleId: p.sale_id, reason: 'server_has_it',
+        total: Number(p.total) || 0
+      }, returnId);
+    }
+
+    saveData();
+    if (typeof renderAll === 'function') renderAll();
+    renderOperationsCenter();
+    return showNotification(tr('op_deleted'), 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2ب: مش موجود → تأكيد + reversal
+  // ═══════════════════════════════════════════════════════
+  if (!confirm(MSG_REVERSAL_CONFIRM)) return;
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 3: Reversal (synchronous، قبل splice)
+  // ═══════════════════════════════════════════════════════
+  const ret = (state.returns || []).find(r => r.id === returnId);
+
+  // Idempotency: لو return مش موجود في state (reversal سابق نجح، splice فشل)، نروح للمرحلة 4
+  if (ret) {
+    try {
+      const saleId = ret.sale_id || ret.saleId;
+      const productId = ret.product_id || ret.productId;
+      const customerId = ret.customer_id || ret.customerId;
+      const qty = Number(ret.qty) || 0;
+      const returnValue = Number(ret.total) || 0;
+      const refundMethod = ret.refund_method || ret.refundMethod;
+
+      const sale = (state.sales || []).find(s => s.id === saleId);
+      const prod = (state.products || []).find(pr => pr.id === productId);
+
+      // 3.1 عكس sale.returned_total + net_total
+      if (sale) {
+        const newReturnedTotal = Math.max(0, (Number(sale.returned_total) || 0) - returnValue);
+        sale.returned_total = newReturnedTotal;
+        sale.returnedTotal = newReturnedTotal;
+        const newNetTotal = Math.max(0, (Number(sale.total) || 0) - newReturnedTotal);
+        sale.net_total = newNetTotal;
+        sale.netTotal = newNetTotal;
+      }
+
+      // 3.2 عكس customerBalances (فقط لو credit)
+      let restoredBalance = 0;
+      if (refundMethod === 'credit' && customerId) {
+        state.customerBalances = state.customerBalances || {};
+        state.customerBalances[customerId] =
+          (Number(state.customerBalances[customerId]) || 0) + returnValue;
+        restoredBalance = returnValue;
+      }
+
+      // 3.3 عكس prod.stock
+      let restoredStock = 0;
+      if (prod) {
+        prod.stock = Math.max(0, (Number(prod.stock) || 0) - qty);
+        restoredStock = qty;
+      }
+
+      // 3.4 إزالة من state.returns
+      state.returns = (state.returns || []).filter(r => r.id !== returnId);
+
+      // 3.5 إزالة stock_move المحلي (idempotent)
+      let removedLocalStockMoveId = null;
+      if (saleId) {
+        const expectedReason = tr('return_for_invoice_prefix') + saleId;
+        const smCandidates = (state.stockMoves || []).filter(sm =>
+          sm.type === 'return' &&
+          (sm.product_id === productId || sm.productId === productId) &&
+          Number(sm.qty) === qty &&
+          sm.reason === expectedReason
+        );
+        if (smCandidates.length > 0) {
+          // الأحدث — sort بـ date desc
+          smCandidates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          removedLocalStockMoveId = smCandidates[0].id;
+          state.stockMoves = state.stockMoves.filter(sm => sm.id !== removedLocalStockMoveId);
+        }
+      }
+
+      // 3.6 audit log
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_return_op', {
+          returnId,
+          saleId,
+          productId,
+          qty,
+          returnValue,
+          refundMethod,
+          restoredStock,
+          restoredBalance,
+          missingProduct: !prod,
+          missingSale: !sale,
+          removedLocalStockMoveId
+        }, returnId);
+      }
+    } catch (err) {
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_return_op_error', {
+          returnId, error: err.message || String(err)
+        }, returnId);
+      }
+      return showNotification(MSG_REVERSAL_FAIL(err.message || ''), 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 4: Splice from queue (فقط بعد نجاح reversal)
+  // ═══════════════════════════════════════════════════════
+  const q = _loadQueue();
+  const idx = q.findIndex(o => o.id === op.id);
+  if (idx !== -1) q.splice(idx, 1);
+  _saveQueue(q);
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 5: Finalize
+  // ═══════════════════════════════════════════════════════
+  saveData();
+  if (typeof renderAll === 'function') renderAll();
+  renderOperationsCenter();
+  showNotification(tr('op_deleted'), 'success');
+}
+
 async function renderStockConflicts() {
   const container = document.getElementById('stockConflictsTable');
   if (!container) return;
