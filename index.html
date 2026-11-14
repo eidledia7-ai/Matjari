@@ -1421,6 +1421,64 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+<!-- 🧪 STORAGE TEST PANEL -->
+<div id="storageTestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runStorageTests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Storage</button>
+  <button onclick="document.getElementById('storageTestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="storageTestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:300px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+</div>
 
+<script>
+async function runStorageTests() {
+  const results = document.getElementById('storageTestResults');
+  results.innerHTML = '';
+  const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
+  
+  try {
+    log('⏳ جاري الاختبار...');
+    
+    // Test 1: Customer Offline Create Protection
+    const cId = 'CUST-TEST-' + Date.now();
+    state.customers.push({ id: cId, name: 'Test Customer', phone: '', opening_debt: 0, _pendingUpload: true });
+    log('1️⃣ اختبار حماية عميل أوفلاين:');
+    log('   - محاكاة syncDown...');
+    await syncDown(state.currentUser.id);
+    const exists = state.customers.find(c => c.id === cId);
+    log(exists && exists._pendingUpload ? '   ✅ العميل محمي ولم يمسح' : '   ❌ العميل اختفى!');
+    
+    // Test 2: Customer Payment + Balance Recalc
+    const cpId = 'CP-TEST-' + Date.now();
+    const testAmount = 150;
+    // بنفترض إن العميل ده ليه رصيد في السيرفر (أو صفر)
+    const beforeBal = Number(state.customerBalances[cId]) || 0;
+    
+    state.customerPayments.push({ id: cpId, customer_id: cId, amount: testAmount, _pendingUpload: true });
+    
+    log('\n2️⃣ اختبار حماية الدفعة وتصحيح الرصيد:');
+    log('   - الرصيد قبل: ' + beforeBal);
+    log('   - محاكاة syncDown...');
+    await syncDown(state.currentUser.id);
+    
+    const paymentExists = state.customerPayments.find(p => p.id === cpId);
+    const afterBal = Number(state.customerBalances[cId]) || 0;
+    
+    log(paymentExists ? '   ✅ الدفعة محمية' : '   ❌ الدفعة اختفت!');
+    log('   - الرصيد بعد: ' + afterBal);
+    log('   - المفروض يكون: ' + (beforeBal - testAmount));
+    log(afterBal === (beforeBal - testAmount) ? '   ✅ الرصيد اتخصم صح' : '   ❌ الرصيد غلط!');
+    
+    // Cleanup
+    state.customers = state.customers.filter(c => c.id !== cId);
+    state.customerPayments = state.customerPayments.filter(p => p.id !== cpId);
+    delete state.customerBalances[cId];
+    saveData();
+    log('\n🧹 تم التنظيف.');
+    
+  } catch (e) {
+    log('❌ خطأ: ' + e.message);
+  }
+}
+</script>
+<!-- 🧪 END STORAGE TEST PANEL -->
 </body>
 </html>

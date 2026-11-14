@@ -31,6 +31,10 @@ const _protectedSaleItems = (function() {
   });
 })();
 
+const _protectedCustomers = (state.customers || []).filter(c => c._pendingUpload === true);
+const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
+const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
+
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
 
@@ -237,7 +241,36 @@ const _protectedSaleItems = (function() {
                 state.shifts.unshift(ps);
               }
             });
+            
           }
+          // ✅ Part 2 (B2): دمج العملاء
+if (t.name === 'customers' && _protectedCustomers.length > 0) {
+  const serverIds = new Set((state.customers || []).map(c => c.id));
+  _protectedCustomers.forEach(pc => {
+    if (serverIds.has(pc.id)) {
+      const idx = state.customers.findIndex(c => c.id === pc.id);
+      if (idx !== -1) state.customers[idx] = pc;
+    } else {
+      state.customers.unshift(pc);
+    }
+  });
+}
+
+// ✅ Part 2 (B2): دمج دفعات العملاء
+if (t.name === 'customer_payments' && _protectedCustomerPayments.length > 0) {
+  const existingIds = new Set((state.customerPayments || []).map(p => p.id));
+  _protectedCustomerPayments.forEach(pp => {
+    if (!existingIds.has(pp.id)) state.customerPayments.unshift(pp);
+  });
+}
+
+// ✅ Part 2 (B2): دمج دفعات الموردين
+if (t.name === 'supplier_payments' && _protectedSupplierPayments.length > 0) {
+  const existingIds = new Set((state.supplierPayments || []).map(p => p.id));
+  _protectedSupplierPayments.forEach(pp => {
+    if (!existingIds.has(pp.id)) state.supplierPayments.unshift(pp);
+  });
+}
         }
       }
       
@@ -328,7 +361,25 @@ const _protectedSaleItems = (function() {
     console.warn('syncDown customer balances failed:', err.message);
     if (!state.customerBalances) state.customerBalances = {};
   }
-
+// ✅ Part 2 (B3): تصحيح أرصدة العملاء اللي عليهم دفعات معلقة
+if (typeof _protectedCustomerPayments !== 'undefined' && _protectedCustomerPayments.length > 0) {
+  const affected = new Set();
+  _protectedCustomerPayments.forEach(p => {
+    const cid = p.customer_id || p.customerId;
+    if (cid) affected.add(cid);
+  });
+  
+  affected.forEach(cid => {
+    // حساب مجموع الدفعات المعلقة للعميل ده
+    const pendingAmount = _protectedCustomerPayments
+      .filter(p => (p.customer_id || p.customerId) === cid)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      
+    // نأخذ رصيد السيرفر ونطرح منه الدفعات المعلقة
+    const serverVal = Number(state.customerBalances[cid]) || 0;
+    state.customerBalances[cid] = serverVal - pendingAmount;
+  });
+}
   // ═══════════════════════════════════════════════════════
   // I) ✅ v7.9 — تحديث عدد تعارضات المخزون
   // ═══════════════════════════════════════════════════════
