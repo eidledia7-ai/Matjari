@@ -1474,10 +1474,11 @@ async function runPartnersTests() {
     log(state.customerBalances[createdCust.id] === 400 ? '   ✅ الرصيد اتخصم صح' : '   ❌ الرصيد غلط');
 
     // 3. Test recordSupplierPayment
-    const testSupId = 'SUP-TEST';
-    if (!state.suppliers.find(s => s.id === testSupId)) {
-        state.suppliers.push({ id: testSupId, name: 'Test Sup', phone: '', openingDebt: 0, opening_debt: 0 });
-    }
+const testSupId = 'SUP-TEST';
+if (!state.suppliers.find(s => s.id === testSupId)) {
+    state.suppliers.push({ id: testSupId, name: 'Test Sup', phone: '', openingDebt: 0, opening_debt: 0 });
+    renderSuppliers(); // ✅ السطر الجديد اللي هيحدث القائمة المنسدلة
+}
     
     document.getElementById('supplierPaymentSupplier').value = testSupId;
     document.getElementById('supplierPaymentAmount').value = 50;
