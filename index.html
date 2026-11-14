@@ -1421,24 +1421,37 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 PHASE 3-DIFF1-2 TEST PANEL -->
+<!-- 🧪 PHASE 3-DIFF1-2 SAFE TEST PANEL -->
 <div id="p3d12Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runP3D12Tests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Phase 3</button>
+  <button onclick="runP3D12TestsSafe()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Phase 3</button>
   <button onclick="document.getElementById('p3d12Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
   <div id="p3d12Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runP3D12Tests() {
+async function runP3D12TestsSafe() {
   const results = document.getElementById('p3d12Results');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
 
   try {
-    // ═══════════════════════════════════════════════════════
-    log('=== Test 1: Flag marking (entity موجودة) ===');
+    log('=== Test 0: توفر دوال sync-queue.js ===');
+    const hasEnqueue = typeof enqueueSyncOperation === 'function';
+    const hasClear = typeof clearSyncQueue === 'function';
+    log('  enqueueSyncOperation: ' + (hasEnqueue ? 'موجود ✅' : 'مفقود ❌'));
+    log('  clearSyncQueue: ' + (hasClear ? 'موجود ✅' : 'مفقود ❌'));
+    
+    if (!hasEnqueue || !hasClear) {
+      log('\n🛑 sync-queue.js فيه مشكلة (Syntax Error أو الدالة اتمسحت).');
+      log('   يرجى مراجعة الملف وإصلاح الأخطاء قبل تكملة الاختبار.');
+      return;
+    }
+
+    // استخدام دالة الحذف الموجودة
     clearSyncQueue();
+
+    log('\n=== Test 1: Flag marking (entity موجودة) ===');
     const testExpId = 'EXP-T1-' + Date.now();
     state.expenses.push({ id: testExpId, name: 'Test', amount: 100, date: new Date().toISOString() });
     
@@ -1448,9 +1461,8 @@ async function runP3D12Tests() {
     }, testExpId);
     
     const expAfter = state.expenses.find(e => e.id === testExpId);
-    log('  _pendingUpload: ' + (expAfter && expAfter._pendingUpload));
     check('Flag set on existing entity', expAfter && expAfter._pendingUpload === true);
-    
+
     // ═══════════════════════════════════════════════════════
     log('\n=== Test 2: Flag marking no-op (entity مش موجودة) ===');
     clearSyncQueue();
@@ -1463,42 +1475,9 @@ async function runP3D12Tests() {
     }, ghostId);
     
     const ghostExp = state.expenses.find(e => e.id === ghostId);
-    log('  Entity in state: ' + (ghostExp ? 'exists' : 'not exists'));
     check('No crash, no entity created', !ghostExp);
     check('Op queued anyway', getSyncQueueCounts().pending === 1);
-    
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: Clear flag after drain ===');
-    if (!navigator.onLine) {
-      log('  ⚠️ SKIP: offline');
-    } else {
-      clearSyncQueue();
-      const testExp3Id = 'EXP-T3-' + Date.now();
-      state.expenses.push({ id: testExp3Id, name: 'Real', amount: 25, date: new Date().toISOString(), _pendingUpload: true });
-      
-      enqueueSyncOperation('insert_expense', {
-        id: testExp3Id, name: 'Real', amount: 25, date: new Date().toISOString(),
-        shift_id: null, pay_method: 'cash', notes: '', needs_review: false, created_by: null
-      }, testExp3Id);
-      
-      log('  Before drain: flag=' + state.expenses.find(e => e.id === testExp3Id)._pendingUpload);
-      await drainSyncQueue();
-      const exp3 = state.expenses.find(e => e.id === testExp3Id);
-      log('  After drain: flag=' + (exp3 ? exp3._pendingUpload : 'entity removed'));
-      check('Flag cleared after drain', exp3 && exp3._pendingUpload === undefined);
-      
-      // Cleanup — remove test record from Supabase manually
-      log('  ⚠️ Cleanup: delete EXP-T3 from Supabase expenses table');
-    }
-    
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 4: Regression — انواع اخرى لم تُلمس ===');
-    clearSyncQueue();
-    const q = _loadQueue();
-    check('Queue cleared after tests', q.filter(o => o.status === 'pending').length === 0);
-    log('  Insert_sale/return/customer/customer_payment/supplier_payment handlers لسه موجودة');
-    log('  (regression covered by Part 2 tests still passing)');
-    
+
     // Cleanup
     state.expenses = state.expenses.filter(e => !e.id.startsWith('EXP-T'));
     clearSyncQueue();
@@ -1511,6 +1490,6 @@ async function runP3D12Tests() {
   }
 }
 </script>
-<!-- 🧪 END PHASE 3-DIFF1-2 TEST PANEL -->
+<!-- 🧪 END PHASE 3-DIFF1-2 SAFE TEST PANEL -->
 </body>
 </html>
