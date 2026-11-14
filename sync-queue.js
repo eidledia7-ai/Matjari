@@ -242,7 +242,20 @@ if (type === 'insert_supplier_payment' && payload && payload.id) {
   const sp = (state.supplierPayments || []).find(x => x.id === payload.id);
   if (sp) sp._pendingUpload = true;
 }
+if (type === 'insert_supplier_payment' && payload && payload.id) {
+  const sp = (state.supplierPayments || []).find(x => x.id === payload.id);
+  if (sp) sp._pendingUpload = true;
+}
 
++ // ✅ Part B Phase 3: insert_expense — defensive marking
++ // (redundant في create لأن saveExpense بيضيفه يدويًا، لكنه ضروري لو
++ //  الـ entity موجودة في state — edit case مستقبلي أو replay)
++ if (type === 'insert_expense' && payload && payload.id) {
++   const ex = (state.expenses || []).find(x => x.id === payload.id);
++   if (ex) ex._pendingUpload = true;
++ }
+
+  if (queue.length > SYNC_QUEUE_MAX_SIZE) {
   if (queue.length > SYNC_QUEUE_MAX_SIZE) {
     const pending = queue.filter(q => q.status !== 'synced');
     const synced  = queue.filter(q => q.status === 'synced');
@@ -341,15 +354,18 @@ async function _executeOp(op, ownerId) {
   }
 
   if (t === 'insert_expense') {
-    const { error } = await c.from('expenses').upsert({
-      id: p.id, user_id: ownerId, name: p.name, amount: p.amount,
-      notes: p.notes, date: p.date, shift_id: p.shift_id, pay_method: p.pay_method,
-      needs_review: p.needs_review === true,
-      created_by: p.created_by || null
-    }, { onConflict: 'id' });
-    if (error) throw error;
-    return;
-  }
+  const { error } = await c.from('expenses').upsert({
+    id: p.id, user_id: ownerId, name: p.name, amount: p.amount,
+    notes: p.notes, date: p.date, shift_id: p.shift_id, pay_method: p.pay_method,
+    needs_review: p.needs_review === true,
+    created_by: p.created_by || null
+  }, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Part B Phase 3: مسح الـ flag بعد النجاح (expense IDs فريدة، مفيش edit)
+  const idxExp = (state.expenses || []).findIndex(x => x.id === p.id);
+  if (idxExp !== -1) delete state.expenses[idxExp]._pendingUpload;
+  return;
+}
 
   if (t === 'insert_customer_payment') {
   const { error } = await c.from('customer_payments').upsert({
