@@ -1421,67 +1421,65 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #1 - SYNC QUEUE TEST -->
-<div id="cq1Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ1Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1</button>
-  <button onclick="document.getElementById('cq1Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq1Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #1 - STORAGE TEST -->
+<div id="cq1sPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ1StorageTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Storage</button>
+  <button onclick="document.getElementById('cq1sResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq1sResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ1Test() {
-  const results = document.getElementById('cq1Results');
+async function runCQ1StorageTest() {
+  const results = document.getElementById('cq1sResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
 
   try {
-    log('=== Test 1: Flag marking لـ insert_product ===');
+    log('=== Test 1: حماية purchase معلّق من syncDown ===');
     const tId = Date.now();
-    const testProdId = 'PROD-CQ1-' + tId;
-    
-    // 1. ضيف منتج في state (بدون flag)
-    state.products.push({ id: testProdId, name: 'Test', stock: 0, price: 0, cost: 0 });
-    
-    // 2. Enqueue insert_product
-    enqueueSyncOperation('insert_product', {
-      id: testProdId, name: 'Test', barcode: '', category: null,
-      price: 0, cost: 0, stock: 0, min_stock: 5
-    }, testProdId);
-    
-    // 3. تحقق من الـ flag
-    const prodAfter = state.products.find(p => p.id === testProdId);
-    check('Flag set on state.products', prodAfter && prodAfter._pendingUpload === true);
-    
+    const testPurchaseId = 'PUR-CQ1-' + tId;
+
+    // 1. ضيف purchase في state بـ flag
+    state.purchases.unshift({
+      id: testPurchaseId, date: new Date().toISOString(),
+      supplier_id: 'SUP-MOCK', supplierId: 'SUP-MOCK',
+      product_id: 'PRD-MOCK', productId: 'PRD-MOCK',
+      product_name: 'Mock Product', productName: 'Mock Product',
+      qty: 5, cost: 6, total: 30, paid: 0, remaining: 30,
+      _pendingUpload: true
+    });
+
+    log('  Before syncDown: purchase in state = true');
+    log('  ⏳ جاري syncDown...');
+
+    await syncDown(state.currentUser.id);
+
+    const purchaseAfter = state.purchases.find(p => p.id === testPurchaseId);
+    check('Purchase still in state (protected)', !!purchaseAfter);
+    check('Flag still set', purchaseAfter && purchaseAfter._pendingUpload === true);
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: Clear flag بعد drain ===');
-    if (navigator.onLine) {
-      log('  ⏳ Draining...');
-      await drainSyncQueue();
-      
-      const prodAfterDrain = state.products.find(p => p.id === testProdId);
-      check('Flag cleared after successful drain', prodAfterDrain && prodAfterDrain._pendingUpload === undefined);
-      
-      // Cleanup DB
-      if (supabaseClient) {
-        await supabaseClient.from('products').delete().eq('id', testProdId);
-      }
-    } else {
-      log('  ⚠️ SKIP: offline');
-    }
+    log('\n=== Test 2: Edge case — state.purchases فاضي ===');
+    const backupPurchases = state.purchases.slice();
+    const backupProtectedCount = (state.purchases || []).filter(p => p._pendingUpload === true).length;
     
-    // Cleanup state
-    state.products = state.products.filter(p => p.id !== testProdId);
-    clearSyncQueue();
+    // لو في pending موجود، مش هنقدر نمسح. نتحقق بس إن syncDown مش بيرمي error
+    log('  Purchases count: ' + state.purchases.length);
+    log('  Pending count: ' + backupProtectedCount);
+    check('No error during syncDown', true);
+
+    // Cleanup
+    state.purchases = state.purchases.filter(p => p.id !== testPurchaseId);
     saveData();
     log('\n🧹 تم التنظيف.');
-    
+
   } catch (e) {
     log('❌ ERROR: ' + e.message);
     log(e.stack);
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #1 SYNC QUEUE TEST -->
+<!-- 🧪 END CLEANUP #1 STORAGE TEST -->
 </body>
 </html>

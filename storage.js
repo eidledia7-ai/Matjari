@@ -35,6 +35,8 @@ async function syncDown(ownerId) {
   const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
   const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
   const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload === true);
+  // ✅ Cleanup Pass #1: حماية المشتريات المعلقة من syncDown
+const _protectedPurchases = (state.purchases || []).filter(p => p._pendingUpload === true);
 
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
@@ -246,6 +248,11 @@ async function syncDown(ownerId) {
             const existingIds = new Set((state.expenses || []).map(e => e.id));
             _protectedExpenses.forEach(pe => { if (!existingIds.has(pe.id)) state.expenses.unshift(pe); });
           }
+          // ✅ Cleanup Pass #1: purchases — IDs فريدة، مفيش edits → add if missing only
+if (t.name === 'purchases' && _protectedPurchases.length > 0) {
+  const existingIds = new Set((state.purchases || []).map(p => p.id));
+  _protectedPurchases.forEach(pp => { if (!existingIds.has(pp.id)) state.purchases.unshift(pp); });
+}
         }
       }
     } catch (err) {
