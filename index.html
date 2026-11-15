@@ -1421,65 +1421,77 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #5 - OPS-CENTER TEST (DIRECT) -->
-<div id="cq5ocPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ5OpsCenterTestDirect()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ5 Direct</button>
-  <button onclick="document.getElementById('cq5ocResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq5ocResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #5 - TRANSLATIONS TEST -->
+<div id="cq5trPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ5TrTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ5 Tr</button>
+  <button onclick="document.getElementById('cq5trResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq5trResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ5OpsCenterTestDirect() {
-  const results = document.getElementById('cq5ocResults');
+function runCQ5TrTest() {
+  const results = document.getElementById('cq5trResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
   
-  const originalShowNotif = window.showNotification;
-  const originalRole = state.role;
-
   try {
-    // ═══════════════════════════════════════════════════════
-    log('=== Test 4 (Fixed): Role check (deleteFailedOp) ===');
+    const keys = [
+      'op_del_offline', 'op_del_server_error', 'op_del_delete_only_btn',
+      'op_del_cancel_btn', 'op_del_reversal_fail', 'op_del_duplicate_title',
+      'op_del_duplicate_body', 'op_del_sale_exists_title', 'op_del_sale_exists_body',
+      'op_del_return_exists_title', 'op_del_return_exists_body',
+      'op_del_expense_exists_title', 'op_del_expense_exists_body',
+      'op_del_payment_exists_title', 'op_del_payment_exists_body',
+      'op_del_sale_confirm', 'op_del_return_confirm',
+      'op_del_expense_confirm', 'op_del_payment_confirm'
+    ];
     
-    // 1. نضيف عملية وهمية في الـ Queue عشان نتخطى سطر if (!op) return
-    clearSyncQueue();
-    enqueueSyncOperation('insert_expense', { id: 'FAKE-OP-ID', name: 'Test', amount: 1, date: new Date().toISOString() }, 'FAKE-OP-ID');
-    const opId = _loadQueue()[0].id; // بنجيب الـ ID الحقيقي اللي اتولد
-
-    // 2. نغير الصلاحية لموظف
-    state.role = 'employee';
+    log('=== Test 1: Keys موجودة في ar ===');
+    const originalLang = currentLang;
+    setLanguage('ar');
     
-    // 3. نعمل Mock للـ Notification عشان نشوف لو اتنادت ولا لأ
-    let blocked = false;
-    window.showNotification = (msg) => { 
-      if (msg && (msg.includes('مدير') || msg.includes('manager'))) blocked = true; 
-    };
+    let missingAr = [];
+    keys.forEach(k => {
+      if (!translations.ar[k]) missingAr.push(k);
+    });
+    check('All 20 keys in ar', missingAr.length === 0);
+    if (missingAr.length > 0) log('  Missing: ' + missingAr.join(', '));
     
-    // 4. ننادي الدالة
-    await deleteFailedOp(opId);
+    log('\n=== Test 2: Keys موجودة في en ===');
+    let missingEn = [];
+    keys.forEach(k => {
+      if (!translations.en[k]) missingEn.push(k);
+    });
+    check('All 20 keys in en', missingEn.length === 0);
+    if (missingEn.length > 0) log('  Missing: ' + missingEn.join(', '));
     
-    // 5. نتحقق
-    check('Employee blocked from delete', blocked);
+    log('\n=== Test 3: عينات من ar ===');
+    log('  op_del_offline: ' + tr('op_del_offline').substring(0, 50) + '...');
+    log('  op_del_sale_exists_title: ' + tr('op_del_sale_exists_title'));
+    log('  op_del_payment_confirm: ' + tr('op_del_payment_confirm').substring(0, 50) + '...');
     
-    // 6. نتأكد إن العملية لسه موجودة في الـ Queue
-    check('Op not deleted from queue', _loadQueue().length === 1);
-
-    // Restore role
-    state.role = originalRole;
+    log('\n=== Test 4: Interpolation ({msg}) ===');
+    const errMsg = tr('op_del_server_error').replace('{msg}', 'Network timeout');
+    check('{msg} replaced in op_del_server_error', errMsg.includes('Network timeout'));
     
+    const failMsg = tr('op_del_reversal_fail').replace('{msg}', 'DB locked');
+    check('{msg} replaced in op_del_reversal_fail', failMsg.includes('DB locked'));
+    
+    log('\n=== Test 5: English switch ===');
+    setLanguage('en');
+    log('  op_del_offline: ' + tr('op_del_offline').substring(0, 60) + '...');
+    log('  op_del_delete_only_btn: ' + tr('op_del_delete_only_btn'));
+    
+    // Restore
+    setLanguage(originalLang);
     log('\n🧹 تم التنظيف.');
     
   } catch (e) {
     log('❌ ERROR: ' + e.message);
-    log(e.stack);
-  } finally {
-    window.showNotification = originalShowNotif;
-    state.role = originalRole;
-    clearSyncQueue();
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #5 OPS-CENTER TEST (DIRECT) -->
+<!-- 🧪 END CLEANUP #5 TRANSLATIONS TEST -->
 </body>
 </html>
