@@ -175,7 +175,10 @@ async function deleteFailedOp(opId) {
 if (op.type === 'insert_expense') {
   return await _deleteFailedExpenseOp(op);
 }
-
+// ✅ Part B Phase 4: insert_customer_payment → server check + reversal
+if (op.type === 'insert_customer_payment') {
+  return await _deleteFailedCustomerPaymentOp(op);
+}
   // Legacy path للأنواع الأخرى (insert_expense / insert_customer_payment)
   // — بدون تغيير، سيتم ترقيتها في مراحل لاحقة (Phase 3+)
   if (!confirm(tr('op_delete_confirm') + '\n\n' + tr('op_delete_warning'))) return;
@@ -661,6 +664,170 @@ async function _deleteFailedExpenseOp(op) {
         }, expenseId);
       }
       return showNotification('فشل عكس البيانات: ' + (err.message || '') + '. لم يتم حذف العملية.', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 4: Splice from queue (فقط بعد نجاح reversal)
+  // ═══════════════════════════════════════════════════════
+  const q = _loadQueue();
+  const idx = q.findIndex(o => o.id === op.id);
+  if (idx !== -1) q.splice(idx, 1);
+  _saveQueue(q);
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 5: Finalize
+  // ═══════════════════════════════════════════════════════
+  saveData();
+  if (typeof renderAll === 'function') renderAll();
+  renderOperationsCenter();
+  showNotification(tr('op_deleted'), 'success');
+}
+async function _deleteFailedCustomerPaymentOp(op) {
+  const p = op.payload || {};
+  const paymentId = p.id;
+  if (!paymentId) return;
+
+  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
+  //             في مرحلة التنظيف بعد Part B.
+  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
+  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
+  const MSG_EXISTS_TITLE     = 'الدفعة موجودة على السيرفر';
+  const MSG_EXISTS_BODY      = 'الدفعة رُفعت بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى. الرصيد سيُحدَّث تلقائيًا عبر السيرفر.';
+  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
+  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع الدفعة. سيتم إرجاع المبلغ لرصيد العميل وحذف العملية. متابعة؟';
+  const MSG_REVERSAL_FAIL    = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
+  const MSG_DUPLICATE_TITLE  = 'يوجد دفعة أخرى معلّقة بنفس الرقم';
+  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس الدفعة. راجع مركز العمليات أولاً.';
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 0: Duplicate op check
+  // ═══════════════════════════════════════════════════════
+  const dupQueue = _loadQueue();
+  const hasDuplicate = dupQueue.some(o =>
+    o.id !== op.id &&
+    o.type === 'insert_customer_payment' &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === paymentId
+  );
+  if (hasDuplicate) {
+    return showNotification(MSG_DUPLICATE_TITLE + ' — ' + MSG_DUPLICATE_BODY, 'warning');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 1: Server check (precondition إجباري)
+  // ═══════════════════════════════════════════════════════
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(MSG_OFFLINE, 'warning');
+  }
+
+  let existsOnServer = false;
+  try {
+    const { data, error } = await supabaseClient
+      .from('customer_payments').select('id').eq('id', paymentId).maybeSingle();
+    if (error) throw error;
+    existsOnServer = !!data;
+  } catch (e) {
+    return showNotification(MSG_SERVER_ERROR(e.message || 'network'), 'error');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2أ: موجود على السيرفر → حذف من القائمة فقط
+  // ملاحظة: صفر لمس للـ balance — RPC get_all_customer_balances سيعيد حسابه
+  //         تلقائيًا في syncDown التالي (B3 recompute).
+  // ═══════════════════════════════════════════════════════
+  if (existsOnServer) {
+    const choice = confirm(
+      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+    );
+    if (!choice) return;
+
+    const q = _loadQueue();
+    const idx = q.findIndex(o => o.id === op.id);
+    if (idx !== -1) q.splice(idx, 1);
+    _saveQueue(q);
+
+    // امسح _pendingUpload عشان syncDown التالي يجيب النسخة من السيرفر
+    const localPayment = (state.customerPayments || []).find(cp => cp.id === paymentId);
+    if (localPayment) delete localPayment._pendingUpload;
+
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('remove_stale_customer_payment_op', {
+        paymentId, reason: 'server_has_it',
+        customerId: p.customer_id,
+        amount: Number(p.amount) || 0
+      }, paymentId);
+    }
+
+    saveData();
+    if (typeof renderAll === 'function') renderAll();
+    renderOperationsCenter();
+    return showNotification(tr('op_deleted'), 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2ب: مش موجود → تأكيد + reversal
+  // ═══════════════════════════════════════════════════════
+  if (!confirm(MSG_REVERSAL_CONFIRM)) return;
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 3: Reversal (synchronous، قبل splice)
+  // ═══════════════════════════════════════════════════════
+  const payment = (state.customerPayments || []).find(cp => cp.id === paymentId);
+
+  // Idempotency: لو payment مش موجود في state (reversal سابق نجح، splice فشل)
+  if (payment) {
+    try {
+      const cid = payment.customer_id || payment.customerId;
+      const amount = Number(payment.amount) || 0;
+      const shiftId = payment.shift_id || payment.shiftId || null;
+      const shift = shiftId ? (state.shifts || []).find(s => s.id === shiftId) : null;
+      const shiftClosed = !!(shift && (shift.end_time || shift.endTime));
+
+      // 3.1 إزالة من state.customerPayments
+      state.customerPayments = (state.customerPayments || []).filter(cp => cp.id !== paymentId);
+
+      // 3.2 عكس الرصيد (بدون Math.max — السالب مشروع للدفعات الزيادة/prepaid)
+      let balanceRestored = 0;
+      if (cid && amount > 0) {
+        state.customerBalances = state.customerBalances || {};
+        state.customerBalances[cid] = (Number(state.customerBalances[cid]) || 0) + amount;
+        balanceRestored = amount;
+      }
+
+      // 3.3 audit log — Option A: نتجاهل shift snapshot لكن نوثقه
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_customer_payment_op', {
+          paymentId,
+          customerId: cid || null,
+          customerName: payment.customer_name || payment.customerName || null,
+          amount,
+          shiftId,
+          shiftClosed,
+          shiftSnapshotNote: shiftClosed
+            ? 'Shift already closed — snapshot cash_collections may retain this amount (known limitation, documented in PLAN.md)'
+            : null,
+          balanceRestored,
+          balanceAfter: cid ? Number(state.customerBalances[cid]) || 0 : null
+        }, paymentId);
+      }
+    } catch (err) {
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_customer_payment_op_error', {
+          paymentId, error: err.message || String(err)
+        }, paymentId);
+      }
+      return showNotification(MSG_REVERSAL_FAIL(err.message || ''), 'error');
+    }
+  } else {
+    // Idempotency: cp مش موجود في state → نسجّل ونروح للمرحلة 4
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('remove_failed_customer_payment_op', {
+        paymentId,
+        missingFromState: true,
+        note: 'Payment not found in state.customerPayments — reversal skipped (already reversed or syncDown removed it)'
+      }, paymentId);
     }
   }
 
