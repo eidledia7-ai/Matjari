@@ -34,6 +34,8 @@ const _protectedSaleItems = (function() {
 const _protectedCustomers = (state.customers || []).filter(c => c._pendingUpload === true);
 const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
 const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
+// ✅ Part B Phase 3: حماية المصروفات المعلقة من syncDown
+const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload === true);
 
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
@@ -271,7 +273,14 @@ if (t.name === 'supplier_payments' && _protectedSupplierPayments.length > 0) {
     if (!existingIds.has(pp.id)) state.supplierPayments.unshift(pp);
   });
 }
-        }
+
+// ✅ Part B Phase 3: expenses — IDs فريدة، مفيش edits → add if missing only
+if (t.name === 'expenses' && _protectedExpenses.length > 0) {
+  const existingIds = new Set((state.expenses || []).map(e => e.id));
+  _protectedExpenses.forEach(pe => {
+    if (!existingIds.has(pe.id)) state.expenses.unshift(pe);
+  });
+}
       }
       
     } catch (err) {
