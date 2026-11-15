@@ -10,39 +10,36 @@ const SYNC_ITEMS_CHUNK   = 200;
 async function syncDown(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
 
-// ✅ v7.9 — حماية الفواتير والمرتجعات المعلقة من المسح
-const _protectedSales = (state.sales || []).filter(s => s._pendingUpload === true);
-const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload === true);
+  // ✅ v7.9 — حماية الفواتير والمرتجعات المعلقة من المسح
+  const _protectedSales = (state.sales || []).filter(s => s._pendingUpload === true);
+  const _protectedReturns = (state.returns || []).filter(r => r._pendingUpload === true);
 
-// ✅ X43: حماية المنتجات المعلقة من المسح
-const _protectedProducts = (state.products || []).filter(p => p._pendingUpload === true);
+  // ✅ X43: حماية المنتجات المعلقة من المسح
+  const _protectedProducts = (state.products || []).filter(p => p._pendingUpload === true);
 
-// ✅ X39: حماية الورديات المعلقة من المسح
-const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === true);
+  // ✅ X39: حماية الورديات المعلقة من المسح
+  const _protectedShifts = (state.shifts || []).filter(s => s._pendingUpload === true);
 
-// ✅ X57: حماية sale_items التابعة لفواتير لسه في الـ queue
-const _protectedSaleItems = (function() {
-  if (typeof getPendingSaleIdsFromQueue !== 'function') return [];
-  const pendingSaleIds = getPendingSaleIdsFromQueue();
-  if (!pendingSaleIds || pendingSaleIds.size === 0) return [];
-  return (state.saleItems || []).filter(si => {
-    const sid = si.sale_id || si.saleId;
-    return sid && pendingSaleIds.has(sid);
-  });
-})();
+  // ✅ X57: حماية sale_items التابعة لفواتير لسه في الـ queue
+  const _protectedSaleItems = (function() {
+    if (typeof getPendingSaleIdsFromQueue !== 'function') return [];
+    const pendingSaleIds = getPendingSaleIdsFromQueue();
+    if (!pendingSaleIds || pendingSaleIds.size === 0) return [];
+    return (state.saleItems || []).filter(si => {
+      const sid = si.sale_id || si.saleId;
+      return sid && pendingSaleIds.has(sid);
+    });
+  })();
 
-const _protectedCustomers = (state.customers || []).filter(c => c._pendingUpload === true);
-const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
-const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
-// ✅ Part B Phase 3: حماية المصروفات المعلقة من syncDown
-const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload === true);
+  const _protectedCustomers = (state.customers || []).filter(c => c._pendingUpload === true);
+  const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
+  const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
+  const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload === true);
 
   const cutoffDate    = new Date(Date.now() - SYNC_DAYS * 86400000).toISOString();
   const cutoffDateStr = cutoffDate.split('T')[0];
 
-  // ═══════════════════════════════════════════════════════
-  // A) sales — آخر 30 يوماً، بحد أقصى 500
-  // ═══════════════════════════════════════════════════════
+  // A) sales
   try {
     const { data, error } = await supabaseClient
       .from('sales').select('*')
@@ -68,27 +65,22 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
     state.salesDataLimited = (data || []).length >= SYNC_SALES_LIMIT;
     state.salesDataFromDate = cutoffDate;
 
-    // ✅ v7.9 — دمج الفواتير المعلقة
-    {
-      const pendingIds = (typeof getPendingSaleIdsFromQueue === 'function') ? getPendingSaleIdsFromQueue() : new Set();
-      const existing = new Set(state.sales.map(s => s.id));
-      _protectedSales.forEach(ps => {
-        if (!existing.has(ps.id) || pendingIds.has(ps.id)) {
-          const localIdx = state.sales.findIndex(s => s.id === ps.id);
-          if (localIdx === -1) state.sales.unshift(ps);
-          else state.sales[localIdx]._pendingUpload = true;
-        }
-      });
-    }
+    const pendingIds = (typeof getPendingSaleIdsFromQueue === 'function') ? getPendingSaleIdsFromQueue() : new Set();
+    const existing = new Set(state.sales.map(s => s.id));
+    _protectedSales.forEach(ps => {
+      if (!existing.has(ps.id) || pendingIds.has(ps.id)) {
+        const localIdx = state.sales.findIndex(s => s.id === ps.id);
+        if (localIdx === -1) state.sales.unshift(ps);
+        else state.sales[localIdx]._pendingUpload = true;
+      }
+    });
   } catch (err) {
     console.warn('SyncDown sales failed:', err.message);
   }
 
   const loadedSaleIds = (state.sales || []).map(s => s.id);
 
-  // ═══════════════════════════════════════════════════════
-  // B) returns — آخر 30 يوماً، بحد أقصى 500
-  // ═══════════════════════════════════════════════════════
+  // B) returns
   try {
     const { data, error } = await supabaseClient
       .from('returns').select('*')
@@ -112,20 +104,15 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
     }));
     state.returnsDataLimited = (data || []).length >= SYNC_RETURNS_LIMIT;
 
-    // ✅ v7.9 — دمج المرتجعات المعلقة
-    {
-      const existing = new Set(state.returns.map(r => r.id));
-      _protectedReturns.forEach(pr => {
-        if (!existing.has(pr.id)) state.returns.unshift(pr);
-      });
-    }
+    const existing = new Set(state.returns.map(r => r.id));
+    _protectedReturns.forEach(pr => {
+      if (!existing.has(pr.id)) state.returns.unshift(pr);
+    });
   } catch (err) {
     console.warn('SyncDown returns failed:', err.message);
   }
 
-  // ═══════════════════════════════════════════════════════
-  // C) audit_logs — آخر 100
-  // ═══════════════════════════════════════════════════════
+  // C) audit_logs
   try {
     const { data, error } = await supabaseClient
       .from('audit_logs').select('*')
@@ -142,9 +129,7 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
     console.warn('SyncDown audit_logs failed:', err.message);
   }
 
-  // ═══════════════════════════════════════════════════════
-  // D) stock_moves — آخر 500
-  // ═══════════════════════════════════════════════════════
+  // D) stock_moves
   try {
     const { data, error } = await supabaseClient
       .from('stock_moves').select('*')
@@ -163,9 +148,7 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
     console.warn('SyncDown stock_moves failed:', err.message);
   }
 
-  // ═══════════════════════════════════════════════════════
-  // E) الجداول الكاملة
-  // ═══════════════════════════════════════════════════════
+  // E) fullTables
   const fullTables = [
     { name: 'products', key: 'products' },
     { name: 'customers', key: 'customers' },
@@ -223,16 +206,12 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
             if (t.name === 'held_carts') return { id: row.id, time: row.time, cart: row.cart_data, customer_id: row.customer_id, customerId: row.customer_id, customer_name: row.customer_name, customerName: row.customer_name, discount: row.discount, discount_type: row.discount_type, discountType: row.discount_type, notes: row.notes, shift_id: row.shift_id, shiftId: row.shift_id };
             return row;
           });
-           // ✅ X43: إرجاع المنتجات المعلقة اللي لسه ما اترفعتش
+
+          // Merge block
           if (t.name === 'products' && _protectedProducts.length > 0) {
             const existingIds = new Set(state.products.map(p => p.id));
-            _protectedProducts.forEach(pp => {
-              if (!existingIds.has(pp.id)) {
-                state.products.unshift(pp);
-              }
-            });
+            _protectedProducts.forEach(pp => { if (!existingIds.has(pp.id)) state.products.unshift(pp); });
           }
-          // ✅ X39: استبدال نسخة السيرفر بالنسخة المحلية للورديات المعلقة
           if (t.name === 'shifts' && _protectedShifts.length > 0) {
             const serverIds = new Set((state.shifts || []).map(s => s.id));
             _protectedShifts.forEach(ps => {
@@ -243,66 +222,47 @@ const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload =
                 state.shifts.unshift(ps);
               }
             });
-            
           }
-          // ✅ Part 2 (B2): دمج العملاء
-if (t.name === 'customers' && _protectedCustomers.length > 0) {
-  const serverIds = new Set((state.customers || []).map(c => c.id));
-  _protectedCustomers.forEach(pc => {
-    if (serverIds.has(pc.id)) {
-      const idx = state.customers.findIndex(c => c.id === pc.id);
-      if (idx !== -1) state.customers[idx] = pc;
-    } else {
-      state.customers.unshift(pc);
-    }
-  });
-}
-
-// ✅ Part 2 (B2): دمج دفعات العملاء
-if (t.name === 'customer_payments' && _protectedCustomerPayments.length > 0) {
-  const existingIds = new Set((state.customerPayments || []).map(p => p.id));
-  _protectedCustomerPayments.forEach(pp => {
-    if (!existingIds.has(pp.id)) state.customerPayments.unshift(pp);
-  });
-}
-
-// ✅ Part 2 (B2): دمج دفعات الموردين
-if (t.name === 'supplier_payments' && _protectedSupplierPayments.length > 0) {
-  const existingIds = new Set((state.supplierPayments || []).map(p => p.id));
-  _protectedSupplierPayments.forEach(pp => {
-    if (!existingIds.has(pp.id)) state.supplierPayments.unshift(pp);
-  });
-}
-
-// ✅ Part B Phase 3: expenses — IDs فريدة، مفيش edits → add if missing only
-if (t.name === 'expenses' && _protectedExpenses.length > 0) {
-  const existingIds = new Set((state.expenses || []).map(e => e.id));
-  _protectedExpenses.forEach(pe => {
-    if (!existingIds.has(pe.id)) state.expenses.unshift(pe);
-  });
-}
+          if (t.name === 'customers' && _protectedCustomers.length > 0) {
+            const serverIds = new Set((state.customers || []).map(c => c.id));
+            _protectedCustomers.forEach(pc => {
+              if (serverIds.has(pc.id)) {
+                const idx = state.customers.findIndex(c => c.id === pc.id);
+                if (idx !== -1) state.customers[idx] = pc;
+              } else {
+                state.customers.unshift(pc);
+              }
+            });
+          }
+          if (t.name === 'customer_payments' && _protectedCustomerPayments.length > 0) {
+            const existingIds = new Set((state.customerPayments || []).map(p => p.id));
+            _protectedCustomerPayments.forEach(pp => { if (!existingIds.has(pp.id)) state.customerPayments.unshift(pp); });
+          }
+          if (t.name === 'supplier_payments' && _protectedSupplierPayments.length > 0) {
+            const existingIds = new Set((state.supplierPayments || []).map(p => p.id));
+            _protectedSupplierPayments.forEach(pp => { if (!existingIds.has(pp.id)) state.supplierPayments.unshift(pp); });
+          }
+          if (t.name === 'expenses' && _protectedExpenses.length > 0) {
+            const existingIds = new Set((state.expenses || []).map(e => e.id));
+            _protectedExpenses.forEach(pe => { if (!existingIds.has(pe.id)) state.expenses.unshift(pe); });
+          }
+        }
       }
-      
     } catch (err) {
       console.warn(`SyncDown failed for ${t.name}:`, err.message);
     }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // F) العميل النقدي الافتراضي
-  // ═══════════════════════════════════════════════════════
+  // F) default cash customer
   if (!state.customers || state.customers.length === 0) {
     state.customers = [{ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 }];
   } else if (!state.customers.find(c => c.name === 'عميل نقدي عام' || c.name === 'Cash Customer')) {
     state.customers.unshift({ id: 'CASH-CUSTOMER', name: 'عميل نقدي عام', phone: '-', openingDebt: 0, opening_debt: 0, points: 0 });
   }
 
-  // ═══════════════════════════════════════════════════════
   // G) sale_items
-  // ═══════════════════════════════════════════════════════
   try {
     if (loadedSaleIds.length === 0) {
-      // ✅ X57: احتفظ بالـ sale_items المعلقة لو مفيش فواتير من السيرفر
       state.saleItems = _protectedSaleItems.slice();
       state.sales.forEach(s => { s.items = []; });
     } else {
@@ -338,7 +298,6 @@ if (t.name === 'expenses' && _protectedExpenses.length > 0) {
       state.sales.forEach(s => { s.items = itemsBySale.get(s.id) || []; });
       state.saleItems = flatItems;
 
-      // ✅ X57: دمج الـ sale_items المعلقة (فواتير لسه مش مرفوعة بالكامل)
       if (_protectedSaleItems.length > 0) {
         const existingKeys = new Set(state.saleItems.map(si =>
           (si.sale_id || si.saleId) + '|' + (si.product_id || si.productId)
@@ -357,9 +316,7 @@ if (t.name === 'expenses' && _protectedExpenses.length > 0) {
     if (!state.saleItems) state.saleItems = [];
   }
 
-  // ═══════════════════════════════════════════════════════
-  // H) أرصدة العملاء
-  // ═══════════════════════════════════════════════════════
+  // H) customer balances
   try {
     const { data, error } = await supabaseClient.rpc('get_all_customer_balances', {
       p_user_id: ownerId
@@ -370,40 +327,38 @@ if (t.name === 'expenses' && _protectedExpenses.length > 0) {
     console.warn('syncDown customer balances failed:', err.message);
     if (!state.customerBalances) state.customerBalances = {};
   }
-// ✅ Part 2 (B3): تصحيح أرصدة العملاء اللي عليهم دفعات معلقة
-if (typeof _protectedCustomerPayments !== 'undefined' && _protectedCustomerPayments.length > 0) {
-  const affected = new Set();
-  _protectedCustomerPayments.forEach(p => {
-    const cid = p.customer_id || p.customerId;
-    if (cid) affected.add(cid);
-  });
-  
-  affected.forEach(cid => {
-    // حساب مجموع الدفعات المعلقة للعميل ده
-    const pendingAmount = _protectedCustomerPayments
-      .filter(p => (p.customer_id || p.customerId) === cid)
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      
-    // نأخذ رصيد السيرفر ونطرح منه الدفعات المعلقة
-    const serverVal = Number(state.customerBalances[cid]) || 0;
-    state.customerBalances[cid] = serverVal - pendingAmount;
-  });
-}
-  // ═══════════════════════════════════════════════════════
-  // I) ✅ v7.9 — تحديث عدد تعارضات المخزون
-  // ═══════════════════════════════════════════════════════
+
+  if (typeof _protectedCustomerPayments !== 'undefined' && _protectedCustomerPayments.length > 0) {
+    const affected = new Set();
+    _protectedCustomerPayments.forEach(p => {
+      const cid = p.customer_id || p.customerId;
+      if (cid) affected.add(cid);
+    });
+    
+    affected.forEach(cid => {
+      const pendingAmount = _protectedCustomerPayments
+        .filter(p => (p.customer_id || p.customerId) === cid)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        
+      const serverVal = Number(state.customerBalances[cid]) || 0;
+      state.customerBalances[cid] = serverVal - pendingAmount;
+    });
+  }
+
+  // I) stock conflicts
   if (navigator.onLine && supabaseClient) {
     try {
       const { data: conflicts } = await supabaseClient.rpc('get_flagged_sales', { p_user_id: ownerId });
       state._stockConflictCount = Array.isArray(conflicts) ? conflicts.length : 0;
     } catch (e) {}
- }
- // ✅ v7.23.3 — Emit sync completion event (root solution — decoupled)
-try {
-  if (typeof window !== 'undefined' && window.dispatchEvent) {
-    window.dispatchEvent(new CustomEvent('matjari:syncDownComplete', { detail: { ownerId } }));
   }
-} catch (e) {}
+  
+  // Emit event
+  try {
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('matjari:syncDownComplete', { detail: { ownerId } }));
+    }
+  } catch (e) {}
 }
 async function syncUp(ownerId) {
   if (!navigator.onLine || !supabaseClient) return;
