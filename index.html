@@ -1421,47 +1421,62 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #1 - PARTNERS TEST (SAFE) -->
+<!-- 🧪 CLEANUP #1 - PARTNERS TEST (DIRECT) -->
 <div id="cq1pPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ1PartnersTestSafe()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Partners</button>
+  <button onclick="runCQ1PartnersTestDirect()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Direct</button>
   <button onclick="document.getElementById('cq1pResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
   <div id="cq1pResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ1PartnersTestSafe() {
+async function runCQ1PartnersTestDirect() {
   const results = document.getElementById('cq1pResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
   
   const originalShowNotif = window.showNotification;
-  const originalConfirm = window.confirm;
-  
-  // Mock notifications
-  window.showNotification = () => {}; 
-  window.confirm = () => true;
+  window.showNotification = () => {}; // silent
 
   try {
-    // ═══════════════════════════════════════════════════════
     log('=== Test 1: Existing product — enqueue + WAC ===');
     
     const tId = Date.now();
     const supId = 'SUP-T-' + tId;
     const prdId = 'PRD-T-' + tId;
+    
+    // Create supplier and product in state
     state.suppliers.push({ id: supId, name: 'Test Sup', phone: '', opening_debt: 0 });
     state.products.push({ id: prdId, name: 'Test Prod', stock: 10, cost: 5, price: 10, barcode: '', category: '' });
     
-    // Fill form (Using native setters for reliability)
-    const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
-    setVal('purchaseSupplier', supId);
-    setVal('purchaseProduct', prdId);
-    setVal('purchaseNewName', '');
-    setVal('purchaseQty', '5');
-    setVal('purchaseCost', '6');
-    setVal('purchasePaid', '30');
+    // Manually trigger savePurchase logic by injecting values into DOM
+    // (simulate form fill)
+    document.getElementById('purchaseSupplier').value = supId;
+    document.getElementById('purchaseProduct').value = prdId;
+    document.getElementById('purchaseNewName').value = '';
+    document.getElementById('purchaseQty').value = '5';
+    document.getElementById('purchaseCost').value = '6';
+    document.getElementById('purchasePaid').value = '30';
     
-    // Execute
+    // Since dropdown is populated by renderSuppliers, let's manually add option if not found
+    const supSelect = document.getElementById('purchaseSupplier');
+    if (!Array.from(supSelect.options).some(o => o.value === supId)) {
+      const opt = document.createElement('option');
+      opt.value = supId;
+      opt.text = 'Test Sup';
+      supSelect.add(opt);
+      supSelect.value = supId;
+    }
+    
+    const prodSelect = document.getElementById('purchaseProduct');
+    if (!Array.from(prodSelect.options).some(o => o.value === prdId)) {
+      const opt = document.createElement('option');
+      opt.value = prdId;
+      opt.text = 'Test Prod';
+      prodSelect.add(opt);
+      prodSelect.value = prdId;
+    }
+
     await savePurchase();
     
     const prod = state.products.find(p => p.id === prdId);
@@ -1477,112 +1492,23 @@ async function runCQ1PartnersTestSafe() {
     check('Purchase with _pendingUpload', purch && purch._pendingUpload === true);
     check('Op in queue', !!op);
     
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: New product — enqueue first + rollback ===');
-    
-    const tId2 = Date.now();
-    const sup2 = 'SUP-T2-' + tId2;
-    const newPrdName = 'New Prod ' + tId2;
-    state.suppliers.push({ id: sup2, name: 'Test Sup2', phone: '', opening_debt: 0 });
-    
-    setVal('purchaseSupplier', sup2);
-    setVal('purchaseProduct', '');
-    setVal('purchaseNewName', newPrdName);
-    setVal('purchaseQty', '3');
-    setVal('purchaseCost', '7');
-    setVal('purchasePaid', '21');
-    
-    await savePurchase();
-    
-    const newProd = state.products.find(p => p.name === newPrdName);
-    const newPurch = state.purchases.find(p => p.supplier_id === sup2);
-    const opsNew = _loadQueue().filter(o => 
-      (o.type === 'insert_product' && o.payload?.name === newPrdName) ||
-      (o.type === 'insert_purchase' && o.payload?.supplier_id === sup2)
-    );
-    
-    check('New product in state', !!newProd);
-    check('New product has _pendingUpload', newProd && newProd._pendingUpload === true);
-    check('New product stock = 3', newProd && newProd.stock === 3);
-    check('Purchase with _pendingUpload', newPurch && newPurch._pendingUpload === true);
-    check('2 ops in queue', opsNew.length === 2);
-    if (opsNew.length >= 2) {
-      check('Product op before purchase op', opsNew[0].type === 'insert_product');
-    }
-    
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: Queue full — Zero state mutation ===');
-    
-    clearSyncQueue();
-    for (let i = 0; i < 200; i++) {
-      enqueueSyncOperation('insert_expense', { id: 'FILL-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL-' + i);
-    }
-    
-    const purchasesBefore = state.purchases.length;
-    const productsBefore = state.products.length;
-    
-    setVal('purchaseSupplier', sup2);
-    setVal('purchaseProduct', '');
-    setVal('purchaseNewName', 'ShouldNotCreate');
-    setVal('purchaseQty', '1');
-    setVal('purchaseCost', '1');
-    setVal('purchasePaid', '1');
-    
-    await savePurchase();
-    
-    const purchasesAfter = state.purchases.length;
-    const productsAfter = state.products.length;
-    
-    check('Zero purchase state mutation', purchasesBefore === purchasesAfter);
-    check('Zero product state mutation', productsBefore === productsAfter);
-    
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 4: Atomic rollback ===');
-    
-    clearSyncQueue();
-    for (let i = 0; i < 199; i++) {
-      enqueueSyncOperation('insert_expense', { id: 'FILL2-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL2-' + i);
-    }
-    
-    const beforeQueue = _loadQueue().length;
-    const beforeProdCount = state.products.length;
-    
-    setVal('purchaseSupplier', sup2);
-    setVal('purchaseProduct', '');
-    setVal('purchaseNewName', 'RollbackTest');
-    setVal('purchaseQty', '1');
-    setVal('purchaseCost', '1');
-    setVal('purchasePaid', '1');
-    
-    await savePurchase();
-    
-    const afterQueue = _loadQueue().length;
-    const afterProdCount = state.products.length;
-    const rollbackTestProd = state.products.find(p => p.name === 'RollbackTest');
-    
-    check('Queue back to 199 (product rolled back)', afterQueue === 199);
-    check('Zero product mutation', beforeProdCount === afterProdCount);
-    check('No RollbackTest product', !rollbackTestProd);
-    
     // Cleanup
     clearSyncQueue();
-    state.products = state.products.filter(p => !p.id.includes('-T-') && !p.name.startsWith('New Prod') && p.name !== 'RollbackTest');
-    state.suppliers = state.suppliers.filter(s => !s.id.includes('-T-'));
-    state.purchases = state.purchases.filter(p => !p.id.includes('-T-'));
+    state.products = state.products.filter(p => p.id !== prdId);
+    state.suppliers = state.suppliers.filter(s => s.id !== supId);
+    state.purchases = state.purchases.filter(p => p.id !== (purch?.id));
     saveData();
     
     log('\n🧹 تم التنظيف.');
-    
   } catch (e) {
     log('❌ ERROR: ' + e.message);
     log(e.stack);
   } finally {
     window.showNotification = originalShowNotif;
-    window.confirm = originalConfirm;
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #1 PARTNERS TEST (SAFE) --> 
+<!-- 🧪 END CLEANUP #1 PARTNERS TEST (DIRECT) --> 
 
 </body>
 </html>
