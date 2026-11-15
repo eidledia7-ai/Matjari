@@ -20,40 +20,92 @@ async function saveExpense() {
     if (openShift) currentShiftId = openShift.id;
   }
 
-  const expenseId = uid('EXP');
-
-  // ✅ Part B Phase 3: payload يطابق _executeOp('insert_expense')
-  const payload = {
-    id: expenseId, name: name, amount: amount,
-    notes: notes, date: date,
-    shift_id: currentShiftId, pay_method: 'cash',
-    needs_review: false, created_by: null
+  const newExpense = {
+    id: uid('EXP'), user_id: ownerId, name: name, amount: amount, date: date, notes: notes,
+    shift_id: currentShiftId, pay_method: 'cash'
   };
 
-  // ✅ Part B Phase 3: Half-Commit Precondition — enqueue أولاً
-  // لو الـ queue ممتلئ → null → نوقف قبل أي state mutation
-  const opId = enqueueSyncOperation('insert_expense', payload, expenseId);
-  if (opId === null) return;
+  enqueueSyncOperation('insert_expense', {
+  id: newExpense.id, name: newExpense.name, amount: newExpense.amount,
+  notes: newExpense.notes, date: newExpense.date,
+  shift_id: newExpense.shift_id, pay_method: newExpense.pay_method,
+  needs_review: false, created_by: null
+}, newExpense.id);
 
-  // ✅ Part B Phase 3: state mutation بعد enqueue ناجح + _pendingUpload flag
   state.expenses.unshift({
-    id: expenseId, name: name, amount: amount, date: date, notes: notes,
-    shift_id: currentShiftId, shiftId: currentShiftId,
-    pay_method: 'cash', payMethod: 'cash',
-    _pendingUpload: true
+    id: newExpense.id, name: name, amount: amount, date: date, notes: notes,
+    shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
   });
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_expense', { id: expenseId, name, amount }, expenseId);
+    addAuditLog('add_expense', { id: newExpense.id, name, amount }, newExpense.id);
   }
 
   saveData();
-  document.getElementById('expenseName').value = '';
-  document.getElementById('expenseAmount').value = '';
-  document.getElementById('expenseNotes').value = '';
-  refreshCurrentPage();
-  showNotification(tr('expense_saved'));
+document.getElementById('expenseName').value = '';
+document.getElementById('expenseAmount').value = '';
+document.getElementById('expenseNotes').value = '';
+refreshCurrentPage();
+showNotification(tr('expense_saved'));
   switchExpenseTab('exp-list');
+}
+
+function renderExpenses() {
+  const container = document.getElementById('expensesTable');
+  if (!container) return;
+  if (state.expenses.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center" style="padding:20px;">' + tr('no_expenses') + '</p>';
+    return;
+  }
+  
+  const delErrBtn = tr('delete_err_btn');
+  const en = currentLang === 'en';
+  
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>' + tr('th_date') + '</th>' +
+'<th>' + tr('th_item_name') + '</th>' +
+'<th>' + tr('th_amount') + '</th>' +
+'<th>' + tr('th_action') + '</th>' +
+    '</tr></thead><tbody>';
+    
+  state.expenses.forEach(function(e) {
+    const dateObj = new Date(e.date);
+    
+    // تنسيق التاريخ والوقت مع بعض في سطر واحد
+    const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    const dateStr = dateObj.toLocaleString(en ? 'en-US' : 'ar-EG', options);
+    
+    // دمج الملاحظات تحت اسم البند عشان نوفر مساحة
+    const notesHtml = e.notes ? `<br><span style="color:#888; font-size:11px;">${escapeHTML(e.notes)}</span>` : '';
+    
+    html += '<tr>' +
+      '<td style="white-space:nowrap; font-size:12px; color:#555;">' + dateStr + '</td>' +
+      '<td><b style="font-size:13px;">' + escapeHTML(e.name) + '</b>' + notesHtml + '</td>' +
+      '<td><b style="color:#c0392b; direction:ltr; font-size:13px;">' + Number(e.amount || 0).toFixed(2) + '</b></td>' +
+      '<td><button class="small-btn red" style="padding:4px 8px;" onclick="safeDeleteRecord(\'expense\', \'' + e.id + '\')">' + delErrBtn + '</button></td>' +
+      '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function filterByPeriod(items, dateField, from, to) {
+  if (!Array.isArray(items)) return [];
+  const fields = Array.isArray(dateField) ? dateField : [dateField];
+  return items.filter(function(item) {
+    if (!item) return false;
+    let raw = null;
+    for (let i = 0; i < fields.length; i++) {
+      const v = item[fields[i]];
+      if (v !== undefined && v !== null && v !== '') { raw = v; break; }
+    }
+    if (raw === null) return false;
+    const d = String(raw).split('T')[0];
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
 }
 async function renderReports() {
   const from = (document.getElementById('reportFrom') || {}).value || '';
