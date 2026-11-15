@@ -415,9 +415,7 @@ async function savePurchase() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // ═══════════════════════════════════════════════════════════
-  // المرحلة 1: بناء الـ payloads (بدون state mutation)
-  // ═══════════════════════════════════════════════════════════
+  // المرحلة 1: بناء الـ payloads
   let targetProdId = prodId;
   let targetProdName = '';
   let newProductData = null;
@@ -455,31 +453,24 @@ async function savePurchase() {
     date: new Date().toISOString()
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // المرحلة 2: enqueue أولاً (Half-Commit Precondition)
-  // ═══════════════════════════════════════════════════════════
+  // المرحلة 2: enqueue أولاً
   let opProductId = null;
   if (newProductData) {
     opProductId = enqueueSyncOperation('insert_product', newProductData, newProductData.id);
-    if (opProductId === null) return; // queue full — صفر state mutation
+    if (opProductId === null) return; 
   }
 
   const opPurchaseId = enqueueSyncOperation('insert_purchase', purchasePayload, purchaseId);
   if (opPurchaseId === null) {
-    // ✅ Atomic pair rollback: نمسح opProduct من الـ queue لو insert_purchase فشل
     if (opProductId) {
       const _q = _loadQueue();
       const _idx = _q.findIndex(o => o.id === opProductId);
       if (_idx !== -1) { _q.splice(_idx, 1); _saveQueue(_q); }
     }
-    return; // صفر state mutation
+    return; 
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // المرحلة 3: state mutations (بعد نجاح enqueue)
-  // ═══════════════════════════════════════════════════════════
-
-  // 3.1 منتج جديد → push مع _pendingUpload
+  // المرحلة 3: state mutations
   if (newProductData) {
     state.products.push({
       id: targetProdId, name: newName, barcode: '', category: tr('general_cat'),
@@ -495,9 +486,7 @@ async function savePurchase() {
       new_stock: qty, newStock: qty,
       reason: tr('new_prod_purchase_reason')
     });
-  }
-  // 3.2 منتج موجود → تحديث stock + cost (WAC)
-  else if (existingProdRef) {
+  } else if (existingProdRef) {
     let newCost = cost;
     if ((existingProdOldStock + qty) > 0) {
       newCost = ((existingProdOldStock * existingProdOldCost) + (qty * cost)) / (existingProdOldStock + qty);
@@ -516,7 +505,6 @@ async function savePurchase() {
     });
   }
 
-  // 3.3 purchase → unshift مع _pendingUpload
   state.purchases.unshift({
     id: purchaseId, date: purchasePayload.date,
     supplier_id: supplierId, supplierId: supplierId,
@@ -526,9 +514,7 @@ async function savePurchase() {
     _pendingUpload: true
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // المرحلة 4: audit + save + UI (نفس السلوك القديم)
-  // ═══════════════════════════════════════════════════════════
+  // المرحلة 4: audit + save + UI
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_purchase', { purchaseId: purchaseId, total }, purchaseId);
   }
