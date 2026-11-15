@@ -100,8 +100,9 @@ function renderCustomers() {
 }
 
 async function deleteCustomer(id) {
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
-
+  
   const cust = state.customers.find(c => c.id === id);
   if (cust && (cust.name === 'عميل نقدي عام' || cust.name === 'Cash Customer')) {
     return showNotification(tr('cannot_delete_cash_cust'), 'warning');
@@ -216,6 +217,8 @@ function renderCustomerPayments() {
 
 /* ============ الموردون والمشتريات ============ */
 async function saveSupplier() {
+  // ✅ Cleanup Pass #4: isReadOnlyMode check (كان مفقود — مقدس #2)
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
   const id = document.getElementById('supplierId').value;
@@ -229,25 +232,38 @@ async function saveSupplier() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const supplierId = id || uid('SUP');
 
-  const newSupplier = {
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 1: بناء payload (بدون state mutation)
+  // ═══════════════════════════════════════════════════════════
+  const payload = {
     id: supplierId, user_id: ownerId, name: name, phone: phone, opening_debt: openingDebt
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 2: enqueue أولاً (Half-Commit Precondition)
+  // ═══════════════════════════════════════════════════════════
+  const opId = enqueueSyncOperation('insert_supplier', payload, supplierId);
+  if (opId === null) return; // queue full — صفر state mutation
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 3: state mutations (بعد enqueue ناجح)
+  // ═══════════════════════════════════════════════════════════
   if (id) {
+    // edit: المورد موجود — flag marking اتعمل جوّه enqueueSyncOperation
     const s = state.suppliers.find(function(item) { return item.id === id; });
     if (s) { s.name = name; s.phone = phone; s.openingDebt = openingDebt; s.opening_debt = openingDebt; }
   } else {
-    state.suppliers.push({ id: supplierId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt });
+    // create: flag يدوي
+    state.suppliers.push({
+      id: supplierId, name: name, phone: phone,
+      openingDebt: openingDebt, opening_debt: openingDebt,
+      _pendingUpload: true
+    });
   }
 
-  if (navigator.onLine && supabaseClient) {
-    const { error } = await supabaseClient.from('suppliers').upsert(newSupplier, { onConflict: 'id' });
-    if (error) {
-      console.warn('Supplier upload failed:', error);
-      return showNotification(tr('supplier_save_fail') + error.message, 'error');
-    }
-  }
-
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 4: audit + save + UI (نفس السلوك القديم)
+  // ═══════════════════════════════════════════════════════════
   if (typeof addAuditLog === 'function') {
     addAuditLog(id ? 'edit_supplier' : 'add_supplier', { supplierId, name }, supplierId);
   }
@@ -342,8 +358,8 @@ function renderSuppliers() {
 }
 
 async function deleteSupplier(id) {
+  if (window.isReadOnlyMode) return showNotification(tr('renew_sub_first'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
-
   const sup = state.suppliers.find(function(s) { return s.id === id; });
 
   const realBalance = financeCore.calcSupplierBalance(id);
