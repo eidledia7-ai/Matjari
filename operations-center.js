@@ -171,6 +171,10 @@ async function deleteFailedOp(opId) {
   if (op.type === 'insert_return') {
     return await _deleteFailedReturnOp(op);
   }
+  // ✅ Part B Phase 3: insert_expense → server check + reversal
+if (op.type === 'insert_expense') {
+  return await _deleteFailedExpenseOp(op);
+}
 
   // Legacy path للأنواع الأخرى (insert_expense / insert_customer_payment)
   // — بدون تغيير، سيتم ترقيتها في مراحل لاحقة (Phase 3+)
@@ -538,7 +542,144 @@ async function _deleteFailedReturnOp(op) {
   renderOperationsCenter();
   showNotification(tr('op_deleted'), 'success');
 }
+async function _deleteFailedExpenseOp(op) {
+  const p = op.payload || {};
+  const expenseId = p.id;
+  if (!expenseId) return;
 
+  // TODO(i18n): 6 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
+  //             في مرحلة التنظيف بعد Part B.
+  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
+  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
+  const MSG_EXISTS_TITLE     = 'المصروف موجود على السيرفر';
+  const MSG_EXISTS_BODY      = 'المصروف رُفع بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
+  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
+  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع المصروف. سيتم حذف العملية من النظام. متابعة؟';
+  const MSG_DUPLICATE_TITLE  = 'يوجد مصروف آخر معلّق بنفس الرقم';
+  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس المصروف. راجع مركز العمليات أولاً.';
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 0: Duplicate op check
+  // ═══════════════════════════════════════════════════════
+  const dupQueue = _loadQueue();
+  const hasDuplicate = dupQueue.some(o =>
+    o.id !== op.id &&
+    o.type === 'insert_expense' &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === expenseId
+  );
+  if (hasDuplicate) {
+    return showNotification(MSG_DUPLICATE_TITLE + ' — ' + MSG_DUPLICATE_BODY, 'warning');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 1: Server check (precondition إجباري)
+  // ═══════════════════════════════════════════════════════
+  if (!navigator.onLine || !supabaseClient) {
+    return showNotification(MSG_OFFLINE, 'warning');
+  }
+
+  let existsOnServer = false;
+  try {
+    const { data, error } = await supabaseClient
+      .from('expenses').select('id').eq('id', expenseId).maybeSingle();
+    if (error) throw error;
+    existsOnServer = !!data;
+  } catch (e) {
+    return showNotification(MSG_SERVER_ERROR(e.message || 'network'), 'error');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2أ: موجود على السيرفر → حذف من القائمة فقط
+  // ═══════════════════════════════════════════════════════
+  if (existsOnServer) {
+    const choice = confirm(
+      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+    );
+    if (!choice) return;
+
+    const q = _loadQueue();
+    const idx = q.findIndex(o => o.id === op.id);
+    if (idx !== -1) q.splice(idx, 1);
+    _saveQueue(q);
+
+    // امسح _pendingUpload عشان syncDown التالي يجيب النسخة من السيرفر
+    const localExpense = (state.expenses || []).find(e => e.id === expenseId);
+    if (localExpense) delete localExpense._pendingUpload;
+
+    if (typeof addAuditLog === 'function') {
+      addAuditLog('remove_stale_expense_op', {
+        expenseId, reason: 'server_has_it',
+        name: p.name, amount: Number(p.amount) || 0
+      }, expenseId);
+    }
+
+    saveData();
+    if (typeof renderAll === 'function') renderAll();
+    renderOperationsCenter();
+    return showNotification(tr('op_deleted'), 'success');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 2ب: مش موجود → تأكيد + reversal
+  // ═══════════════════════════════════════════════════════
+  if (!confirm(MSG_REVERSAL_CONFIRM)) return;
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 3: Reversal (synchronous، قبل splice)
+  // ═══════════════════════════════════════════════════════
+  const exp = (state.expenses || []).find(e => e.id === expenseId);
+
+  // Idempotency: لو expense مش موجود في state (reversal سابق نجح، splice فشل)، نروح للمرحلة 4
+  if (exp) {
+    try {
+      const shiftId = exp.shift_id || exp.shiftId || null;
+      const shift = shiftId ? (state.shifts || []).find(s => s.id === shiftId) : null;
+      const shiftClosed = !!(shift && (shift.end_time || shift.endTime));
+
+      // 3.1 إزالة من state.expenses (footprint الوحيد)
+      state.expenses = (state.expenses || []).filter(e => e.id !== expenseId);
+
+      // 3.2 audit log — Option A: نتجاهل الـ shift snapshot لكن نوثقه
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_expense_op', {
+          expenseId,
+          name: exp.name || p.name,
+          amount: Number(exp.amount ?? p.amount) || 0,
+          shift_id: shiftId,
+          shiftClosed,
+          shiftSnapshotNote: shiftClosed
+            ? 'Shift already closed — snapshot cash_expenses may retain this amount (known limitation, documented in PLAN.md)'
+            : null
+        }, expenseId);
+      }
+    } catch (err) {
+      if (typeof addAuditLog === 'function') {
+        addAuditLog('remove_failed_expense_op_error', {
+          expenseId, error: err.message || String(err)
+        }, expenseId);
+      }
+      return showNotification('فشل عكس البيانات: ' + (err.message || '') + '. لم يتم حذف العملية.', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 4: Splice from queue (فقط بعد نجاح reversal)
+  // ═══════════════════════════════════════════════════════
+  const q = _loadQueue();
+  const idx = q.findIndex(o => o.id === op.id);
+  if (idx !== -1) q.splice(idx, 1);
+  _saveQueue(q);
+
+  // ═══════════════════════════════════════════════════════
+  // المرحلة 5: Finalize
+  // ═══════════════════════════════════════════════════════
+  saveData();
+  if (typeof renderAll === 'function') renderAll();
+  renderOperationsCenter();
+  showNotification(tr('op_deleted'), 'success');
+}
 async function renderStockConflicts() {
   const container = document.getElementById('stockConflictsTable');
   if (!container) return;

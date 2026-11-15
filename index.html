@@ -1421,6 +1421,136 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+<!-- 🧪 PHASE 3 OPERATIONS-CENTER TEST PANEL -->
+<div id="opsTestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runOpsTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Ops Center</button>
+  <button onclick="document.getElementById('opsTestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="opsTestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+</div>
 
+<script>
+async function runOpsTest() {
+  const results = document.getElementById('opsTestResults');
+  results.innerHTML = '';
+  const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
+  const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
+  
+  const originalConfirm = window.confirm;
+  const originalShowNotif = window.showNotification;
+  
+  try {
+    // ═══════════════════════════════════════════════════════
+    log('=== Test 1: Reversal logic (expense بدون shift) ===');
+    
+    // 1. Setup: fake expense + fake op
+    const tId = Date.now();
+    const testExpId = 'EXP-OPS-' + tId;
+    const testOpId = 'OP-OPS-' + tId;
+    
+    state.expenses.push({
+      id: testExpId, name: 'اختبار مصروف', amount: 150,
+      date: new Date().toISOString(), shift_id: null, shiftId: null,
+      pay_method: 'cash', payMethod: 'cash',
+      _pendingUpload: true
+    });
+    
+    const q = _loadQueue();
+    q.push({
+      id: testOpId, type: 'insert_expense',
+      payload: { id: testExpId, name: 'اختبار مصروف', amount: 150, date: new Date().toISOString(), shift_id: null, pay_method: 'cash' },
+      idempotencyKey: testExpId, attempts: 5, maxAttempts: 5,
+      status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
+    });
+    _saveQueue(q);
+    
+    log('  Before: expense in state = ' + !!state.expenses.find(e => e.id === testExpId));
+    
+    // Mock confirm → true, showNotification → silent
+    window.confirm = () => true;
+    window.showNotification = () => {};
+    
+    // 2. Execute delete
+    await deleteFailedOp(testOpId);
+    
+    window.confirm = originalConfirm;
+    window.showNotification = originalShowNotif;
+    
+    // 3. Verify
+    const expAfter = state.expenses.find(e => e.id === testExpId);
+    const opAfter = _loadQueue().find(o => o.id === testOpId);
+    
+    log('  After: expense in state = ' + !!expAfter);
+    check('Expense removed from state', !expAfter);
+    check('Op removed from queue', !opAfter);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 2: Server has it (simulated) ===');
+    const tId2 = Date.now();
+    const testExp2Id = 'EXP-OPS-REAL-' + tId2;
+    const testOp2Id = 'OP-OPS-REAL-' + tId2;
+    
+    // 1. Create real expense in DB
+    if (navigator.onLine && supabaseClient) {
+      const { error: err1 } = await supabaseClient.from('expenses').insert({
+        id: testExp2Id, user_id: state.currentUser.id, name: 'Real Test', amount: 99,
+        date: new Date().toISOString(), pay_method: 'cash'
+      });
+      
+      if (err1) {
+        log('  ⚠️ Failed to create real expense in DB: ' + err1.message);
+      } else {
+        state.expenses.push({
+          id: testExp2Id, name: 'Real Test', amount: 99,
+          date: new Date().toISOString(), shift_id: null, shiftId: null,
+          pay_method: 'cash', payMethod: 'cash',
+          _pendingUpload: true
+        });
+        
+        const q2 = _loadQueue();
+        q2.push({
+          id: testOp2Id, type: 'insert_expense',
+          payload: { id: testExp2Id, name: 'Real Test', amount: 99, date: new Date().toISOString(), shift_id: null, pay_method: 'cash' },
+          idempotencyKey: testExp2Id, attempts: 5, maxAttempts: 5,
+          status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
+        });
+        _saveQueue(q2);
+        
+        window.confirm = () => true;
+        window.showNotification = () => {};
+        await deleteFailedOp(testOp2Id);
+        window.confirm = originalConfirm;
+        window.showNotification = originalShowNotif;
+        
+        const exp2After = state.expenses.find(e => e.id === testExp2Id);
+        const op2After = _loadQueue().find(o => o.id === testOp2Id);
+        const exp2InDb = await supabaseClient.from('expenses').select('id').eq('id', testExp2Id).maybeSingle();
+        
+        check('Expense kept in state (server has it)', !!exp2After);
+        check('Flag cleared (ready for syncDown)', exp2After && exp2After._pendingUpload === undefined);
+        check('Op removed from queue', !op2After);
+        check('Expense still in DB (not deleted)', exp2InDb.data !== null);
+        
+        // Cleanup DB
+        await supabaseClient.from('expenses').delete().eq('id', testExp2Id);
+        state.expenses = state.expenses.filter(e => e.id !== testExp2Id);
+      }
+    } else {
+      log('  ⚠️ SKIP: offline');
+    }
+    
+    // Cleanup
+    clearSyncQueue();
+    saveData();
+    log('\n🧹 تم التنظيف.');
+    
+  } catch (e) {
+    window.confirm = originalConfirm;
+    window.showNotification = originalShowNotif;
+    log('❌ ERROR: ' + e.message);
+    log(e.stack);
+  }
+}
+</script>
+<!-- 🧪 END PHASE 3 OPERATIONS-CENTER TEST PANEL -->
 </body>
 </html>
