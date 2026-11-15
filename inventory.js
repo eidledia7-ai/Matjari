@@ -323,6 +323,9 @@ async function saveStockAdjustment() {
   const prod = state.products.find(p => p.id === prodId);
   if (!prod) return;
 
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 1: حساب newStock + moveQty (بدون state mutation)
+  // ═══════════════════════════════════════════════════════════
   const oldStock = Number(prod.stock) || 0;
   let newStock = oldStock;
   let moveQty = qty;
@@ -340,24 +343,35 @@ async function saveStockAdjustment() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const moveId = uid('SM');
+  const moveDate = new Date().toISOString();
 
-  // 1. تحديث الحالة المحلية
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 2: enqueue أولاً (Half-Commit Precondition)
+  // ═══════════════════════════════════════════════════════════
+  const opId = enqueueSyncOperation('adjust_stock', {
+    id: moveId, product_id: prod.id, product_name: prod.name,
+    type: type, qty: moveQty, old_stock: oldStock, new_stock: newStock,
+    reason: reason, date: moveDate
+  }, moveId);
+  if (opId === null) return; // queue full — صفر state mutation
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 3: state mutations (بعد نجاح enqueue)
+  // ═══════════════════════════════════════════════════════════
   prod.stock = newStock;
   state.stockMoves.unshift({
-    id: moveId, date: new Date().toISOString(),
-    product_id: prod.id, productId: prod.id, product_name: prod.name, productName: prod.name,
-    type: type, qty: moveQty, old_stock: oldStock, oldStock: oldStock, new_stock: newStock, newStock: newStock, reason: reason
+    id: moveId, date: moveDate,
+    product_id: prod.id, productId: prod.id,
+    product_name: prod.name, productName: prod.name,
+    type: type, qty: moveQty,
+    old_stock: oldStock, oldStock: oldStock,
+    new_stock: newStock, newStock: newStock,
+    reason: reason
   });
 
-  // 2. إرسال للسيرفر عبر الـ Queue (عشان تدعم الأوفلاين)
-  if (typeof enqueueSyncOperation === 'function') {
-    enqueueSyncOperation('adjust_stock', {
-      id: moveId, product_id: prod.id, product_name: prod.name,
-      type: type, qty: moveQty, old_stock: oldStock, new_stock: newStock,
-      reason: reason, date: new Date().toISOString()
-    }, moveId);
-  }
-
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 4: audit + save + UI (نفس السلوك القديم)
+  // ═══════════════════════════════════════════════════════════
   if (typeof addAuditLog === 'function') {
     addAuditLog('adjust_stock', { productId: prod.id, productName: prod.name, type: type, qty: moveQty, oldStock, newStock, reason }, moveId);
   }

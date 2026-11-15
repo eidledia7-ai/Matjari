@@ -1421,94 +1421,116 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #1 - PARTNERS TEST (DIRECT) -->
-<div id="cq1pPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ1PartnersTestDirect()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Direct</button>
-  <button onclick="document.getElementById('cq1pResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq1pResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #2 - STOCK ADJUSTMENT TEST -->
+<div id="cq2Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ2Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ2</button>
+  <button onclick="document.getElementById('cq2Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq2Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ1PartnersTestDirect() {
-  const results = document.getElementById('cq1pResults');
+async function runCQ2Test() {
+  const results = document.getElementById('cq2Results');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
   
   const originalShowNotif = window.showNotification;
+  const originalConfirm = window.confirm;
+  
   window.showNotification = () => {}; // silent
-
+  window.confirm = () => true;
+  
   try {
-    log('=== Test 1: Existing product — enqueue + WAC ===');
-    
+    // ═══════════════════════════════════════════════════════
+    log('=== Test 1: type=\'in\' (Happy Path) ===');
     const tId = Date.now();
-    const supId = 'SUP-T-' + tId;
-    const prdId = 'PRD-T-' + tId;
+    const prodId = 'PROD-CQ2-' + tId;
     
-    // Create supplier and product in state
-    state.suppliers.push({ id: supId, name: 'Test Sup', phone: '', opening_debt: 0 });
-    state.products.push({ id: prdId, name: 'Test Prod', stock: 10, cost: 5, price: 10, barcode: '', category: '' });
+    state.products.push({ id: prodId, name: 'Test Prod', stock: 10, cost: 5, price: 10, barcode: '', category: '' });
     
-    // Manually trigger savePurchase logic by injecting values into DOM
-    // (simulate form fill)
-    document.getElementById('purchaseSupplier').value = supId;
-    document.getElementById('purchaseProduct').value = prdId;
-    document.getElementById('purchaseNewName').value = '';
-    document.getElementById('purchaseQty').value = '5';
-    document.getElementById('purchaseCost').value = '6';
-    document.getElementById('purchasePaid').value = '30';
+    document.getElementById('adjustProduct').value = prodId;
+    document.getElementById('adjustType').value = 'in';
+    document.getElementById('adjustQty').value = '5';
+    document.getElementById('adjustReason').value = 'Test';
     
-    // Since dropdown is populated by renderSuppliers, let's manually add option if not found
-    const supSelect = document.getElementById('purchaseSupplier');
-    if (!Array.from(supSelect.options).some(o => o.value === supId)) {
-      const opt = document.createElement('option');
-      opt.value = supId;
-      opt.text = 'Test Sup';
-      supSelect.add(opt);
-      supSelect.value = supId;
+    await saveStockAdjustment();
+    
+    const pAfter = state.products.find(p => p.id === prodId);
+    const moveAfter = state.stockMoves.find(m => m.product_id === prodId && m.type === 'in');
+    const opAfter = _loadQueue().find(o => o.type === 'adjust_stock' && o.payload?.product_id === prodId);
+    
+    check('Stock updated to 15', pAfter && pAfter.stock === 15);
+    check('StockMove created', !!moveAfter);
+    check('Op queued', !!opAfter);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 2: type=\'out\' with invalid qty (Validation) ===');
+    // Prod stock is now 15.
+    document.getElementById('adjustType').value = 'out';
+    document.getElementById('adjustQty').value = '20'; // > 15
+    document.getElementById('adjustReason').value = 'Test Out';
+    
+    await saveStockAdjustment();
+    
+    const pAfterOut = state.products.find(p => p.id === prodId);
+    check('Stock unchanged (still 15)', pAfterOut && pAfterOut.stock === 15);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 3: type=\'set\' (Happy Path) ===');
+    document.getElementById('adjustType').value = 'set';
+    document.getElementById('adjustQty').value = '7';
+    
+    await saveStockAdjustment();
+    
+    const pAfterSet = state.products.find(p => p.id === prodId);
+    const moveSet = state.stockMoves.find(m => m.product_id === prodId && m.type === 'set');
+    
+    check('Stock set to 7', pAfterSet && pAfterSet.stock === 7);
+    check('StockMove set created', !!moveSet);
+    check('Move qty = -8 (7 - 15)', moveSet && moveSet.qty === -8);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 4: Half-Commit (Queue Full) ===');
+    
+    // املأ الـ queue لـ 200
+    clearSyncQueue();
+    for (let i = 0; i < 200; i++) {
+      enqueueSyncOperation('insert_expense', { id: 'FILL-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL-' + i);
     }
     
-    const prodSelect = document.getElementById('purchaseProduct');
-    if (!Array.from(prodSelect.options).some(o => o.value === prdId)) {
-      const opt = document.createElement('option');
-      opt.value = prdId;
-      opt.text = 'Test Prod';
-      prodSelect.add(opt);
-      prodSelect.value = prdId;
-    }
-
-    await savePurchase();
+    const stockBefore = pAfterSet.stock;
+    const movesCountBefore = state.stockMoves.length;
     
-    const prod = state.products.find(p => p.id === prdId);
-    const purch = state.purchases.find(p => p.supplier_id === supId && p.product_id === prdId);
-    const op = _loadQueue().find(o => o.type === 'insert_purchase' && o.payload?.supplier_id === supId);
+    document.getElementById('adjustType').value = 'in';
+    document.getElementById('adjustQty').value = '100';
     
-    log('  Before: Stock=10, Cost=5. After purchase(qty=5, cost=6):');
-    log('  Current Stock: ' + (prod ? prod.stock : 'N/A') + ', Current Cost: ' + (prod ? prod.cost.toFixed(3) : 'N/A'));
-    log('  Queue ops: ' + (_loadQueue().length));
+    await saveStockAdjustment();
     
-    check('Product stock updated (10 → 15)', prod && prod.stock === 15);
-    check('Product cost WAC (5.333...)', prod && Math.abs(prod.cost - 5.3333) < 0.01);
-    check('Purchase with _pendingUpload', purch && purch._pendingUpload === true);
-    check('Op in queue', !!op);
+    const stockAfter = state.products.find(p => p.id === prodId).stock;
+    const movesCountAfter = state.stockMoves.length;
+    
+    check('Stock unchanged on queue full', stockAfter === stockBefore);
+    check('No new stockMove added', movesCountAfter === movesCountBefore);
     
     // Cleanup
     clearSyncQueue();
-    state.products = state.products.filter(p => p.id !== prdId);
-    state.suppliers = state.suppliers.filter(s => s.id !== supId);
-    state.purchases = state.purchases.filter(p => p.id !== (purch?.id));
+    state.products = state.products.filter(p => p.id !== prodId);
+    state.stockMoves = state.stockMoves.filter(m => m.product_id !== prodId);
     saveData();
     
     log('\n🧹 تم التنظيف.');
+    
   } catch (e) {
     log('❌ ERROR: ' + e.message);
     log(e.stack);
   } finally {
     window.showNotification = originalShowNotif;
+    window.confirm = originalConfirm;
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #1 PARTNERS TEST (DIRECT) --> 
+<!-- 🧪 END CLEANUP #2 TEST --> 
 
 </body>
 </html>
