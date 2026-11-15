@@ -104,11 +104,70 @@ async function renderFailedOps() {
 function _summarizeOp(op) {
   const p = op.payload || {};
   const cur = state.storeSettings?.currency || '';
+
+  // ─── الأنواع الموجودة من قبل ───
   if (op.type === 'insert_sale')   return escapeHTML('#' + (p.id || '?') + ' — ' + (Number(p.total) || 0).toFixed(2) + ' ' + cur);
   if (op.type === 'insert_return') return escapeHTML('#' + (p.sale_id || '?') + ' — ' + (p.product_name || '') + ' × ' + (p.qty || 0));
   if (op.type === 'insert_expense') return escapeHTML((p.name || '') + ' — ' + (Number(p.amount) || 0).toFixed(2));
   if (op.type === 'insert_customer_payment') return escapeHTML((p.customer_name || '') + ' — ' + (Number(p.amount) || 0).toFixed(2));
   if (op.type === 'delete_sale' || op.type === 'delete_expense') return escapeHTML('#' + (p.id || '?'));
+
+  // ─── ✅ Cleanup Pass #5: الأنواع الـ 8 الناقصة ───
+
+  // العملاء والموردين
+  if (op.type === 'insert_customer') {
+    const tail = p.phone ? ' — ' + p.phone : '';
+    return escapeHTML((p.name || '?') + tail);
+  }
+  if (op.type === 'insert_supplier') {
+    const tail = p.phone ? ' — ' + p.phone : '';
+    return escapeHTML((p.name || '?') + tail);
+  }
+  if (op.type === 'insert_supplier_payment') {
+    return escapeHTML((p.supplier_name || '?') + ' — ' + (Number(p.amount) || 0).toFixed(2) + ' ' + cur);
+  }
+
+  // المنتجات
+  if (op.type === 'insert_product') {
+    return escapeHTML(
+      (p.name || '?') +
+      ' — stock: ' + (Number(p.stock) || 0) +
+      ' — price: ' + (Number(p.price) || 0).toFixed(2) + ' ' + cur
+    );
+  }
+
+  // الورديات
+  if (op.type === 'insert_shift') {
+    const startStr = p.start_time ? new Date(p.start_time).toLocaleString(currentLang === 'en' ? 'en-US' : 'ar-EG') : '—';
+    return escapeHTML((p.cashier_name || '?') + ' — start: ' + startStr);
+  }
+  if (op.type === 'close_shift') {
+    return escapeHTML(
+      (p.cashier_name || '?') +
+      ' — actual: ' + (Number(p.actual_cash) || 0).toFixed(2) + ' ' + cur +
+      ' — diff: ' + (Number(p.difference) || 0).toFixed(2) + ' ' + cur
+    );
+  }
+
+  // المشتريات
+  if (op.type === 'insert_purchase') {
+    return escapeHTML(
+      (p.product_name || '?') + ' × ' + (Number(p.qty) || 0) +
+      ' — total: ' + (Number(p.total) || 0).toFixed(2) + ' ' + cur
+    );
+  }
+
+  // تعديل المخزون
+  if (op.type === 'adjust_stock') {
+    const q = Number(p.qty) || 0;
+    const sign = q > 0 ? '+' : '';
+    const typeLabel = p.type || '?';
+    return escapeHTML(
+      (p.product_name || '?') + ' — ' + typeLabel + ' ' + sign + q +
+      (p.reason ? ' — ' + p.reason : '')
+    );
+  }
+
   return '-';
 }
 
@@ -158,6 +217,7 @@ async function retryAllFailedOps() {
 }
 
 async function deleteFailedOp(opId) {
+if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
   const queue = _loadQueue();
   const op = queue.find(o => o.id === opId);
   if (!op) return;

@@ -1421,93 +1421,95 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #4 - PARTNERS TEST -->
-<div id="cq4pPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ4PartnersTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ4 Partners</button>
-  <button onclick="document.getElementById('cq4pResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq4pResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #5 - OPS-CENTER TEST -->
+<div id="cq5ocPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ5OpsCenterTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ5 Ops</button>
+  <button onclick="document.getElementById('cq5ocResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq5ocResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ4PartnersTest() {
-  const results = document.getElementById('cq4pResults');
+async function runCQ5OpsCenterTest() {
+  const results = document.getElementById('cq5ocResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
   
   const originalShowNotif = window.showNotification;
-  const originalConfirm = window.confirm;
   window.showNotification = () => {}; // silent
-  window.confirm = () => true;
 
   try {
     // ═══════════════════════════════════════════════════════
-    log('=== Test 1: saveSupplier create online ===');
-    const tId = Date.now();
-    const supName = 'CQ4 Sup ' + tId;
+    log('=== Test 1: _summarizeOp — 8 new types ===');
     
-    document.getElementById('supplierId').value = '';
-    document.getElementById('supplierName').value = supName;
-    document.getElementById('supplierPhone').value = '010';
-    document.getElementById('supplierOpeningDebt').value = '0';
+    const mockCurrency = 'ج.م';
+    state.storeSettings = state.storeSettings || {};
+    state.storeSettings.currency = mockCurrency;
     
-    await saveSupplier();
+    const newTypes = [
+      { type: 'insert_customer', payload: { id: 'C1', name: 'أحمد', phone: '01000000000' }, expectContains: 'أحمد' },
+      { type: 'insert_supplier', payload: { id: 'S1', name: 'مورد A', phone: '01111111111' }, expectContains: 'مورد A' },
+      { type: 'insert_supplier_payment', payload: { id: 'SP1', supplier_name: 'مورد B', amount: 100 }, expectContains: 'مورد B' },
+      { type: 'insert_product', payload: { id: 'P1', name: 'منتج X', stock: 10, price: 15 }, expectContains: 'منتج X' },
+      { type: 'insert_shift', payload: { id: 'SH1', cashier_name: 'أحمد', start_time: new Date().toISOString() }, expectContains: 'أحمد' },
+      { type: 'close_shift', payload: { id: 'SH2', cashier_name: 'أحمد', actual_cash: 500, difference: -5 }, expectContains: 'أحمد' },
+      { type: 'insert_purchase', payload: { id: 'PU1', product_name: 'منتج Y', qty: 5, total: 30 }, expectContains: 'منتج Y' },
+      { type: 'adjust_stock', payload: { id: 'SM1', product_name: 'منتج Z', qty: 10, type: 'in', reason: 'جرد' }, expectContains: 'منتج Z' }
+    ];
     
-    const sup = state.suppliers.find(s => s.name === supName);
-    const op = _loadQueue().find(o => o.type === 'insert_supplier' && o.payload?.name === supName);
-    
-    check('Supplier created in state', !!sup);
-    check('Supplier has _pendingUpload', sup && sup._pendingUpload === true);
-    check('Op queued', !!op);
-    
+    newTypes.forEach(t => {
+      const summary = _summarizeOp({ type: t.type, payload: t.payload });
+      const ok = summary.includes(t.expectContains);
+      check(t.type + ' → "' + summary.substring(0, 40) + '..."', ok);
+    });
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: saveSupplier isReadOnlyMode ===');
-    window.isReadOnlyMode = true;
-    const supCountBefore = state.suppliers.length;
+    log('\n=== Test 2: _summarizeOp — 6 existing types (regression) ===');
     
-    document.getElementById('supplierName').value = 'ShouldNotCreate';
-    await saveSupplier();
+    const existingTypes = [
+      { type: 'insert_sale', payload: { id: 'INV-1', total: 200 }, expectContains: 'INV-1' },
+      { type: 'insert_return', payload: { sale_id: 'INV-1', product_name: 'Prod', qty: 2 }, expectContains: 'INV-1' },
+      { type: 'insert_expense', payload: { id: 'EXP-1', name: 'كهرباء', amount: 150 }, expectContains: 'كهرباء' },
+      { type: 'insert_customer_payment', payload: { id: 'CP-1', customer_name: 'أحمد', amount: 100 }, expectContains: 'أحمد' },
+      { type: 'delete_sale', payload: { id: 'INV-DEL-1' }, expectContains: 'INV-DEL-1' },
+      { type: 'delete_expense', payload: { id: 'EXP-DEL-1' }, expectContains: 'EXP-DEL-1' }
+    ];
     
-    const supCountAfter = state.suppliers.length;
-    check('Blocked in read-only mode', supCountBefore === supCountAfter);
-    window.isReadOnlyMode = false;
-    
+    existingTypes.forEach(t => {
+      const summary = _summarizeOp({ type: t.type, payload: t.payload });
+      const ok = summary.includes(t.expectContains);
+      check(t.type + ' → "' + summary.substring(0, 40) + '..."', ok);
+    });
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: deleteSupplier isReadOnlyMode ===');
-    window.isReadOnlyMode = true;
-    const supBefore = state.suppliers.length;
-    if (sup) await deleteSupplier(sup.id);
-    check('Delete blocked in read-only mode', supBefore === state.suppliers.length);
-    window.isReadOnlyMode = false;
+    log('\n=== Test 3: Edge cases ===');
     
+    // Empty name — no crash
+    const s1 = _summarizeOp({ type: 'insert_customer', payload: {} });
+    check('insert_customer (empty) no crash', typeof s1 === 'string');
+    
+    // Zero stock
+    const s2 = _summarizeOp({ type: 'insert_product', payload: { name: 'X', stock: 0, price: 0 } });
+    check('insert_product zero-stock ok', s2.includes('stock: 0'));
+    
+    // Unknown type — returns '-'
+    const s3 = _summarizeOp({ type: 'unknown_type', payload: {} });
+    check('Unknown type → "-"', s3 === '-');
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 4: deleteCustomer isReadOnlyMode ===');
-    window.isReadOnlyMode = true;
-    const cust = state.customers[0];
-    const custBefore = state.customers.length;
-    if (cust) await deleteCustomer(cust.id);
-    check('Customer delete blocked in read-only mode', custBefore === state.customers.length);
-    window.isReadOnlyMode = false;
+    log('\n=== Test 4: Role check (deleteFailedOp) ===');
     
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 5: Drain + clean up ===');
-    if (navigator.onLine && sup) {
-      log('  ⏳ Draining...');
-      await drainSyncQueue();
-      
-      const supAfterDrain = state.suppliers.find(s => s.id === sup.id);
-      check('Flag cleared after drain', supAfterDrain && supAfterDrain._pendingUpload === undefined);
-      
-      // Cleanup DB
-      if (supabaseClient) {
-        await supabaseClient.from('suppliers').delete().eq('id', sup.id);
-      }
-    }
+    // Test: employee blocked (mock role)
+    const originalRole = state.role;
+    state.role = 'employee';
+    let blocked = false;
+    window.showNotification = (msg) => { if (msg && msg.includes('manager')) blocked = true; };
     
-    // Cleanup state
-    clearSyncQueue();
-    state.suppliers = state.suppliers.filter(s => !s.name.startsWith('CQ4 Sup') && s.name !== 'ShouldNotCreate');
-    saveData();
+    await deleteFailedOp('FAKE-OP-ID');
+    
+    check('Employee blocked from delete', blocked);
+    state.role = originalRole;
+    
     log('\n🧹 تم التنظيف.');
     
   } catch (e) {
@@ -1515,11 +1517,9 @@ async function runCQ4PartnersTest() {
     log(e.stack);
   } finally {
     window.showNotification = originalShowNotif;
-    window.confirm = originalConfirm;
-    window.isReadOnlyMode = false;
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #4 PARTNERS TEST -->
+<!-- 🧪 END CLEANUP #5 OPS-CENTER TEST -->
 </body>
 </html>
