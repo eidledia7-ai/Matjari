@@ -1421,61 +1421,86 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 PHASE 3 STORAGE TEST PANEL -->
-<div id="p3StoragePanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runP3StorageTests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Storage</button>
-  <button onclick="document.getElementById('p3StorageResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="p3StorageResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 PHASE 3 FINANCE TEST PANEL -->
+<div id="p3FinPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runP3FinTests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Finance</button>
+  <button onclick="document.getElementById('p3FinResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="p3FinResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runP3StorageTests() {
-  const results = document.getElementById('p3StorageResults');
+async function runP3FinTests() {
+  const results = document.getElementById('p3FinResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
 
+  const originalShowNotif = window.showNotification;
+  const originalConfirm = window.confirm;
+
   try {
-    log('=== Test 1: حماية مصروف أوفلاين من syncDown ===');
+    log('=== Test 1: Online Happy Path ===');
     
-    // 1. تجهيز مصروف أوفلاين وهمي
-    const testExpId = 'EXP-STORAGE-' + Date.now();
-    const mockExpense = {
-      id: testExpId,
-      name: 'كهرباء أوفلاين',
-      amount: 150,
-      date: new Date().toISOString(),
-      shift_id: null, shiftId: null,
-      pay_method: 'cash', payMethod: 'cash',
-      _pendingUpload: true
-    };
-    
-    state.expenses.unshift(mockExpense);
-    log('  قبل syncDown: المصروف موجود في state (flag=true)');
+    // Mock showNotification
+    window.showNotification = () => {};
+    window.confirm = () => true;
 
-    // 2. محاكاة syncDown (هتسحب من السيرفر)
-    log('  ⏳ جاري syncDown (سحب البيانات من السيرفر)...');
-    await syncDown(state.currentUser.id);
-
-    // 3. التحقق
-    const expAfter = state.expenses.find(e => e.id === testExpId);
+    // تجهيز الفورم
+    document.getElementById('expenseName').value = 'كهرباء';
+    document.getElementById('expenseAmount').value = '150';
+    document.getElementById('expenseNotes').value = 'فاتورة شهر 11';
     
-    log('  بعد syncDown:');
-    check('المصروف لسه موجود في state', !!expAfter);
-    check('الـ _pendingUpload flag لسه موجود', expAfter && expAfter._pendingUpload === true);
+    // إضافة الدالة
+    await saveExpense();
 
-    // 4. تنظيف المصروف الوهمي
-    state.expenses = state.expenses.filter(e => e.id !== testExpId);
-    saveData();
+    const expAfter = state.expenses.find(e => e.name === 'كهرباء' && e.amount === 150);
+    const q = _loadQueue().filter(o => o.type === 'insert_expense' && o.payload.name === 'كهرباء');
     
-    log('\n🧹 تم التنظيف.');
-    log('✅ اختبار Storage انتهى.');
+    check('Expense created in state', !!expAfter);
+    check('Flag set in state', expAfter && expAfter._pendingUpload === true);
+    check('Queued properly', q.length > 0);
+
+    // محاكاة Drain
+    log('  ⏳ Draining queue...');
+    await drainSyncQueue();
+    
+    const expAfterDrain = state.expenses.find(e => e.name === 'كهرباء' && e.amount === 150);
+    const qAfterDrain = _loadQueue().filter(o => o.type === 'insert_expense' && o.payload.name === 'كهرباء');
+    
+    check('Flag cleared after drain', expAfterDrain && expAfterDrain._pendingUpload === undefined);
+    check('Op status synced', qAfterDrain.length > 0 && qAfterDrain[0].status === 'synced');
+
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 2: Half-Commit (Queue Full) ===');
+    
+    // املأ الـ queue
+    for (let i = 0; i < 200; i++) {
+      enqueueSyncOperation('insert_expense', { id: 'MOCK-' + i, name: 'mock', amount: 1, date: new Date().toISOString() }, 'MOCK-' + i);
+    }
+    
+    const stateCountBefore = state.expenses.length;
+    document.getElementById('expenseName').value = 'مياه';
+    document.getElementById('expenseAmount').value = '50';
+    
+    await saveExpense();
+    
+    const stateCountAfter = state.expenses.length;
+    check('State NOT mutated (length unchanged)', stateCountBefore === stateCountAfter);
+    
+    // Cleanup
+    clearSyncQueue();
+
+    log('\n🧹 تم التنظيف');
+    
   } catch (e) {
     log('❌ ERROR: ' + e.message);
     log(e.stack);
+  } finally {
+    window.showNotification = originalShowNotif;
+    window.confirm = originalConfirm;
   }
 }
 </script>
-<!-- 🧪 END PHASE 3 STORAGE TEST PANEL -->
+<!-- 🧪 END PHASE 3 FINANCE TEST PANEL -->
 </body>
 </html>
