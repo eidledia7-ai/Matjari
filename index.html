@@ -1421,65 +1421,157 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #1 - STORAGE TEST -->
-<div id="cq1sPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ1StorageTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Storage</button>
-  <button onclick="document.getElementById('cq1sResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq1sResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #1 - PARTNERS TEST -->
+<div id="cq1pPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ1PartnersTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1 Partners</button>
+  <button onclick="document.getElementById('cq1pResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq1pResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ1StorageTest() {
-  const results = document.getElementById('cq1sResults');
+async function runCQ1PartnersTest() {
+  const results = document.getElementById('cq1pResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
-
+  
+  const originalShowNotif = window.showNotification;
+  window.showNotification = () => {}; // silent for tests
+  
   try {
-    log('=== Test 1: حماية purchase معلّق من syncDown ===');
-    const tId = Date.now();
-    const testPurchaseId = 'PUR-CQ1-' + tId;
-
-    // 1. ضيف purchase في state بـ flag
-    state.purchases.unshift({
-      id: testPurchaseId, date: new Date().toISOString(),
-      supplier_id: 'SUP-MOCK', supplierId: 'SUP-MOCK',
-      product_id: 'PRD-MOCK', productId: 'PRD-MOCK',
-      product_name: 'Mock Product', productName: 'Mock Product',
-      qty: 5, cost: 6, total: 30, paid: 0, remaining: 30,
-      _pendingUpload: true
-    });
-
-    log('  Before syncDown: purchase in state = true');
-    log('  ⏳ جاري syncDown...');
-
-    await syncDown(state.currentUser.id);
-
-    const purchaseAfter = state.purchases.find(p => p.id === testPurchaseId);
-    check('Purchase still in state (protected)', !!purchaseAfter);
-    check('Flag still set', purchaseAfter && purchaseAfter._pendingUpload === true);
-
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: Edge case — state.purchases فاضي ===');
-    const backupPurchases = state.purchases.slice();
-    const backupProtectedCount = (state.purchases || []).filter(p => p._pendingUpload === true).length;
+    log('=== Test 1: Existing product — enqueue + WAC ===');
     
-    // لو في pending موجود، مش هنقدر نمسح. نتحقق بس إن syncDown مش بيرمي error
-    log('  Purchases count: ' + state.purchases.length);
-    log('  Pending count: ' + backupProtectedCount);
-    check('No error during syncDown', true);
-
+    // Setup: existing product + supplier
+    const tId = Date.now();
+    const supId = 'SUP-T-' + tId;
+    const prdId = 'PRD-T-' + tId;
+    state.suppliers.push({ id: supId, name: 'Test Sup', phone: '', opening_debt: 0 });
+    state.products.push({ id: prdId, name: 'Test Prod', stock: 10, cost: 5, price: 10, barcode: '', category: '' });
+    
+    // Fill form
+    document.getElementById('purchaseSupplier').value = supId;
+    document.getElementById('purchaseProduct').value = prdId;
+    document.getElementById('purchaseNewName').value = '';
+    document.getElementById('purchaseQty').value = '5';
+    document.getElementById('purchaseCost').value = '6';
+    document.getElementById('purchasePaid').value = '30';
+    
+    await savePurchase();
+    
+    const prod = state.products.find(p => p.id === prdId);
+    const purch = state.purchases.find(p => p.supplier_id === supId && p.product_id === prdId);
+    const op = _loadQueue().find(o => o.type === 'insert_purchase' && o.payload?.supplier_id === supId);
+    
+    check('Product stock updated (10 → 15)', prod && prod.stock === 15);
+    check('Product cost WAC (5.333...)', prod && Math.abs(prod.cost - 5.3333) < 0.01);
+    check('Purchase with _pendingUpload', purch && purch._pendingUpload === true);
+    check('Op in queue', !!op);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 2: New product — enqueue first + rollback ===');
+    
+    const tId2 = Date.now();
+    const sup2 = 'SUP-T2-' + tId2;
+    const newPrdName = 'New Prod ' + tId2;
+    state.suppliers.push({ id: sup2, name: 'Test Sup2', phone: '', opening_debt: 0 });
+    
+    document.getElementById('purchaseSupplier').value = sup2;
+    document.getElementById('purchaseProduct').value = '';
+    document.getElementById('purchaseNewName').value = newPrdName;
+    document.getElementById('purchaseQty').value = '3';
+    document.getElementById('purchaseCost').value = '7';
+    document.getElementById('purchasePaid').value = '21';
+    
+    await savePurchase();
+    
+    const newProd = state.products.find(p => p.name === newPrdName);
+    const newPurch = state.purchases.find(p => p.supplier_id === sup2);
+    const opsNew = _loadQueue().filter(o => 
+      (o.type === 'insert_product' && o.payload?.name === newPrdName) ||
+      (o.type === 'insert_purchase' && o.payload?.supplier_id === sup2)
+    );
+    
+    check('New product in state', !!newProd);
+    check('New product has _pendingUpload', newProd && newProd._pendingUpload === true);
+    check('New product stock = 3', newProd && newProd.stock === 3);
+    check('Purchase with _pendingUpload', newPurch && newPurch._pendingUpload === true);
+    check('2 ops in queue (product then purchase)', opsNew.length === 2);
+    check('Product op before purchase op', opsNew[0].type === 'insert_product');
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 3: Queue full — Zero state mutation ===');
+    
+    // Fill queue to max
+    clearSyncQueue();
+    for (let i = 0; i < 200; i++) {
+      enqueueSyncOperation('insert_expense', { id: 'FILL-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL-' + i);
+    }
+    
+    const purchasesBefore = state.purchases.length;
+    const productsBefore = state.products.length;
+    
+    document.getElementById('purchaseSupplier').value = sup2;
+    document.getElementById('purchaseProduct').value = '';
+    document.getElementById('purchaseNewName').value = 'ShouldNotCreate';
+    document.getElementById('purchaseQty').value = '1';
+    document.getElementById('purchaseCost').value = '1';
+    document.getElementById('purchasePaid').value = '1';
+    
+    await savePurchase();
+    
+    const purchasesAfter = state.purchases.length;
+    const productsAfter = state.products.length;
+    
+    check('Zero purchase state mutation', purchasesBefore === purchasesAfter);
+    check('Zero product state mutation', productsBefore === productsAfter);
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 4: Atomic rollback (196 in queue, product succeeds, purchase fails) ===');
+    
+    clearSyncQueue();
+    // Fill to 199 (so insert_product succeeds → 200, insert_purchase fails → null)
+    for (let i = 0; i < 199; i++) {
+      enqueueSyncOperation('insert_expense', { id: 'FILL2-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL2-' + i);
+    }
+    
+    const beforeQueue = _loadQueue().length;
+    const beforeProdCount = state.products.length;
+    
+    document.getElementById('purchaseSupplier').value = sup2;
+    document.getElementById('purchaseProduct').value = '';
+    document.getElementById('purchaseNewName').value = 'RollbackTest';
+    document.getElementById('purchaseQty').value = '1';
+    document.getElementById('purchaseCost').value = '1';
+    document.getElementById('purchasePaid').value = '1';
+    
+    await savePurchase();
+    
+    const afterQueue = _loadQueue().length;
+    const afterProdCount = state.products.length;
+    const rollbackTestProd = state.products.find(p => p.name === 'RollbackTest');
+    
+    check('Queue back to 199 (product rolled back)', afterQueue === 199);
+    check('Zero product mutation', beforeProdCount === afterProdCount);
+    check('No RollbackTest product', !rollbackTestProd);
+    
     // Cleanup
-    state.purchases = state.purchases.filter(p => p.id !== testPurchaseId);
+    clearSyncQueue();
+    state.products = state.products.filter(p => !p.id.includes('-T-') && !p.name.startsWith('New Prod') && p.name !== 'RollbackTest');
+    state.suppliers = state.suppliers.filter(s => !s.id.includes('-T-'));
+    state.purchases = state.purchases.filter(p => !p.id.includes('-T-'));
     saveData();
+    
+    window.showNotification = originalShowNotif;
     log('\n🧹 تم التنظيف.');
-
+    
   } catch (e) {
+    window.showNotification = originalShowNotif;
     log('❌ ERROR: ' + e.message);
     log(e.stack);
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #1 STORAGE TEST -->
+<!-- 🧪 END CLEANUP #1 PARTNERS TEST -->
 </body>
 </html>

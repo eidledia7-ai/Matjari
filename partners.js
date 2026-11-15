@@ -414,33 +414,24 @@ async function savePurchase() {
   if (qty < 1 || cost < 0) return showNotification(tr('invalid_qty_cost'), 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 1: بناء الـ payloads (بدون state mutation)
+  // ═══════════════════════════════════════════════════════════
   let targetProdId = prodId;
   let targetProdName = '';
   let newProductData = null;
+  let existingProdRef = null;
+  let existingProdOldStock = 0;
+  let existingProdOldCost = 0;
 
   if (prodId) {
     const p = state.products.find(function(item) { return item.id === prodId; });
-    if (p) {
-      const oldStock = Number(p.stock) || 0;
-      const oldCost = Number(p.cost) || 0;
-      let newCost = cost;
-      if ((oldStock + qty) > 0) {
-        newCost = ((oldStock * oldCost) + (qty * cost)) / (oldStock + qty);
-      }
-      p.stock = oldStock + qty;
-      p.cost = newCost;
-      targetProdName = p.name;
-
-      state.stockMoves.unshift({
-        id: uid('SM'), date: new Date().toISOString(),
-        product_id: p.id, productId: p.id,
-        product_name: p.name, productName: p.name,
-        type: 'purchase', qty: qty,
-        old_stock: oldStock, oldStock: oldStock,
-        new_stock: p.stock, newStock: p.stock,
-        reason: tr('purchases_type')
-      });
-    }
+    if (!p) return showNotification(tr('item_not_found'), 'error');
+    existingProdRef = p;
+    existingProdOldStock = Number(p.stock) || 0;
+    existingProdOldCost = Number(p.cost) || 0;
+    targetProdName = p.name;
   } else if (newName) {
     targetProdId = uid('PRD');
     newProductData = {
@@ -448,13 +439,53 @@ async function savePurchase() {
       category: tr('general_cat'), price: purchaseSalePrice, cost: cost,
       stock: 0, min_stock: 5
     };
+    targetProdName = newName;
+  } else {
+    return showNotification(tr('select_prod_name_err'), 'error');
+  }
 
+  const total = qty * cost;
+  const remaining = Math.max(0, total - paid);
+  const purchaseId = uid('PUR');
+
+  const purchasePayload = {
+    id: purchaseId, supplier_id: supplierId,
+    product_id: targetProdId, product_name: targetProdName,
+    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining,
+    date: new Date().toISOString()
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 2: enqueue أولاً (Half-Commit Precondition)
+  // ═══════════════════════════════════════════════════════════
+  let opProductId = null;
+  if (newProductData) {
+    opProductId = enqueueSyncOperation('insert_product', newProductData, newProductData.id);
+    if (opProductId === null) return; // queue full — صفر state mutation
+  }
+
+  const opPurchaseId = enqueueSyncOperation('insert_purchase', purchasePayload, purchaseId);
+  if (opPurchaseId === null) {
+    // ✅ Atomic pair rollback: نمسح opProduct من الـ queue لو insert_purchase فشل
+    if (opProductId) {
+      const _q = _loadQueue();
+      const _idx = _q.findIndex(o => o.id === opProductId);
+      if (_idx !== -1) { _q.splice(_idx, 1); _saveQueue(_q); }
+    }
+    return; // صفر state mutation
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 3: state mutations (بعد نجاح enqueue)
+  // ═══════════════════════════════════════════════════════════
+
+  // 3.1 منتج جديد → push مع _pendingUpload
+  if (newProductData) {
     state.products.push({
       id: targetProdId, name: newName, barcode: '', category: tr('general_cat'),
-      price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5
+      price: purchaseSalePrice, cost: cost, stock: qty, minStock: 5, min_stock: 5,
+      _pendingUpload: true
     });
-    targetProdName = newName;
-
     state.stockMoves.unshift({
       id: uid('SM'), date: new Date().toISOString(),
       product_id: targetProdId, productId: targetProdId,
@@ -464,52 +495,55 @@ async function savePurchase() {
       new_stock: qty, newStock: qty,
       reason: tr('new_prod_purchase_reason')
     });
-  } else {
-    return showNotification(tr('select_prod_name_err'), 'error');
+  }
+  // 3.2 منتج موجود → تحديث stock + cost (WAC)
+  else if (existingProdRef) {
+    let newCost = cost;
+    if ((existingProdOldStock + qty) > 0) {
+      newCost = ((existingProdOldStock * existingProdOldCost) + (qty * cost)) / (existingProdOldStock + qty);
+    }
+    existingProdRef.stock = existingProdOldStock + qty;
+    existingProdRef.cost = newCost;
+
+    state.stockMoves.unshift({
+      id: uid('SM'), date: new Date().toISOString(),
+      product_id: existingProdRef.id, productId: existingProdRef.id,
+      product_name: existingProdRef.name, productName: existingProdRef.name,
+      type: 'purchase', qty: qty,
+      old_stock: existingProdOldStock, oldStock: existingProdOldStock,
+      new_stock: existingProdRef.stock, newStock: existingProdRef.stock,
+      reason: tr('purchases_type')
+    });
   }
 
-  const total = qty * cost;
-  const remaining = Math.max(0, total - paid);
-
-  const newPurchase = {
-    id: uid('PUR'), user_id: ownerId, supplier_id: supplierId,
-    product_id: targetProdId, product_name: targetProdName,
-    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining,
-    date: new Date().toISOString()
-  };
-
+  // 3.3 purchase → unshift مع _pendingUpload
   state.purchases.unshift({
-    id: newPurchase.id, date: newPurchase.date,
+    id: purchaseId, date: purchasePayload.date,
     supplier_id: supplierId, supplierId: supplierId,
     product_id: targetProdId, productId: targetProdId,
     product_name: targetProdName, productName: targetProdName,
-    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining
+    qty: qty, cost: cost, total: total, paid: paid, remaining: remaining,
+    _pendingUpload: true
   });
 
- if (newProductData) {
-  enqueueSyncOperation('insert_product', newProductData, newProductData.id);
-}
-enqueueSyncOperation('insert_purchase', {
-  id: newPurchase.id, supplier_id: newPurchase.supplier_id,
-  product_id: newPurchase.product_id, product_name: newPurchase.product_name,
-  qty: newPurchase.qty, cost: newPurchase.cost, total: newPurchase.total,
-  paid: newPurchase.paid, remaining: newPurchase.remaining, date: newPurchase.date
-}, newPurchase.id);
-
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 4: audit + save + UI (نفس السلوك القديم)
+  // ═══════════════════════════════════════════════════════════
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_purchase', { purchaseId: newPurchase.id, total }, newPurchase.id);
+    addAuditLog('add_purchase', { purchaseId: purchaseId, total }, purchaseId);
   }
 
   saveData();
-document.getElementById('purchaseNewName').value = '';
-document.getElementById('purchaseQty').value = 1;
-document.getElementById('purchaseCost').value = '';
-if (purchasePriceInput) purchasePriceInput.value = '';
-document.getElementById('purchaseTotal').value = '0.00';
-document.getElementById('purchasePaid').value = 0;
-refreshCurrentPage();
-showNotification(tr('purchase_success'));
+  document.getElementById('purchaseNewName').value = '';
+  document.getElementById('purchaseQty').value = 1;
+  document.getElementById('purchaseCost').value = '';
+  if (purchasePriceInput) purchasePriceInput.value = '';
+  document.getElementById('purchaseTotal').value = '0.00';
+  document.getElementById('purchasePaid').value = 0;
+  refreshCurrentPage();
+  showNotification(tr('purchase_success'));
 }
+
 
 function renderPurchases() {
   const container = document.getElementById('purchasesTable');
