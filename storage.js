@@ -282,7 +282,7 @@ if (t.name === 'expenses' && _protectedExpenses.length > 0) {
   });
 }
       }
-      
+      }
     } catch (err) {
       console.warn(`SyncDown failed for ${t.name}:`, err.message);
     }
