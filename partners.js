@@ -13,34 +13,21 @@ async function saveCustomer() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const customerId = id || uid('CUST');
-  const preservedPoints = id ? (state.customers.find(c => c.id === id)?.points || 0) : 0;
 
-  // Part 2: payload يطابق ما يتوقعه _executeOp('insert_customer') في sync-queue.js
   const payload = {
     id: customerId, user_id: ownerId, name: name, phone: phone,
-    opening_debt: openingDebt, points: preservedPoints
+    opening_debt: openingDebt,
+    points: id ? (state.customers.find(c => c.id === id)?.points || 0) : 0
   };
 
-  // Part 2: Half-Commit Precondition — enqueue أولاً
-  // لو الـ queue ممتلئ → null → نوقف قبل أي state mutation
   const opId = enqueueSyncOperation('insert_customer', payload, customerId);
   if (opId === null) return;
 
-  // Part 2: state mutation بعد enqueue ناجح
   if (id) {
-    // Edit — الكائن موجود، flag-marking اتعمل جوّه enqueueSyncOperation على نفس الـ reference
     const c = state.customers.find(function(item) { return item.id === id; });
-    if (c) {
-      c.name = name; c.phone = phone;
-      c.openingDebt = openingDebt; c.opening_debt = openingDebt;
-    }
+    if (c) { c.name = name; c.phone = phone; c.openingDebt = openingDebt; c.opening_debt = openingDebt; }
   } else {
-    // Create — الكائن مش موجود وقت الـ enqueue، فالعلم صريح في الـ push
-    state.customers.push({
-      id: customerId, name: name, phone: phone,
-      openingDebt: openingDebt, opening_debt: openingDebt, points: 0,
-      _pendingUpload: true
-    });
+    state.customers.push({ id: customerId, name: name, phone: phone, openingDebt: openingDebt, opening_debt: openingDebt, points: 0, _pendingUpload: true });
   }
 
   if (typeof addAuditLog === 'function') {
@@ -76,7 +63,6 @@ function renderCustomers() {
     paySel.innerHTML = '';
     state.customers.forEach(function(c) {
       const isCashCustomer = c.name === 'عميل نقدي عام' || c.name === 'Cash Customer';
-      // ✅ v7.10.2 — إزالة anti-pattern
       const displayName = isCashCustomer ? tr('cash_customer') : c.name;
       const debtLabel = tr('debt_prefix');
       const realDebt = financeCore.calcCustomerBalance(c.id);
@@ -94,7 +80,6 @@ function renderCustomers() {
   filtered.forEach(function(c) {
     const debtVal = financeCore.calcCustomerBalance(c.id);
     const debtClass = debtVal > 0 ? 'red-text' : '';
-    // ✅ v7.10.2 — ترجمة
     const stmtBtn = tr('statement_btn');
     const delBtn = tr('delete_btn');
     const stmtTitle = tr('statement_btn');
@@ -177,17 +162,14 @@ async function recordCustomerPayment() {
 
   const paymentId = uid('CP');
 
-  // Part 2: payload يطابق _executeOp('insert_customer_payment')
   const payload = {
     id: paymentId, user_id: ownerId, customer_id: customerId, customer_name: cust.name,
     amount: amount, date: date, notes: notes, shift_id: currentShiftId, pay_method: 'cash'
   };
 
-  // Part 2: Half-Commit Precondition — enqueue أولاً
   const opId = enqueueSyncOperation('insert_customer_payment', payload, paymentId);
   if (opId === null) return;
 
-  // Part 2: state mutation بعد enqueue ناجح
   state.customerPayments.unshift({
     id: paymentId, customer_id: customerId, customerId: customerId,
     customer_name: cust.name, customerName: cust.name, amount: amount, date: date, notes: notes,
@@ -199,7 +181,6 @@ async function recordCustomerPayment() {
     addAuditLog('record_customer_payment', { paymentId: paymentId, amount, customerId }, paymentId);
   }
 
-  // ✅ v7.4 — تحديث فوري لرصيد العميل في الكاش (safe update)
   if (customerId) {
     state.customerBalances = state.customerBalances || {};
     state.customerBalances[customerId] = (Number(state.customerBalances[customerId]) || 0) - amount;
@@ -339,7 +320,6 @@ function renderSuppliers() {
     return;
   }
 
-  // ✅ v7.10.2 — ترجمة
   const editBtn = tr('edit_btn');
   const deleteBtn = tr('delete_btn');
 
@@ -415,7 +395,6 @@ async function savePurchase() {
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
 
-  // المرحلة 1: بناء الـ payloads
   let targetProdId = prodId;
   let targetProdName = '';
   let newProductData = null;
@@ -453,11 +432,10 @@ async function savePurchase() {
     date: new Date().toISOString()
   };
 
-  // المرحلة 2: enqueue أولاً
   let opProductId = null;
   if (newProductData) {
     opProductId = enqueueSyncOperation('insert_product', newProductData, newProductData.id);
-    if (opProductId === null) return; 
+    if (opProductId === null) return;
   }
 
   const opPurchaseId = enqueueSyncOperation('insert_purchase', purchasePayload, purchaseId);
@@ -467,10 +445,9 @@ async function savePurchase() {
       const _idx = _q.findIndex(o => o.id === opProductId);
       if (_idx !== -1) { _q.splice(_idx, 1); _saveQueue(_q); }
     }
-    return; 
+    return;
   }
 
-  // المرحلة 3: state mutations
   if (newProductData) {
     state.products.push({
       id: targetProdId, name: newName, barcode: '', category: tr('general_cat'),
@@ -514,7 +491,6 @@ async function savePurchase() {
     _pendingUpload: true
   });
 
-  // المرحلة 4: audit + save + UI
   if (typeof addAuditLog === 'function') {
     addAuditLog('add_purchase', { purchaseId: purchaseId, total }, purchaseId);
   }
@@ -529,7 +505,6 @@ async function savePurchase() {
   refreshCurrentPage();
   showNotification(tr('purchase_success'));
 }
-
 
 function renderPurchases() {
   const container = document.getElementById('purchasesTable');
@@ -563,7 +538,6 @@ function renderPurchases() {
 }
 
 async function recordSupplierPayment() {
-  // Part 2: isReadOnlyMode check — كان مفقود (مخالف للمقدس #2) — أُضيف ضمن نطاق الـ 3 دوال
   if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
 
@@ -580,17 +554,14 @@ async function recordSupplierPayment() {
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
   const paymentId = uid('SUPP');
 
-  // Part 2: payload يطابق _executeOp('insert_supplier_payment')
   const payload = {
     id: paymentId, user_id: ownerId, supplier_id: supplierId,
     supplier_name: sup.name, amount: amount, date: date, notes: notes
   };
 
-  // Part 2: Half-Commit Precondition — enqueue أولاً
   const opId = enqueueSyncOperation('insert_supplier_payment', payload, paymentId);
   if (opId === null) return;
 
-  // Part 2: state mutation بعد enqueue ناجح
   state.supplierPayments.unshift({
     id: paymentId, supplier_id: supplierId, supplierId: supplierId,
     supplier_name: sup.name, supplierName: sup.name,
