@@ -257,7 +257,11 @@ if (type === 'insert_product' && payload && payload.id) {
   const pr = (state.products || []).find(x => x.id === payload.id);
   if (pr) pr._pendingUpload = true;
 }
-
+// ✅ Cleanup Pass #4: insert_supplier — flag marking (نمط مطابق لـ insert_customer)
+if (type === 'insert_supplier' && payload && payload.id) {
+  const sp = (state.suppliers || []).find(x => x.id === payload.id);
+  if (sp) sp._pendingUpload = true;
+}
 if (queue.length > SYNC_QUEUE_MAX_SIZE) {
   const pending = queue.filter(q => q.status !== 'synced');
   const synced  = queue.filter(q => q.status === 'synced');
@@ -314,6 +318,19 @@ function hasPendingOpForCustomer(customerId, excludeOpId) {
     o.payload && o.payload.id === customerId
   );
 }
+
+// ✅ Cleanup Pass #4: نمط مطابق لـ hasPendingOpForCustomer
+function hasPendingOpForSupplier(supplierId, excludeOpId) {
+  if (!supplierId) return false;
+  const q = _loadQueue();
+  return q.some(o =>
+    o.id !== excludeOpId &&
+    o.type === 'insert_supplier' &&
+    o.status !== 'synced' &&
+    o.payload && o.payload.id === supplierId
+  );
+}
+
 async function _executeOp(op, ownerId) {
   const c = supabaseClient;
   const t = op.type;
@@ -395,7 +412,19 @@ if (t === 'insert_customer') {
   }
   return;
 }
-
+if (t === 'insert_supplier') {
+  const { error } = await c.from('suppliers').upsert({
+    id: p.id, user_id: ownerId, name: p.name, phone: p.phone || '',
+    opening_debt: Number(p.opening_debt) || 0
+  }, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Cleanup Pass #4: مسح الـ flag — بشرط عدم وجود op أخرى معلقة
+  const idxSup = (state.suppliers || []).findIndex(x => x.id === p.id);
+  if (idxSup !== -1 && !hasPendingOpForSupplier(p.id, op.id)) {
+    delete state.suppliers[idxSup]._pendingUpload;
+  }
+  return;
+}
 if (t === 'insert_supplier_payment') {
   const { error } = await c.from('supplier_payments').upsert({
     id: p.id, user_id: ownerId, supplier_id: p.supplier_id,

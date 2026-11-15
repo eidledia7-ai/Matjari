@@ -1421,116 +1421,91 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-
-<!-- 🧪 CLEANUP #3 - SAVE PRODUCT TEST -->
-<div id="cq3Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ3Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ3</button>
-  <button onclick="document.getElementById('cq3Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq3Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #4 - SYNC-QUEUE TEST -->
+<div id="cq4sPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ4SyncQueueTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ4 Sync</button>
+  <button onclick="document.getElementById('cq4sResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq4sResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ3Test() {
-  const results = document.getElementById('cq3Results');
+async function runCQ4SyncQueueTest() {
+  const results = document.getElementById('cq4sResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
-  
-  const originalShowNotif = window.showNotification;
-  window.showNotification = () => {}; // silent
-  
+
   try {
-    // ═══════════════════════════════════════════════════════
-    log('=== Test 1: Create (enqueue + flag) ===');
-    
+    log('=== Test 1: Flag marking (entity موجودة) ===');
     const tId = Date.now();
-    const prodName = 'CQ3-Prod-' + tId;
+    const supId = 'SUP-CQ4-' + tId;
+    state.suppliers = state.suppliers || [];
+    state.suppliers.push({ id: supId, name: 'Old Name', phone: '', opening_debt: 0 });
     
-    // Fill form
-    document.getElementById('productId').value = '';
-    document.getElementById('productName').value = prodName;
-    document.getElementById('productBarcode').value = '';
-    document.getElementById('productCategory').value = '';
-    document.getElementById('productPrice').value = '10';
-    document.getElementById('productCost').value = '5';
-    document.getElementById('productStock').value = '10';
-    document.getElementById('productMin').value = '5';
+    enqueueSyncOperation('insert_supplier', {
+      id: supId, user_id: state.currentUser.id, name: 'New Name', phone: '', opening_debt: 0
+    }, supId);
     
-    await saveProduct();
-    
-    const prodAfter = state.products.find(p => p.name === prodName);
-    const opAfter = _loadQueue().find(o => o.type === 'insert_product' && o.payload?.name === prodName);
-    
-    check('Product created in state', !!prodAfter);
-    check('Product has _pendingUpload', prodAfter && prodAfter._pendingUpload === true);
-    check('Op queued', !!opAfter);
-    
-    // Drain
-    log('  ⏳ Draining...');
-    await drainSyncQueue();
-    
-    const prodAfterDrain = state.products.find(p => p.name === prodName);
-    check('Flag cleared after drain', prodAfterDrain && prodAfterDrain._pendingUpload === undefined);
-    
+    const supAfter = state.suppliers.find(s => s.id === supId);
+    check('Flag set on existing entity', supAfter && supAfter._pendingUpload === true);
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: Edit (flag marking from enqueue) ===');
+    log('\n=== Test 2: hasPendingOpForSupplier (2 ops) ===');
+    // enqueue op تانية لنفس المورد
+    enqueueSyncOperation('insert_supplier', {
+      id: supId, user_id: state.currentUser.id, name: 'Newer Name', phone: '', opening_debt: 0
+    }, supId);
     
-    if (prodAfterDrain) {
-      document.getElementById('productId').value = prodAfterDrain.id;
-      document.getElementById('productName').value = prodName + '-Edited';
-      // Other fields as-is
-      
-      await saveProduct();
-      
-      const editedProd = state.products.find(p => p.id === prodAfterDrain.id);
-      check('Product name updated', editedProd && editedProd.name === prodName + '-Edited');
-      check('Edit has _pendingUpload', editedProd && editedProd._pendingUpload === true);
-      
-      log('  ⏳ Draining edit...');
+    const hasPending = hasPendingOpForSupplier(supId);
+    check('hasPendingOpForSupplier returns true (2 ops)', hasPending === true);
+
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 3: Clear flag after drain ===');
+    if (navigator.onLine) {
+      log('  ⏳ Draining...');
       await drainSyncQueue();
       
-      const editedAfterDrain = state.products.find(p => p.id === prodAfterDrain.id);
-      check('Edit flag cleared after drain', editedAfterDrain && editedAfterDrain._pendingUpload === undefined);
+      const supAfterDrain = state.suppliers.find(s => s.id === supId);
+      check('Flag cleared after drain', supAfterDrain && supAfterDrain._pendingUpload === undefined);
+      check('hasPendingOpForSupplier false', hasPendingOpForSupplier(supId) === false);
+      
+      // Cleanup DB
+      if (supabaseClient) {
+        await supabaseClient.from('suppliers').delete().eq('id', supId);
+      }
+    } else {
+      log('  ⚠️ SKIP: offline');
     }
-    
+
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: Half-commit (Queue Full) ===');
-    
+    log('\n=== Test 4: No naming confusion ===');
+    // تأكيد إن insert_supplier (المورد) و insert_supplier_payment (الدفعة) منفصلين
     clearSyncQueue();
-    for (let i = 0; i < 200; i++) {
-      enqueueSyncOperation('insert_expense', { id: 'FILL-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL-' + i);
-    }
+    const supPaymentId = 'SUPP-CQ4-' + tId;
+    enqueueSyncOperation('insert_supplier_payment', {
+      id: supPaymentId, user_id: state.currentUser.id, supplier_id: supId,
+      supplier_name: 'Test', amount: 100, date: new Date().toISOString(), notes: ''
+    }, supPaymentId);
     
-    const productsBefore = state.products.length;
-    document.getElementById('productId').value = '';
-    document.getElementById('productName').value = 'ShouldNotCreate';
-    document.getElementById('productStock').value = '1';
+    const q = _loadQueue();
+    const hasSupplierOp = q.some(o => o.type === 'insert_supplier');
+    const hasSupplierPaymentOp = q.some(o => o.type === 'insert_supplier_payment');
     
-    await saveProduct();
-    
-    const productsAfter = state.products.length;
-    check('Zero state mutation on queue full', productsBefore === productsAfter);
-    
+    check('insert_supplier op NOT found', !hasSupplierOp);
+    check('insert_supplier_payment op found', hasSupplierPaymentOp);
+
     // Cleanup
     clearSyncQueue();
-    state.products = state.products.filter(p => !p.name.startsWith('CQ3-') && p.name !== 'ShouldNotCreate');
+    state.suppliers = state.suppliers.filter(s => s.id !== supId);
     saveData();
-    
-    // Optional: clean from Supabase if online
-    if (navigator.onLine && supabaseClient) {
-      await supabaseClient.from('products').delete().like('name', 'CQ3-%');
-    }
-    
     log('\n🧹 تم التنظيف.');
     
   } catch (e) {
     log('❌ ERROR: ' + e.message);
     log(e.stack);
-  } finally {
-    window.showNotification = originalShowNotif;
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #3 TEST -->
+<!-- 🧪 END CLEANUP #4 SYNC-QUEUE TEST -->
 </body>
 </html>
