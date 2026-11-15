@@ -1,4 +1,3 @@
-/* ============ المصروفات ============ */
 async function saveExpense() {
   if (window.isReadOnlyMode) return showNotification(tr('renew_sub_expense'), 'error');
   if (state.role !== 'manager') return showNotification(tr('manager_only'), 'warning');
@@ -20,33 +19,38 @@ async function saveExpense() {
     if (openShift) currentShiftId = openShift.id;
   }
 
-  const newExpense = {
-    id: uid('EXP'), user_id: ownerId, name: name, amount: amount, date: date, notes: notes,
-    shift_id: currentShiftId, pay_method: 'cash'
+  const expenseId = uid('EXP');
+
+  // ✅ Part B Phase 3: payload يطابق _executeOp('insert_expense')
+  const payload = {
+    id: expenseId, name: name, amount: amount,
+    notes: notes, date: date,
+    shift_id: currentShiftId, pay_method: 'cash',
+    needs_review: false, created_by: null
   };
 
-  enqueueSyncOperation('insert_expense', {
-  id: newExpense.id, name: newExpense.name, amount: newExpense.amount,
-  notes: newExpense.notes, date: newExpense.date,
-  shift_id: newExpense.shift_id, pay_method: newExpense.pay_method,
-  needs_review: false, created_by: null
-}, newExpense.id);
+  // ✅ Part B Phase 3: Half-Commit Precondition — enqueue أولاً
+  const opId = enqueueSyncOperation('insert_expense', payload, expenseId);
+  if (opId === null) return;
 
+  // ✅ Part B Phase 3: state mutation بعد enqueue ناجح + _pendingUpload flag
   state.expenses.unshift({
-    id: newExpense.id, name: name, amount: amount, date: date, notes: notes,
-    shift_id: currentShiftId, shiftId: currentShiftId, pay_method: 'cash', payMethod: 'cash'
+    id: expenseId, name: name, amount: amount, date: date, notes: notes,
+    shift_id: currentShiftId, shiftId: currentShiftId,
+    pay_method: 'cash', payMethod: 'cash',
+    _pendingUpload: true
   });
 
   if (typeof addAuditLog === 'function') {
-    addAuditLog('add_expense', { id: newExpense.id, name, amount }, newExpense.id);
+    addAuditLog('add_expense', { id: expenseId, name, amount }, expenseId);
   }
 
   saveData();
-document.getElementById('expenseName').value = '';
-document.getElementById('expenseAmount').value = '';
-document.getElementById('expenseNotes').value = '';
-refreshCurrentPage();
-showNotification(tr('expense_saved'));
+  document.getElementById('expenseName').value = '';
+  document.getElementById('expenseAmount').value = '';
+  document.getElementById('expenseNotes').value = '';
+  refreshCurrentPage();
+  showNotification(tr('expense_saved'));
   switchExpenseTab('exp-list');
 }
 
