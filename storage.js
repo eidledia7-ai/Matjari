@@ -32,6 +32,8 @@ async function syncDown(ownerId) {
   })();
 
   const _protectedCustomers = (state.customers || []).filter(c => c._pendingUpload === true);
+  // ✅ Cleanup Pass #4: حماية الموردين المعلقين من syncDown
+const _protectedSuppliers = (state.suppliers || []).filter(s => s._pendingUpload === true);
   const _protectedCustomerPayments = (state.customerPayments || []).filter(p => p._pendingUpload === true);
   const _protectedSupplierPayments = (state.supplierPayments || []).filter(p => p._pendingUpload === true);
   const _protectedExpenses = (state.expenses || []).filter(e => e._pendingUpload === true);
@@ -236,6 +238,18 @@ const _protectedPurchases = (state.purchases || []).filter(p => p._pendingUpload
               }
             });
           }
+          // ✅ Cleanup Pass #4: suppliers — النسخة المحلية تكسب عند التعارض (edit pending)
+if (t.name === 'suppliers' && _protectedSuppliers.length > 0) {
+  const serverIds = new Set((state.suppliers || []).map(s => s.id));
+  _protectedSuppliers.forEach(ps => {
+    if (serverIds.has(ps.id)) {
+      const idx = state.suppliers.findIndex(s => s.id === ps.id);
+      if (idx !== -1) state.suppliers[idx] = ps;
+    } else {
+      state.suppliers.unshift(ps);
+    }
+  });
+}
           if (t.name === 'customer_payments' && _protectedCustomerPayments.length > 0) {
             const existingIds = new Set((state.customerPayments || []).map(p => p.id));
             _protectedCustomerPayments.forEach(pp => { if (!existingIds.has(pp.id)) state.customerPayments.unshift(pp); });
