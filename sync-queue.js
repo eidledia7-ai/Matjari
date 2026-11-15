@@ -252,6 +252,11 @@ if (type === 'insert_expense' && payload && payload.id) {
   const ex = (state.expenses || []).find(x => x.id === payload.id);
   if (ex) ex._pendingUpload = true;
 }
+// ✅ Cleanup Pass #1: insert_product — flag marking
+if (type === 'insert_product' && payload && payload.id) {
+  const pr = (state.products || []).find(x => x.id === payload.id);
+  if (pr) pr._pendingUpload = true;
+}
 
 if (queue.length > SYNC_QUEUE_MAX_SIZE) {
   const pending = queue.filter(q => q.status !== 'synced');
@@ -415,16 +420,16 @@ if (t === 'insert_supplier_payment') {
     if (error) throw error;
     return;
   }
-
-  if (t === 'insert_product') {
-    const { error } = await c.from('products').upsert({
-      id: p.id, user_id: ownerId, name: p.name, barcode: p.barcode || '',
+if (t === 'insert_product') {
+  const { error } = await c.from('products').upsert({ id: p.id, user_id: ownerId, name: p.name, barcode: p.barcode || '',
       category: p.category || null, price: p.price || 0, cost: p.cost || 0,
-      stock: p.stock || 0, min_stock: p.min_stock || 5
-    }, { onConflict: 'id' });
-    if (error) throw error;
-    return;
-  }
+      stock: p.stock || 0, min_stock: p.min_stock || 5}, { onConflict: 'id' });
+  if (error) throw error;
+  // ✅ Cleanup Pass #1: مسح الـ flag بعد النجاح
+  const idxPr = (state.products || []).findIndex(x => x.id === p.id);
+  if (idxPr !== -1) delete state.products[idxPr]._pendingUpload;
+  return;
+}
 
   if (t === 'insert_shift') {
     const { error } = await c.from('shifts').upsert({

@@ -1421,143 +1421,67 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 PHASE 4 CUSTOMER-PAYMENT TEST PANEL -->
-<div id="p4TestPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runPhase4Tests()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test Phase 4</button>
-  <button onclick="document.getElementById('p4TestResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="p4TestResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #1 - SYNC QUEUE TEST -->
+<div id="cq1Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ1Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ1</button>
+  <button onclick="document.getElementById('cq1Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq1Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runPhase4Tests() {
-  const results = document.getElementById('p4TestResults');
+async function runCQ1Test() {
+  const results = document.getElementById('cq1Results');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
-  
-  const originalConfirm = window.confirm;
-  const originalShowNotif = window.showNotification;
-  
+
   try {
+    log('=== Test 1: Flag marking لـ insert_product ===');
+    const tId = Date.now();
+    const testProdId = 'PROD-CQ1-' + tId;
+    
+    // 1. ضيف منتج في state (بدون flag)
+    state.products.push({ id: testProdId, name: 'Test', stock: 0, price: 0, cost: 0 });
+    
+    // 2. Enqueue insert_product
+    enqueueSyncOperation('insert_product', {
+      id: testProdId, name: 'Test', barcode: '', category: null,
+      price: 0, cost: 0, stock: 0, min_stock: 5
+    }, testProdId);
+    
+    // 3. تحقق من الـ flag
+    const prodAfter = state.products.find(p => p.id === testProdId);
+    check('Flag set on state.products', prodAfter && prodAfter._pendingUpload === true);
+    
     // ═══════════════════════════════════════════════════════
-    log('=== Test 1: Happy Path (Server 404) + Balance Reversal ===');
-    const tId1 = Date.now();
-    const testCustId = 'CUST-TEST-' + tId1;
-    const testPayId = 'CP-TEST-' + tId1;
-    const testOpId = 'OP-TEST-' + tId1;
-    
-    // 1. Setup customer balance and payment
-    state.customerBalances[testCustId] = 500;
-    state.customerPayments.push({
-      id: testPayId, customer_id: testCustId, amount: 100,
-      date: new Date().toISOString(), _pendingUpload: true
-    });
-    
-    // 2. Fake failed op
-    const q = _loadQueue();
-    q.push({
-      id: testOpId, type: 'insert_customer_payment',
-      payload: { id: testPayId, customer_id: testCustId, amount: 100, date: new Date().toISOString() },
-      idempotencyKey: testPayId, attempts: 5, maxAttempts: 5,
-      status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
-    });
-    _saveQueue(q);
-    
-    log('  Before: Balance = 500, Payment in state = true');
-    
-    // Mock confirms
-    window.confirm = () => true;
-    window.showNotification = () => {};
-    
-    // 3. Execute delete
-    await deleteFailedOp(testOpId);
-    
-    window.confirm = originalConfirm;
-    window.showNotification = originalShowNotif;
-    
-    // 4. Verify
-    const payAfter = state.customerPayments.find(cp => cp.id === testPayId);
-    const balAfter = state.customerBalances[testCustId];
-    const opAfter = _loadQueue().find(o => o.id === testOpId);
-    
-    log('  After: Balance = ' + balAfter + ', Payment in state = ' + !!payAfter);
-    
-    check('Payment removed from state', !payAfter);
-    check('Balance restored to 500 (500+100-100)', balAfter === 500);
-    check('Op removed from queue', !opAfter);
-    
-    // Cleanup 1
-    delete state.customerBalances[testCustId];
-
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: Server Has It (Balance should NOT change) ===');
-    if (!navigator.onLine) {
-      log('  ⚠️ SKIP: offline');
-    } else {
-      const tId2 = Date.now();
-      const testCust2 = 'CUST-TEST2-' + tId2;
-      const testPay2 = 'CP-TEST2-' + tId2;
-      const testOp2 = 'OP-TEST2-' + tId2;
+    log('\n=== Test 2: Clear flag بعد drain ===');
+    if (navigator.onLine) {
+      log('  ⏳ Draining...');
+      await drainSyncQueue();
       
-      // 1. Create real payment in DB
-      const { error: err1 } = await supabaseClient.from('customer_payments').insert({
-        id: testPay2, user_id: state.currentUser.id, customer_id: testCust2,
-        amount: 100, date: new Date().toISOString(), pay_method: 'cash'
-      });
+      const prodAfterDrain = state.products.find(p => p.id === testProdId);
+      check('Flag cleared after successful drain', prodAfterDrain && prodAfterDrain._pendingUpload === undefined);
       
-      if (err1) {
-        log('  ⚠️ Failed to insert to DB: ' + err1.message);
-      } else {
-        state.customerBalances[testCust2] = 500;
-        state.customerPayments.push({
-          id: testPay2, customer_id: testCust2, amount: 100,
-          date: new Date().toISOString(), _pendingUpload: true
-        });
-        
-        const q2 = _loadQueue();
-        q2.push({
-          id: testOp2, type: 'insert_customer_payment',
-          payload: { id: testPay2, customer_id: testCust2, amount: 100, date: new Date().toISOString() },
-          idempotencyKey: testPay2, attempts: 5, maxAttempts: 5,
-          status: 'failed', lastError: 'Test', createdAt: new Date().toISOString()
-        });
-        _saveQueue(q2);
-        
-        window.confirm = () => true;
-        window.showNotification = () => {};
-        await deleteFailedOp(testOp2);
-        window.confirm = originalConfirm;
-        window.showNotification = originalShowNotif;
-        
-        const pay2After = state.customerPayments.find(cp => cp.id === testPay2);
-        const bal2After = state.customerBalances[testCust2];
-        const op2After = _loadQueue().find(o => o.id === testOp2);
-        
-        check('Payment kept in state (server has it)', !!pay2After);
-        check('Balance untouched (500)', bal2After === 500);
-        check('Op removed from queue', !op2After);
-        check('_pendingUpload cleared', pay2After && pay2After._pendingUpload === undefined);
-        
-        // Cleanup 2
-        await supabaseClient.from('customer_payments').delete().eq('id', testPay2);
-        state.customerPayments = state.customerPayments.filter(cp => cp.id !== testPay2);
-        delete state.customerBalances[testCust2];
+      // Cleanup DB
+      if (supabaseClient) {
+        await supabaseClient.from('products').delete().eq('id', testProdId);
       }
+    } else {
+      log('  ⚠️ SKIP: offline');
     }
-
+    
+    // Cleanup state
+    state.products = state.products.filter(p => p.id !== testProdId);
     clearSyncQueue();
     saveData();
     log('\n🧹 تم التنظيف.');
-    log('✅ اختبار Phase 4 انتهى.');
     
   } catch (e) {
-    window.confirm = originalConfirm;
-    window.showNotification = originalShowNotif;
     log('❌ ERROR: ' + e.message);
     log(e.stack);
   }
 }
 </script>
-<!-- 🧪 END PHASE 4 CUSTOMER-PAYMENT TEST PANEL -->
+<!-- 🧪 END CLEANUP #1 SYNC QUEUE TEST -->
 </body>
 </html>
