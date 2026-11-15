@@ -1422,16 +1422,16 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
-<!-- 🧪 CLEANUP #2 - STOCK ADJUSTMENT TEST (DIRECT) -->
-<div id="cq2Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ2TestDirect()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ2 Direct</button>
-  <button onclick="document.getElementById('cq2Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq2Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #3 - SAVE PRODUCT TEST -->
+<div id="cq3Panel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ3Test()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ3</button>
+  <button onclick="document.getElementById('cq3Results').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq3Results" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ2TestDirect() {
-  const results = document.getElementById('cq2Results');
+async function runCQ3Test() {
+  const results = document.getElementById('cq3Results');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
@@ -1440,72 +1440,87 @@ async function runCQ2TestDirect() {
   window.showNotification = () => {}; // silent
   
   try {
-    log('=== Test 1: type=\'in\' (Happy Path) ===');
+    // ═══════════════════════════════════════════════════════
+    log('=== Test 1: Create (enqueue + flag) ===');
+    
     const tId = Date.now();
-    const prodId = 'PROD-CQ2-' + tId;
+    const prodName = 'CQ3-Prod-' + tId;
     
-    // 1. Add product to state
-    state.products.push({ id: prodId, name: 'Test Prod', stock: 10, cost: 5, price: 10, barcode: '', category: '' });
+    // Fill form
+    document.getElementById('productId').value = '';
+    document.getElementById('productName').value = prodName;
+    document.getElementById('productBarcode').value = '';
+    document.getElementById('productCategory').value = '';
+    document.getElementById('productPrice').value = '10';
+    document.getElementById('productCost').value = '5';
+    document.getElementById('productStock').value = '10';
+    document.getElementById('productMin').value = '5';
     
-    // 2. Force UI to have the product in the dropdown
-    const selectProd = document.getElementById('adjustProduct');
-    if (selectProd) {
-       selectProd.innerHTML = `<option value="${prodId}">Test Prod</option>`;
-       selectProd.value = prodId;
-    }
+    await saveProduct();
     
-    // 3. Fill form
-    document.getElementById('adjustType').value = 'in';
-    document.getElementById('adjustQty').value = '5';
-    document.getElementById('adjustReason').value = 'Test';
+    const prodAfter = state.products.find(p => p.name === prodName);
+    const opAfter = _loadQueue().find(o => o.type === 'insert_product' && o.payload?.name === prodName);
     
-    // 4. Execute
-    await saveStockAdjustment();
-    
-    const pAfter = state.products.find(p => p.id === prodId);
-    const moveAfter = state.stockMoves.find(m => m.product_id === prodId && m.type === 'in');
-    const opAfter = _loadQueue().find(o => o.type === 'adjust_stock' && o.payload?.product_id === prodId);
-    
-    check('Stock updated to 15', pAfter && pAfter.stock === 15);
-    check('StockMove created', !!moveAfter);
+    check('Product created in state', !!prodAfter);
+    check('Product has _pendingUpload', prodAfter && prodAfter._pendingUpload === true);
     check('Op queued', !!opAfter);
     
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: type=\'set\' (Happy Path) ===');
-    document.getElementById('adjustType').value = 'set';
-    document.getElementById('adjustQty').value = '7';
+    // Drain
+    log('  ⏳ Draining...');
+    await drainSyncQueue();
     
-    await saveStockAdjustment();
-    
-    const pAfterSet = state.products.find(p => p.id === prodId);
-    const moveSet = state.stockMoves.find(m => m.product_id === prodId && m.type === 'set');
-    
-    check('Stock set to 7', pAfterSet && pAfterSet.stock === 7);
-    check('Move qty = -8 (7 - 15)', moveSet && moveSet.qty === -8);
+    const prodAfterDrain = state.products.find(p => p.name === prodName);
+    check('Flag cleared after drain', prodAfterDrain && prodAfterDrain._pendingUpload === undefined);
     
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: Half-Commit (Queue Full) ===');
+    log('\n=== Test 2: Edit (flag marking from enqueue) ===');
+    
+    if (prodAfterDrain) {
+      document.getElementById('productId').value = prodAfterDrain.id;
+      document.getElementById('productName').value = prodName + '-Edited';
+      // Other fields as-is
+      
+      await saveProduct();
+      
+      const editedProd = state.products.find(p => p.id === prodAfterDrain.id);
+      check('Product name updated', editedProd && editedProd.name === prodName + '-Edited');
+      check('Edit has _pendingUpload', editedProd && editedProd._pendingUpload === true);
+      
+      log('  ⏳ Draining edit...');
+      await drainSyncQueue();
+      
+      const editedAfterDrain = state.products.find(p => p.id === prodAfterDrain.id);
+      check('Edit flag cleared after drain', editedAfterDrain && editedAfterDrain._pendingUpload === undefined);
+    }
+    
+    // ═══════════════════════════════════════════════════════
+    log('\n=== Test 3: Half-commit (Queue Full) ===');
     
     clearSyncQueue();
     for (let i = 0; i < 200; i++) {
       enqueueSyncOperation('insert_expense', { id: 'FILL-' + i, name: 'x', amount: 1, date: new Date().toISOString() }, 'FILL-' + i);
     }
     
-    const stockBefore = pAfterSet.stock;
+    const productsBefore = state.products.length;
+    document.getElementById('productId').value = '';
+    document.getElementById('productName').value = 'ShouldNotCreate';
+    document.getElementById('productStock').value = '1';
     
-    document.getElementById('adjustType').value = 'in';
-    document.getElementById('adjustQty').value = '100';
+    await saveProduct();
     
-    await saveStockAdjustment();
-    
-    const stockAfter = state.products.find(p => p.id === prodId).stock;
-    check('Stock unchanged on queue full', stockAfter === stockBefore);
+    const productsAfter = state.products.length;
+    check('Zero state mutation on queue full', productsBefore === productsAfter);
     
     // Cleanup
     clearSyncQueue();
-    state.products = state.products.filter(p => p.id !== prodId);
-    state.stockMoves = state.stockMoves.filter(m => m.product_id !== prodId);
+    state.products = state.products.filter(p => !p.name.startsWith('CQ3-') && p.name !== 'ShouldNotCreate');
     saveData();
+    
+    // Optional: clean from Supabase if online
+    if (navigator.onLine && supabaseClient) {
+      await supabaseClient.from('products').delete().like('name', 'CQ3-%');
+    }
+    
     log('\n🧹 تم التنظيف.');
     
   } catch (e) {
@@ -1516,6 +1531,6 @@ async function runCQ2TestDirect() {
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #2 TEST (DIRECT) -->
+<!-- 🧪 END CLEANUP #3 TEST -->
 </body>
 </html>

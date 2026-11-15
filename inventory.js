@@ -25,56 +25,60 @@ async function saveProduct() {
   if (dup) return showNotification(tr('barcode_used') + dup.name, 'error');
 
   const ownerId = (state.role === 'employee' && state.ownerId) ? state.ownerId : state.currentUser.id;
+  const productId = id || uid('PRD');
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 1: بناء productData (بدون state mutation)
+  // ═══════════════════════════════════════════════════════════
   const productData = {
-    id: id || uid('PRD'), user_id: ownerId, name, barcode, category, price, cost, stock, min_stock: minStock
+    id: productId, user_id: ownerId, name, barcode, category, price, cost, stock, min_stock: minStock
   };
 
+  // edit path: edit لا يغيّر stock — نستخدم stock الحالي (زي الأصل)
   if (id) {
+    const prod = state.products.find(function(p) { return p.id === id; });
+    if (prod) productData.stock = prod.stock;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 2: enqueue أولاً (Half-Commit Precondition)
+  // ═══════════════════════════════════════════════════════════
+  const opId = enqueueSyncOperation('insert_product', productData, productId);
+  if (opId === null) return; // queue full — صفر state mutation
+
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 3: state mutations (بعد نجاح enqueue)
+  // ═══════════════════════════════════════════════════════════
+  if (id) {
+    // edit: المنتج موجود — flag marking اتعمل جوّه enqueueSyncOperation
+    // (على نفس الـ reference)، والـ mutation بعدين بيحافظ على الـ flag.
     const prod = state.products.find(function(p) { return p.id === id; });
     if (prod) {
       prod.name = name; prod.barcode = barcode; prod.category = category;
       prod.price = price; prod.cost = cost; prod.minStock = minStock; prod.min_stock = minStock;
-      productData.stock = prod.stock;
+      prod.stock = productData.stock;
     }
   } else {
-    state.products.push({ id: productData.id, name, barcode, category, price, cost, stock, minStock, min_stock: minStock });
+    // create: المنتج مش موجود وقت الـ enqueue → flag يدوي
+    state.products.push({
+      id: productId, name, barcode, category, price, cost, stock,
+      minStock, min_stock: minStock,
+      _pendingUpload: true
+    });
   }
 
-  if (navigator.onLine && supabaseClient) {
-  // أونلاين: رفع مباشر (نفس السلوك الحالي)
-  const { error } = await supabaseClient.from('products').upsert(productData, { onConflict: 'id' });
-  if (error) {
-    console.warn('Product upload failed:', error);
-    return showNotification(tr('product_save_fail') + error.message, 'error');
-  }
-} else {
-  // أوفلاين: تحط في الـ Queue للرفع لما النت يرجع
-  if (typeof enqueueSyncOperation === 'function') {
-    enqueueSyncOperation('insert_product', {
-      id: productData.id,
-      name: productData.name,
-      barcode: productData.barcode,
-      category: productData.category,
-      price: productData.price,
-      cost: productData.cost,
-      stock: productData.stock,
-      min_stock: productData.min_stock
-    }, productData.id);
-    
-    // ✅ X43: تعليم المنتج بأنه معلق عشان ميتسمحش من الـ syncDown
-    const localProd = state.products.find(p => p.id === productData.id);
-    if (localProd) localProd._pendingUpload = true;
-  }
-}
-
+  // ═══════════════════════════════════════════════════════════
+  // المرحلة 4: audit + save + UI (نفس السلوك القديم)
+  // ═══════════════════════════════════════════════════════════
   if (typeof addAuditLog === 'function') {
     addAuditLog(id ? 'edit_product' : 'add_product', { productId: productData.id, name }, productData.id);
   }
-saveData();
-clearProductForm();
-switchProductTab('list');
-refreshCurrentPage();
-showNotification(tr('product_saved'));
+
+  saveData();
+  clearProductForm();
+  switchProductTab('list');
+  refreshCurrentPage();
+  showNotification(tr('product_saved'));
 }
 
 async function togglePinProduct(id) {
