@@ -1421,82 +1421,70 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #4 - SYNC-QUEUE TEST -->
-<div id="cq4sPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ4SyncQueueTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ4 Sync</button>
-  <button onclick="document.getElementById('cq4sResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq4sResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #4 - STORAGE TEST -->
+<div id="cq4stPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ4StorageTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ4 Storage</button>
+  <button onclick="document.getElementById('cq4stResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq4stResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-async function runCQ4SyncQueueTest() {
-  const results = document.getElementById('cq4sResults');
+async function runCQ4StorageTest() {
+  const results = document.getElementById('cq4stResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
 
   try {
-    log('=== Test 1: Flag marking (entity موجودة) ===');
+    // ═══════════════════════════════════════════════════════
+    log('=== Test 1: Offline create + syncDown protection ===');
     const tId = Date.now();
-    const supId = 'SUP-CQ4-' + tId;
+    const testSupId = 'SUP-CQ4-ST-' + tId;
     state.suppliers = state.suppliers || [];
-    state.suppliers.push({ id: supId, name: 'Old Name', phone: '', opening_debt: 0 });
-    
-    enqueueSyncOperation('insert_supplier', {
-      id: supId, user_id: state.currentUser.id, name: 'New Name', phone: '', opening_debt: 0
-    }, supId);
-    
-    const supAfter = state.suppliers.find(s => s.id === supId);
-    check('Flag set on existing entity', supAfter && supAfter._pendingUpload === true);
+    state.suppliers.unshift({
+      id: testSupId, name: 'Offline Supplier', phone: '', opening_debt: 0, openingDebt: 0,
+      _pendingUpload: true
+    });
+
+    log('  Before syncDown: Supplier in state = true');
+    log('  ⏳ جاري syncDown...');
+    await syncDown(state.currentUser.id);
+
+    const supAfter = state.suppliers.find(s => s.id === testSupId);
+    check('Supplier still in state (protected)', !!supAfter);
+    check('Flag still set', supAfter && supAfter._pendingUpload === true);
 
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 2: hasPendingOpForSupplier (2 ops) ===');
-    // enqueue op تانية لنفس المورد
-    enqueueSyncOperation('insert_supplier', {
-      id: supId, user_id: state.currentUser.id, name: 'Newer Name', phone: '', opening_debt: 0
-    }, supId);
-    
-    const hasPending = hasPendingOpForSupplier(supId);
-    check('hasPendingOpForSupplier returns true (2 ops)', hasPending === true);
+    log('\n=== Test 2: Offline EDIT + syncDown (local wins) ===');
+    const testSupId2 = 'SUP-CQ4-EDIT-' + tId;
+    state.suppliers.unshift({
+      id: testSupId2, name: 'Edited Local Name', phone: '', opening_debt: 0, openingDebt: 0,
+      _pendingUpload: true
+    });
+
+    log('  Before syncDown: Local name = "Edited Local Name"');
+    log('  ⏳ جاري syncDown...');
+    await syncDown(state.currentUser.id);
+
+    const supEditAfter = state.suppliers.find(s => s.id === testSupId2);
+    check('Edited supplier still in state', !!supEditAfter);
+    check('Local name won over server', supEditAfter && supEditAfter.name === 'Edited Local Name');
 
     // ═══════════════════════════════════════════════════════
-    log('\n=== Test 3: Clear flag after drain ===');
-    if (navigator.onLine) {
-      log('  ⏳ Draining...');
-      await drainSyncQueue();
-      
-      const supAfterDrain = state.suppliers.find(s => s.id === supId);
-      check('Flag cleared after drain', supAfterDrain && supAfterDrain._pendingUpload === undefined);
-      check('hasPendingOpForSupplier false', hasPendingOpForSupplier(supId) === false);
-      
-      // Cleanup DB
-      if (supabaseClient) {
-        await supabaseClient.from('suppliers').delete().eq('id', supId);
-      }
-    } else {
-      log('  ⚠️ SKIP: offline');
+    log('\n=== Test 3: Edge case (empty suppliers) ===');
+    const backupSuppliers = state.suppliers.slice();
+    state.suppliers = [];
+    try {
+      await syncDown(state.currentUser.id);
+      check('No error with empty suppliers', true);
+    } catch (e) {
+      check('No error with empty suppliers', false);
     }
 
-    // ═══════════════════════════════════════════════════════
-    log('\n=== Test 4: No naming confusion ===');
-    // تأكيد إن insert_supplier (المورد) و insert_supplier_payment (الدفعة) منفصلين
-    clearSyncQueue();
-    const supPaymentId = 'SUPP-CQ4-' + tId;
-    enqueueSyncOperation('insert_supplier_payment', {
-      id: supPaymentId, user_id: state.currentUser.id, supplier_id: supId,
-      supplier_name: 'Test', amount: 100, date: new Date().toISOString(), notes: ''
-    }, supPaymentId);
-    
-    const q = _loadQueue();
-    const hasSupplierOp = q.some(o => o.type === 'insert_supplier');
-    const hasSupplierPaymentOp = q.some(o => o.type === 'insert_supplier_payment');
-    
-    check('insert_supplier op NOT found', !hasSupplierOp);
-    check('insert_supplier_payment op found', hasSupplierPaymentOp);
-
     // Cleanup
-    clearSyncQueue();
-    state.suppliers = state.suppliers.filter(s => s.id !== supId);
+    state.suppliers = state.suppliers.filter(s => 
+      s.id !== testSupId && s.id !== testSupId2
+    );
     saveData();
     log('\n🧹 تم التنظيف.');
     
@@ -1506,6 +1494,6 @@ async function runCQ4SyncQueueTest() {
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #4 SYNC-QUEUE TEST -->
+<!-- 🧪 END CLEANUP #4 STORAGE TEST -->
 </body>
 </html>
