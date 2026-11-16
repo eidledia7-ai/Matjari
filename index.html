@@ -1421,70 +1421,60 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<!-- 🧪 CLEANUP #5 - TRANSLATIONS TEST -->
-<div id="cq5trPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-  <button onclick="runCQ5TrTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ5 Tr</button>
-  <button onclick="document.getElementById('cq5trResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
-  <div id="cq5trResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
+<!-- 🧪 CLEANUP #5 - I18N OPS TEST -->
+<div id="cq5i18nPanel" style="position:fixed;bottom:90px;right:10px;z-index:9999999;background:#fff;padding:12px;border:2px solid #176b70;border-radius:8px;max-width:90vw;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+  <button onclick="runCQ5I18nTest()" style="padding:10px 20px;background:#176b70;color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:14px;">🧪 Test CQ5 i18n</button>
+  <button onclick="document.getElementById('cq5i18nResults').innerHTML=''" style="padding:10px 15px;background:#c62828;color:#fff;border:none;border-radius:6px;font-weight:bold;margin-left:5px;font-size:14px;">Clear</button>
+  <div id="cq5i18nResults" style="margin-top:10px;font-size:11px;direction:rtl;text-align:right;max-height:350px;overflow-y:auto;white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;"></div>
 </div>
 
 <script>
-function runCQ5TrTest() {
-  const results = document.getElementById('cq5trResults');
+function runCQ5I18nTest() {
+  const results = document.getElementById('cq5i18nResults');
   results.innerHTML = '';
   const log = (msg) => { results.innerHTML += msg + '\n'; results.scrollTop = results.scrollHeight; };
   const check = (name, cond) => log(cond ? '  ✅ ' + name : '  ❌ ' + name);
-  
+
   try {
-    const keys = [
-      'op_del_offline', 'op_del_server_error', 'op_del_delete_only_btn',
-      'op_del_cancel_btn', 'op_del_reversal_fail', 'op_del_duplicate_title',
-      'op_del_duplicate_body', 'op_del_sale_exists_title', 'op_del_sale_exists_body',
-      'op_del_return_exists_title', 'op_del_return_exists_body',
-      'op_del_expense_exists_title', 'op_del_expense_exists_body',
-      'op_del_payment_exists_title', 'op_del_payment_exists_body',
-      'op_del_sale_confirm', 'op_del_return_confirm',
-      'op_del_expense_confirm', 'op_del_payment_confirm'
-    ];
+    const origLang = currentLang;
     
-    log('=== Test 1: Keys موجودة في ar ===');
-    const originalLang = currentLang;
+    log('=== Test 1: Arabic messages (source-level) ===');
     setLanguage('ar');
+    // Verify all the keys used in the 4 functions are correctly translated
+    check('op_del_offline (ar)', tr('op_del_offline').includes('الاتصال'));
+    check('op_del_sale_exists_title (ar)', tr('op_del_sale_exists_title').includes('الفاتورة'));
+    check('op_del_return_exists_title (ar)', tr('op_del_return_exists_title').includes('المرتجع'));
+    check('op_del_expense_exists_title (ar)', tr('op_del_expense_exists_title').includes('المصروف'));
+    check('op_del_payment_exists_title (ar)', tr('op_del_payment_exists_title').includes('الدفعة'));
+    check('op_del_cancel_btn (ar)', tr('op_del_cancel_btn') === 'إلغاء');
+    check('op_del_delete_only_btn (ar)', tr('op_del_delete_only_btn').includes('حذف من القائمة'));
     
-    let missingAr = [];
-    keys.forEach(k => {
-      if (!translations.ar[k]) missingAr.push(k);
-    });
-    check('All 20 keys in ar', missingAr.length === 0);
-    if (missingAr.length > 0) log('  Missing: ' + missingAr.join(', '));
+    log('\n=== Test 2: English messages ===');
+    setLanguage('en');
+    check('op_del_offline (en)', tr('op_del_offline').includes('Internet'));
+    check('op_del_sale_exists_title (en)', tr('op_del_sale_exists_title').includes('Invoice'));
+    check('op_del_cancel_btn (en)', tr('op_del_cancel_btn') === 'Cancel');
     
-    log('\n=== Test 2: Keys موجودة في en ===');
-    let missingEn = [];
-    keys.forEach(k => {
-      if (!translations.en[k]) missingEn.push(k);
-    });
-    check('All 20 keys in en', missingEn.length === 0);
-    if (missingEn.length > 0) log('  Missing: ' + missingEn.join(', '));
-    
-    log('\n=== Test 3: عينات من ar ===');
-    log('  op_del_offline: ' + tr('op_del_offline').substring(0, 50) + '...');
-    log('  op_del_sale_exists_title: ' + tr('op_del_sale_exists_title'));
-    log('  op_del_payment_confirm: ' + tr('op_del_payment_confirm').substring(0, 50) + '...');
-    
-    log('\n=== Test 4: Interpolation ({msg}) ===');
-    const errMsg = tr('op_del_server_error').replace('{msg}', 'Network timeout');
-    check('{msg} replaced in op_del_server_error', errMsg.includes('Network timeout'));
+    log('\n=== Test 3: Interpolation works ===');
+    setLanguage('ar');
+    const testMsg = tr('op_del_server_error').replace('{msg}', 'Network fail');
+    check('server_error interpolation', testMsg.includes('Network fail') && !testMsg.includes('{msg}'));
     
     const failMsg = tr('op_del_reversal_fail').replace('{msg}', 'DB locked');
-    check('{msg} replaced in op_del_reversal_fail', failMsg.includes('DB locked'));
+    check('reversal_fail interpolation', failMsg.includes('DB locked') && !failMsg.includes('{msg}'));
     
-    log('\n=== Test 5: English switch ===');
-    setLanguage('en');
-    log('  op_del_offline: ' + tr('op_del_offline').substring(0, 60) + '...');
-    log('  op_del_delete_only_btn: ' + tr('op_del_delete_only_btn'));
+    log('\n=== Test 4: Verify no hardcoded "إلغاء" remains in source ===');
+    // This is a manual check — you should verify in the file editor
+    log('  📝 Manual check: open operations-center.js');
+    log('  Search for: "\\n[Cancel] = إلغاء"');
+    log('  Expected: 0 results (all replaced with tr(\'op_del_cancel_btn\'))');
     
-    // Restore
-    setLanguage(originalLang);
+    log('\n=== Test 5: Verify TODO(i18n) removed ===');
+    log('  📝 Manual check: open operations-center.js');
+    log('  Search for: "TODO(i18n)"');
+    log('  Expected: 0 results (all 4 functions cleaned)');
+    
+    setLanguage(origLang);
     log('\n🧹 تم التنظيف.');
     
   } catch (e) {
@@ -1492,6 +1482,6 @@ function runCQ5TrTest() {
   }
 }
 </script>
-<!-- 🧪 END CLEANUP #5 TRANSLATIONS TEST -->
+<!-- 🧪 END CLEANUP #5 I18N OPS TEST -->
 </body>
 </html>

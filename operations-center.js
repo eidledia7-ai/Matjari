@@ -272,15 +272,14 @@ async function _deleteFailedSaleOp(op) {
   const saleId = p.id;
   if (!saleId) return;
 
-  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
-  //             في مرحلة التنظيف بعد Part B (المراحل 2-11 + cleanup pass).
-  const MSG_OFFLINE         = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
-  const MSG_SERVER_ERROR    = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
-  const MSG_EXISTS_TITLE    = 'الفاتورة موجودة على السيرفر';
-  const MSG_EXISTS_BODY     = 'الفاتورة رُفعت بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
-  const MSG_EXISTS_CONFIRM  = 'حذف من القائمة فقط (البيانات تبقى)';
-  const MSG_REVERSAL_CONFIRM= 'لم يتم رفع الفاتورة. سيتم عكس المخزون والرصيد وحذف العملية. متابعة؟';
-  const MSG_REVERSAL_FAIL   = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
+// ✅ Cleanup Pass #5: i18n keys (كانت hardcoded)
+const MSG_OFFLINE         = tr('op_del_offline');
+const MSG_SERVER_ERROR    = (msg) => tr('op_del_server_error').replace('{msg}', msg);
+const MSG_EXISTS_TITLE    = tr('op_del_sale_exists_title');
+const MSG_EXISTS_BODY     = tr('op_del_sale_exists_body');
+const MSG_EXISTS_CONFIRM  = tr('op_del_delete_only_btn');
+const MSG_REVERSAL_CONFIRM= tr('op_del_sale_confirm');
+const MSG_REVERSAL_FAIL   = (msg) => tr('op_del_reversal_fail').replace('{msg}', msg);
 
   // ═══════════════════════════════════════════════════════
   // المرحلة 1: Server check (precondition إجباري)
@@ -304,9 +303,9 @@ async function _deleteFailedSaleOp(op) {
   // ═══════════════════════════════════════════════════════
   if (existsOnServer) {
     const choice = confirm(
-      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
-      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
-    );
+  MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+  '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = ' + tr('op_del_cancel_btn')
+);
     if (!choice) return;
 
     const q = _loadQueue();
@@ -418,17 +417,16 @@ async function _deleteFailedReturnOp(op) {
   const returnId = p.id;
   if (!returnId) return;
 
-  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
-  //             في مرحلة التنظيف بعد Part B (المراحل 3-11 + cleanup pass).
-  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
-  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
-  const MSG_EXISTS_TITLE     = 'المرتجع موجود على السيرفر';
-  const MSG_EXISTS_BODY      = 'المرتجع رُفع بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
-  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
-  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع المرتجع. سيتم عكس المخزون والرصيد وحذف العملية. متابعة؟';
-  const MSG_REVERSAL_FAIL    = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
-  const MSG_DUPLICATE_TITLE  = 'يوجد مرتجع آخر معلّق بنفس الرقم';
-  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس المرتجع. راجع مركز العمليات أولاً.';
+// ✅ Cleanup Pass #5: i18n keys (كانت hardcoded)
+const MSG_OFFLINE          = tr('op_del_offline');
+const MSG_SERVER_ERROR     = (msg) => tr('op_del_server_error').replace('{msg}', msg);
+const MSG_EXISTS_TITLE     = tr('op_del_return_exists_title');
+const MSG_EXISTS_BODY      = tr('op_del_return_exists_body');
+const MSG_EXISTS_CONFIRM   = tr('op_del_delete_only_btn');
+const MSG_REVERSAL_CONFIRM = tr('op_del_return_confirm');
+const MSG_REVERSAL_FAIL    = (msg) => tr('op_del_reversal_fail').replace('{msg}', msg);
+const MSG_DUPLICATE_TITLE  = tr('op_del_duplicate_title');
+const MSG_DUPLICATE_BODY   = tr('op_del_duplicate_body');
 
   // ═══════════════════════════════════════════════════════
   // المرحلة 0: Duplicate op check
@@ -467,7 +465,7 @@ async function _deleteFailedReturnOp(op) {
   if (existsOnServer) {
     const choice = confirm(
       MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
-      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+'\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = ' + tr('op_del_cancel_btn')
     );
     if (!choice) return;
 
@@ -610,16 +608,15 @@ async function _deleteFailedExpenseOp(op) {
   const expenseId = p.id;
   if (!expenseId) return;
 
-  // TODO(i18n): 6 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
-  //             في مرحلة التنظيف بعد Part B.
-  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
-  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
-  const MSG_EXISTS_TITLE     = 'المصروف موجود على السيرفر';
-  const MSG_EXISTS_BODY      = 'المصروف رُفع بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى.';
-  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
-  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع المصروف. سيتم حذف العملية من النظام. متابعة؟';
-  const MSG_DUPLICATE_TITLE  = 'يوجد مصروف آخر معلّق بنفس الرقم';
-  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس المصروف. راجع مركز العمليات أولاً.';
+// ✅ Cleanup Pass #5: i18n keys (كانت hardcoded)
+const MSG_OFFLINE          = tr('op_del_offline');
+const MSG_SERVER_ERROR     = (msg) => tr('op_del_server_error').replace('{msg}', msg);
+const MSG_EXISTS_TITLE     = tr('op_del_expense_exists_title');
+const MSG_EXISTS_BODY      = tr('op_del_expense_exists_body');
+const MSG_EXISTS_CONFIRM   = tr('op_del_delete_only_btn');
+const MSG_REVERSAL_CONFIRM = tr('op_del_expense_confirm');
+const MSG_DUPLICATE_TITLE  = tr('op_del_duplicate_title');
+const MSG_DUPLICATE_BODY   = tr('op_del_duplicate_body');
 
   // ═══════════════════════════════════════════════════════
   // المرحلة 0: Duplicate op check
@@ -658,7 +655,7 @@ async function _deleteFailedExpenseOp(op) {
   if (existsOnServer) {
     const choice = confirm(
       MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
-      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+'\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = ' + tr('op_del_cancel_btn')
     );
     if (!choice) return;
 
@@ -748,18 +745,16 @@ async function _deleteFailedCustomerPaymentOp(op) {
   const paymentId = p.id;
   if (!paymentId) return;
 
-  // TODO(i18n): 8 رسائل هاردكود مؤقتًا — تُنقل إلى translations.js
-  //             في مرحلة التنظيف بعد Part B.
-  const MSG_OFFLINE          = 'يجب الاتصال بالإنترنت للتحقق من حالة العملية قبل الحذف.';
-  const MSG_SERVER_ERROR     = (msg) => 'تعذر التحقق من السيرفر: ' + msg + '. حاول مرة أخرى.';
-  const MSG_EXISTS_TITLE     = 'الدفعة موجودة على السيرفر';
-  const MSG_EXISTS_BODY      = 'الدفعة رُفعت بنجاح (ربما في محاولة سابقة). حذف العملية من القائمة سيمسحها من الـ queue فقط، والبيانات المحلية ستبقى. الرصيد سيُحدَّث تلقائيًا عبر السيرفر.';
-  const MSG_EXISTS_CONFIRM   = 'حذف من القائمة فقط (البيانات تبقى)';
-  const MSG_REVERSAL_CONFIRM = 'لم يتم رفع الدفعة. سيتم إرجاع المبلغ لرصيد العميل وحذف العملية. متابعة؟';
-  const MSG_REVERSAL_FAIL    = (msg) => 'فشل عكس البيانات: ' + msg + '. لم يتم حذف العملية.';
-  const MSG_DUPLICATE_TITLE  = 'يوجد دفعة أخرى معلّقة بنفس الرقم';
-  const MSG_DUPLICATE_BODY   = 'لا يمكن عكس البيانات تلقائيًا لوجود عمليات أخرى معلقة لنفس الدفعة. راجع مركز العمليات أولاً.';
-
+// ✅ Cleanup Pass #5: i18n keys (كانت hardcoded)
+const MSG_OFFLINE          = tr('op_del_offline');
+const MSG_SERVER_ERROR     = (msg) => tr('op_del_server_error').replace('{msg}', msg);
+const MSG_EXISTS_TITLE     = tr('op_del_payment_exists_title');
+const MSG_EXISTS_BODY      = tr('op_del_payment_exists_body');
+const MSG_EXISTS_CONFIRM   = tr('op_del_delete_only_btn');
+const MSG_REVERSAL_CONFIRM = tr('op_del_payment_confirm');
+const MSG_REVERSAL_FAIL    = (msg) => tr('op_del_reversal_fail').replace('{msg}', msg);
+const MSG_DUPLICATE_TITLE  = tr('op_del_duplicate_title');
+const MSG_DUPLICATE_BODY   = tr('op_del_duplicate_body');
   // ═══════════════════════════════════════════════════════
   // المرحلة 0: Duplicate op check
   // ═══════════════════════════════════════════════════════
@@ -798,8 +793,8 @@ async function _deleteFailedCustomerPaymentOp(op) {
   // ═══════════════════════════════════════════════════════
   if (existsOnServer) {
     const choice = confirm(
-      MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
-      '\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = إلغاء'
+     MSG_EXISTS_TITLE + '\n\n' + MSG_EXISTS_BODY +
+'\n\n[OK] = ' + MSG_EXISTS_CONFIRM + '\n[Cancel] = ' + tr('op_del_cancel_btn')
     );
     if (!choice) return;
 
